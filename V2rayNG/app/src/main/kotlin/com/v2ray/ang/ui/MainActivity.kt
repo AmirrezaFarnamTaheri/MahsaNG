@@ -7,7 +7,6 @@ import android.net.VpnService
 import androidx.recyclerview.widget.LinearLayoutManager
 import android.view.Menu
 import android.view.MenuItem
-import com.tbruyelle.rxpermissions.RxPermissions
 import com.v2ray.ang.R
 import android.os.Bundle
 import android.text.TextUtils
@@ -55,6 +54,29 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             startV2Ray()
         }
     }
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) toast(R.string.toast_permission_denied)
+        }
+
+    private val requestCameraForConfig =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                scanQRCodeForConfig.launch(Intent(this, ScannerActivity::class.java))
+            } else {
+                toast(R.string.toast_permission_denied)
+            }
+        }
+
+    private val requestCameraForCustomUrl =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                scanQRCodeForUrlToCustomConfig.launch(Intent(this, ScannerActivity::class.java))
+            } else {
+                toast(R.string.toast_permission_denied)
+            }
+        }
+
     private var mItemTouchHelper: ItemTouchHelper? = null
     val mainViewModel: MainViewModel by viewModels()
 
@@ -110,12 +132,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         migrateLegacy()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            RxPermissions(this)
-                .request(Manifest.permission.POST_NOTIFICATIONS)
-                .subscribe {
-                    if (!it)
-                        toast(R.string.toast_permission_denied)
-                }
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -372,23 +389,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
      * import config from qrcode
      */
     fun importQRcode(forConfig: Boolean): Boolean {
-//        try {
-//            startActivityForResult(Intent("com.google.zxing.client.android.SCAN")
-//                    .addCategory(Intent.CATEGORY_DEFAULT)
-//                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP), requestCode)
-//        } catch (e: Exception) {
-        RxPermissions(this)
-                .request(Manifest.permission.CAMERA)
-                .subscribe {
-                    if (it)
-                        if (forConfig)
-                            scanQRCodeForConfig.launch(Intent(this, ScannerActivity::class.java))
-                        else
-                            scanQRCodeForUrlToCustomConfig.launch(Intent(this, ScannerActivity::class.java))
-                    else
-                        toast(R.string.toast_permission_denied)
-                }
-//        }
+        if (forConfig) {
+            requestCameraForConfig.launch(Manifest.permission.CAMERA)
+        } else {
+            requestCameraForCustomUrl.launch(Manifest.permission.CAMERA)
+        }
         return true
     }
 
@@ -585,25 +590,19 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
      * read content from uri
      */
     private fun readContentFromUri(uri: Uri) {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        // ACTION_GET_CONTENT grants read access to the returned URI.
+        // A JSON configuration is not a photo and needs no READ_MEDIA_IMAGES grant.
+        try {
+            contentResolver.openInputStream(uri).use { input ->
+                importCustomizeConfig(input?.bufferedReader()?.readText())
+            }
+        } catch (e: SecurityException) {
+            Log.w(ANG_PACKAGE, "Selected document URI cannot be read", e)
+            toast(R.string.toast_permission_denied)
+        } catch (e: Exception) {
+            Log.e(ANG_PACKAGE, "Error reading selected configuration document", e)
+            toast(R.string.toast_failure)
         }
-        RxPermissions(this)
-                .request(permission)
-                .subscribe {
-                    if (it) {
-                        try {
-                            contentResolver.openInputStream(uri).use { input ->
-                                importCustomizeConfig(input?.bufferedReader()?.readText())
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    } else
-                        toast(R.string.toast_permission_denied)
-                }
     }
 
     /**

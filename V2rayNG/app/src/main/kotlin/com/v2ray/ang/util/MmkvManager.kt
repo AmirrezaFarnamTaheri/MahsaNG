@@ -111,6 +111,16 @@ object MmkvManager {
         }
     }
 
+    /** Reset only the selected run's profiles; hidden subscriptions keep their test results. */
+    fun clearTestDelayResults(visibleGuids: Collection<String>) {
+        visibleGuids.distinct().forEach { guid ->
+            runCatching { decodeServerAffiliationInfo(guid) }.getOrNull()?.let { affiliation ->
+                affiliation.testDelayMillis = 0L
+                serverAffStorage?.encode(guid, Gson().toJson(affiliation))
+            }
+        }
+    }
+
     fun importUrlAsSubscription(url: String): Int {
         val subscriptions = decodeSubscriptions()
         subscriptions.forEach {

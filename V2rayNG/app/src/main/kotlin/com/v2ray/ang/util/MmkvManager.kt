@@ -102,7 +102,7 @@ object MmkvManager {
         return try {
             val oldIndex = decodeServerList()
             val oldGuids = oldIndex.filter { guid ->
-                decodeServerConfig(guid)?.subscriptionId == subid
+                runCatching { decodeServerConfig(guid) }.getOrNull()?.subscriptionId == subid
             }.toSet()
             val newIndex = SubscriptionReplacementPlan.mergedIndex(
                 oldIndex, oldGuids, stagedProfiles.keys.toList()
@@ -117,7 +117,7 @@ object MmkvManager {
                 }) return false
 
             val selectedGuid = main.decodeString(KEY_SELECTED_SERVER)?.takeIf { it.isNotBlank() }
-            val selectedConfig = selectedGuid?.let { decodeServerConfig(it) }
+            val selectedConfig = selectedGuid?.let { runCatching { decodeServerConfig(it) }.getOrNull() }
             val selectedAfter = SubscriptionReplacementPlan.matchSelected(
                 selectedGuid, oldGuids, selectedConfig, stagedProfiles
             ) { before, after ->

@@ -1,26 +1,63 @@
-# Integration review — MahsaNG
+# MahsaNG integrated safety fixes — review and build status (2026-11-11)
 
-This branch combines draft PRs #1–#7 into a single reviewable change based on master without modifying master.
+This draft integrates original PRs #1–#7 plus one new GUID-based filtered reorder fix. The default `master` branch remains unchanged.
 
-## Conflict resolution
+## Integrated behavior
 
-- `MmkvManager.kt`: PR #4 staged subscription writer plus PR #1 confirmed scoped deletion, PR #2 per-test-run result clearing, and PR #7 stable sort; measured delay updates and clears share the in-process synchronized writer lock.
-- `MainActivity.kt`: PR #4 asynchronous subscription import plus PR #1 scoped deletion confirmation and PR #7 background sorting.
-- `MainViewModel.swapServer` now delegates filtered drag/drop reordering to `MmkvManager.swapServerPositions` under the same writer lock, preventing a stale full-index overwrite. Five new GUID swap tests were added.
-- All other modified paths are pinned to their corresponding individual PR head SHAs.
+- PR #1: explicit negative-only, scope-limited failed-profile removal with confirmation.
+- PR #2: immutable test targets, native generation tokens and test-run-scoped result clearing.
+- PR #3: guaranteed TCP socket cleanup on error, cancellation and normal completion.
+- PR #4: stage/validate subscription replacements before retiring old profiles; coordinate in-process storage writes.
+- PR #5: tun2socks native process ownership and bounded restart.
+- PR #6: validated optional fragmentor lifecycle and core stop acknowledgement ordering.
+- PR #7: stable sorted delay snapshot off the main thread.
+- Integration-only: `MainViewModel.swapServer` delegates filtered list drag/drop to synchronized GUID-based `MmkvManager.swapServerPositions`. Previously it rewrote the full index by filtered list positions.
 
-## Build and verification
+`MmkvManager.kt` reconciles #1/#2/#4/#7; `MainActivity.kt` reconciles #1/#4/#7 and replaces the unavailable RxPermissions dependency with AndroidX Activity Result contracts. Android's document URI access uses the picker-provided read grant.
 
-- Gradle wrapper updated from 7.5 to 8.6 to match Android Gradle Plugin 8.4.2 (JDK 17 minimum).
-- Declared SDK: compileSdk 33 and Build Tools 33.0.2; see `V2rayNG/gradle.properties`.
-- Build command after restoring missing dependencies: `cd V2rayNG && ./gradlew :app:assembleDevDebug :app:testDevDebugUnitTest`.
-- 47 focused pure Kotlin/JVM regression tests pass together under local `kotlinc`; they are not a full Android build.
-- Full Android build **not verified**: the public repository lacks source for GFW types such as `my_preference_storage`, `config_pkg_reader`, and other referenced features. Native and SDK dependencies also require verification. Do not add guessed networking stubs.
+## Actual CI results (not a claimed APK build)
 
-## Mandatory QA before merging
+**47/47 standalone Kotlin/JUnit4 regressions passed** in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
 
-- Restore missing sources with provenance and compatible licensing, compile the full app with JDK 17 and Android SDK, run Gradle unit/instrumented tests.
-- Exercise failed/untested deletion under filters, reconnect, concurrent subscription refresh and crash/rollback paths, and native JNI cancellation.
-- Device-test rapid start/stop, tun2socks restart, VPN revocation, TLS/DoH fragmentation and route correctness. No release or defaults changed.
+The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation, dependencies and resource processing but **fails** during Android resource linking. It is not marked optional, so the integration remains red/not release-ready.
 
-This integration PR is intended to supersede seven independent draft PRs after review; the individual PRs remain open for auditing.
+The build preflight has already exposed and corrected:
+1. Incompatible Gradle wrapper 7.5 and obsolete Java 17 `-XX:MaxPermSize`.
+2. Non-executable wrapper invocation and an obsolete SDK setup-action package request.
+3. An unavailable legacy `com.tbruyelle.rxpermissions:rxpermissions:0.9.4` artifact (migrated to existing AndroidX contracts).
+4. Two byte-for-byte duplicate XML color definitions (kept the `res/values` copies).
+5. Android 15 style attributes requiring modern compilation tools (now **AGP 8.6.1, Gradle 8.7, compileSdk 35, Build Tools 34.0.0, JDK 17**). **targetSdk remains 33**; no targeting upgrade was made.
+6. Orphaned About-page reference names. A limited compatibility shim uses *existing* checked-in theme colors, the actual `ic_banner` image and explanatory vector fallbacks. This is not a restoration of unpublished artwork or translations; visual QA is mandatory.
+
+### Current Android blocker — missing MASQUE/WARP screen resources
+
+The last Android compilation in run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208) failed in `:app:processDevDebugResources`, before Kotlin compilation, because `res/layout/activity_add_masque.xml` refers to untracked resources including:
+
+- Drawables: `bg_button_theme`, `bg_card`, `bg_edit_field`, `ic_shield_guard_filled`, `ic_key`, `ic_clipboard_filled_import`.
+- Colors: `red`, `donor_link`.
+- Strings: `warp_gen_new_ip`, `warp_gen_new_key`, `warp_gen_paste`, `warp_clear`, `warp_section_endpoint_keys`, `warp_ip`, `masque_gen_description`, `masque_hint_ip`.
+
+This is an observed, non-exhaustive first batch of missing references. The authoring/layout source for this security-sensitive feature must be restored or intentionally redesigned, not filled with fake labels/icons solely for a green build.
+
+### Additional source-provenance blocker
+
+The tracked source still references `my_preference_storage`, `config_pkg_reader` and `GFW_client_ip`, but their definitions are absent from the fork and from the original `GFW-knocker/MahsaNG` tracked trees on `master`, `EMS` and `1.8.9`. These could cause later Java/Kotlin compilation errors once resources link. Do **not** create guessed network code or import code from an unrelated project without licensing/provenance review.
+
+## How to reproduce
+
+```sh
+cd V2rayNG
+bash ./gradlew -p pure-tests --no-daemon test
+bash ./gradlew --no-daemon :app:compileDevDebugKotlin
+```
+
+Requires Android SDK platform 35, Build Tools 34.0.0 and JDK 17; Maven repositories needed for dependency resolution.
+
+## Required before merging/release
+
+1. Obtain the original MASQUE/WARP drawables, strings, colors and GFW source dependencies with authorship and license verification (or approve a separately designed replacement with UX and security review).
+2. Run full Android compilation, APK packaging, app/instrumented tests, and manual visual review of both English/Persian layouts and RTL.
+3. Device-test failed/untested deletion, selected and filtered subscriptions, process death and cross-process MMKV writers, stale JNI callbacks, native stop/start, tun2socks restart, VPN revocation and tunnel privacy.
+4. Review the combined integration PR before marking it ready; never merge independent draft PRs #1–#7 and this integrated PR on top of each other without conflict reconciliation.
+
+No claim of an Android APK or VPN-device verification has been made.

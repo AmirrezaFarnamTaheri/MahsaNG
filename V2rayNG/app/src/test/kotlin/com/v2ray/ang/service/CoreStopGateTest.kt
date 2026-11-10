@@ -16,12 +16,12 @@ class CoreStopGateTest {
         assertTrue(gate.requestStart())
     }
 
-    @Test fun repeatedStopCancelsDeferredRestartWithoutSchedulingSecondStop() {
+    @Test fun duplicateNativeStopPreservesDeferredRestartWithoutSchedulingSecondStop() {
         val gate = CoreStopGate()
         val token = gate.beginStop()!!
         assertFalse(gate.requestStart())
         assertEquals(null, gate.beginStop())
-        assertEquals(null, gate.completeStop(token, success = true))
+        assertTrue(gate.completeStop(token, success = true) != null)
     }
 
     @Test fun nativeStopFailureDoesNotAuthorizeRestart() {

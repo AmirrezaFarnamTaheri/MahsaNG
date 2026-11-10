@@ -17,9 +17,11 @@ internal class CoreStopGate {
     /** Returns a stop token only to the caller responsible for starting native cleanup. */
     @Synchronized
     fun beginStop(): Long? {
+        // Duplicate native shutdown callbacks are idempotent. Only the first
+        // stop may invalidate the previous session or its pending start.
+        if (stopping) return null
         revision++
         pendingStart = false
-        if (stopping) return null
         stopping = true
         activeStop = revision
         return revision

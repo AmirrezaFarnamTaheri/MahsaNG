@@ -66,6 +66,15 @@ object V2rayConfigUtil {
 
         httpRequestObject(outbound)
 
+        // Apply the current opt-in even to profiles imported by older releases.
+        val userAllowsInsecure = settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true
+        outbound.streamSettings?.tlsSettings?.let { tls ->
+            tls.allowInsecure = TlsCertificatePolicy.forConnection(userAllowsInsecure, tls.allowInsecure)
+        }
+        outbound.streamSettings?.realitySettings?.let { reality ->
+            reality.allowInsecure = TlsCertificatePolicy.forConnection(userAllowsInsecure, reality.allowInsecure)
+        }
+
         v2rayConfig.outbounds[0] = outbound
 
         routing(v2rayConfig)

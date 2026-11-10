@@ -181,14 +181,11 @@ object AngConfigManager {
                         vmessBean.requestHost,
                     )
 
-                    // ---------------------- GFW knocker -------------------------------
-                    val allowInsecure = true
-//                    val allowInsecure = if (vmessBean.allowInsecure.isBlank()) {
-//                        settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: true // GFW-knocker: just disable root CA check by default that cause many configs to fail
-//                    } else {
-//                        vmessBean.allowInsecure.toBoolean()
-//                    }
-                    // ------------------------------------------------------------------
+                    // Legacy flags may restrict, but never override the user's TLS opt-in.
+                    val allowInsecure = TlsCertificatePolicy.forImport(
+                        settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true,
+                        vmessBean.allowInsecure,
+                    )
 
                     var fingerprint = streamSetting.tlsSettings?.fingerprint
                     streamSetting.populateTlsSettings(
@@ -238,7 +235,9 @@ object AngConfigManager {
             }
 
             var config: ServerConfig? = null
-            val allowInsecure = true // settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: true // GFW-knocker: just disable root CA check by default that cause many configs to fail
+            val allowInsecure = TlsCertificatePolicy.forImport(
+                settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true,
+            )
             if (str.startsWith(EConfigType.VMESS.protocolScheme)) {
                 config = ServerConfig.create(EConfigType.VMESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return -1
@@ -1099,7 +1098,9 @@ object AngConfigManager {
             }
 
             var config: ServerConfig? = null
-            val allowInsecure = true // settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: true // GFW-knocker: just disable root CA check by default that cause many configs to fail
+            val allowInsecure = TlsCertificatePolicy.forImport(
+                settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true,
+            )
             if (str.startsWith(EConfigType.VMESS.protocolScheme)) {
                 config = ServerConfig.create(EConfigType.VMESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return ""
@@ -1380,7 +1381,9 @@ object AngConfigManager {
 
 
             var config: ServerConfig? = null
-            val allowInsecure = true // settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: true // GFW-knocker: just disable root CA check by default that cause many configs to fail
+            val allowInsecure = TlsCertificatePolicy.forImport(
+                settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true,
+            )
             if (str.startsWith(EConfigType.VMESS.protocolScheme)) {
                 config = ServerConfig.create(EConfigType.VMESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return ""

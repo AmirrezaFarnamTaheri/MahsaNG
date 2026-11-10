@@ -17,9 +17,11 @@ This draft integrates original PRs #1–#7 plus one new GUID-based filtered reor
 
 - Duplicate removal is now confirmed and restricted to the exact visible GUIDs, keeps the active selected profile even if it appears later in an equal-outbound group, recomputes candidates at commit time, and uses a single synchronized index publication instead of O(n^2) pairwise UI comparisons and per-profile index writes. Seven isolated JUnit4 cases cover this policy (expected isolated suite total: **54**).
 
+- TLS certificate security: corrected the preference key to the existing `pref_allow_insecure` checkbox, default off. Four imports no longer unconditionally set `allowInsecure=true`; legacy flags cannot override the user setting. Non-custom managed profiles recheck TLS and Reality bypass flags at configuration generation time, including profiles previously saved with insecure flags. Explicitly user-authored raw custom JSON is not rewritten. Seven pure JUnit tests cover the secure policy; expected isolated suite count after this change: **61** (awaiting hosted CI).
+
 ## Actual CI results (not a claimed APK build)
 
-**47/47 standalone Kotlin/JUnit4 regressions passed before the new duplicate tests; the **54-test** combined suite must be verified by the next hosted CI run** in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
+**54/54 isolated Kotlin/JUnit4 tests passed** in [run 42916109776](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42916109776); the seven new TLS tests await the next run. in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
 
 The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation, dependencies and resource processing but **fails** during Android resource linking. It is not marked optional, so the integration remains red/not release-ready.
 

@@ -137,6 +137,8 @@
 
     <string name="title_pref_proxy_sharing_enabled">اجازه اتصالات از طریق LAN</string>
     <string name="summary_pref_proxy_sharing_enabled">دستگاه‌های دیگر می‌توانند از طریق socks/http به پراکسی توسط نشانی آی‌پی شما متصل شوند، فقط در شبکه مورد اعتماد فعال می‌شوند تا از اتصال غیرمجاز جلوگیری کنند</string>
+    <string name="title_pref_allow_insecure">اجازهٔ گواهی TLS نامعتبر (ناامن)</string>
+    <string name="summary_pref_allow_insecure">با فعال‌کردن این گزینه، بررسی اعتبار گواهی TLS در پروفایل‌های واردشده می‌تواند غیرفعال شود. برای امنیت آن را خاموش نگه دارید؛ خاموش‌کردن این گزینه، پروفایل‌های مدیریت‌شدهٔ قدیمی را نیز ایمن می‌کند.</string>
     <string name="toast_warning_pref_proxysharing_short">اتصالات از طریق LAN را مجاز کنید، مطمئن شوید که در یک شبکه قابل اعتماد هستید</string>
 
     <string name="title_pref_socks_port">پورت پروکسی SOCKS5</string>

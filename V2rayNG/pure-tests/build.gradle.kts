@@ -22,6 +22,7 @@ val productionHelpers = listOf(
     "ProfileDelayOrder",
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
+    "TlsCertificatePolicy",
 )
 
 sourceSets {

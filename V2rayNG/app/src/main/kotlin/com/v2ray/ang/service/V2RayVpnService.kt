@@ -273,7 +273,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
             sendFd(generation)
         } catch (e: Exception) {
-            Log.d(packageName, "tun2socks start failed: $e")
+            Log.e(packageName, "tun2socks start failed: $e")
+            // A failed current-generation restart must not leave a live VPN without a bridge.
+            if (tunProcesses.isCurrent(generation)) stopV2Ray()
         }
     }
 

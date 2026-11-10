@@ -398,22 +398,27 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
 
     fun importBatchConfig(server: String?, subid: String = "") {
-        val subid2 = if(subid.isNullOrEmpty()){
-            mainViewModel.subscriptionId
-        }else{
-            subid
-        }
-        val append = subid.isNullOrEmpty()
+        val targetSubid = if (subid.isBlank()) mainViewModel.subscriptionId else subid
+        val append = subid.isBlank()
 
-        var count = AngConfigManager.importBatchConfig(server, subid2, append)
-        if (count <= 0) {
-            count = AngConfigManager.importBatchConfig(Utils.decode(server!!), subid2, append)
-        }
-        if (count > 0) {
-            toast(R.string.toast_success)
-            mainViewModel.reloadServerList()
-        } else {
-            toast(R.string.toast_failure)
+        // Parsing and MMKV writes can be expensive for long subscriptions.
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                var imported = AngConfigManager.importBatchConfig(server, targetSubid, append)
+                if (imported <= 0 && !server.isNullOrBlank()) {
+                    val decoded = runCatching { Utils.decode(server) }.getOrNull()
+                    if (!decoded.isNullOrBlank() && decoded != server) {
+                        imported = AngConfigManager.importBatchConfig(decoded, targetSubid, append)
+                    }
+                }
+                imported
+            }
+            if (count > 0) {
+                toast(R.string.toast_success)
+                mainViewModel.reloadServerList()
+            } else {
+                toast(R.string.toast_failure)
+            }
         }
     }
 

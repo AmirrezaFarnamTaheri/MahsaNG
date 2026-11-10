@@ -41,6 +41,7 @@ object MmkvManager {
         return Gson().fromJson(json, ServerConfig::class.java)
     }
 
+    @Synchronized
     fun encodeServerConfig(guid: String, config: ServerConfig): String {
         val key = guid.ifBlank { Utils.getUuid() }
         serverStorage?.encode(key, Gson().toJson(config))
@@ -55,6 +56,7 @@ object MmkvManager {
         return key
     }
 
+    @Synchronized
     fun removeServer(guid: String) {
         if (guid.isBlank()) {
             return
@@ -158,22 +160,20 @@ object MmkvManager {
         }
     }
 
-    fun sortByTestResults( ) {
-        data class ServerDelay(var guid: String, var testDelayMillis: Long)
-
-        val serverDelays = mutableListOf<ServerDelay>()
-        val serverList = decodeServerList()
-        serverList.forEach { key ->
-            val delay = decodeServerAffiliationInfo(key)?.testDelayMillis ?: 0L
-            serverDelays.add(ServerDelay(key, if (delay <= 0L) 999999 else delay))
+    /**
+     * Sort against one immutable result snapshot. A concurrent profile-index
+     * modification aborts publishing rather than overwriting imported GUIDs.
+     * This is same-process coordination; MMKV writes are not cross-process transactions.
+     */
+    @Synchronized
+    fun sortByTestResults(): Boolean {
+        val initial = runCatching { decodeServerList().toList() }.getOrNull() ?: return false
+        val ordered = ProfileDelayOrder.order(initial) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
         }
-        serverDelays.sortBy { it.testDelayMillis }
-
-        serverDelays.forEach {
-            serverList.remove(it.guid)
-            serverList.add(it.guid)
-        }
-
-        mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(serverList))
+        if (ordered == initial) return true
+        val latest = runCatching { decodeServerList() }.getOrNull() ?: return false
+        if (latest != initial) return false
+        return mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(ordered)) == true
     }
 }

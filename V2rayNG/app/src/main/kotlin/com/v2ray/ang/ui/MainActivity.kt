@@ -325,8 +325,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             true
         }
         R.id.sort_by_test_results -> {
-            MmkvManager.sortByTestResults()
-            mainViewModel.reloadServerList()
+            // Sorting may read thousands of stored profiles; keep it off the UI thread.
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) { MmkvManager.sortByTestResults() }
+                mainViewModel.reloadServerList()
+            }
             true
         }
         R.id.filter_config -> {

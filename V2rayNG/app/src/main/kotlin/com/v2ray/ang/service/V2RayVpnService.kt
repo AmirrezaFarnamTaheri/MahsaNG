@@ -257,9 +257,17 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
             Thread({
                 val exitCode = runCatching { child.waitFor() }.getOrNull()
-                if (exitCode != null && tunProcesses.departed(generation, child)) {
-                    Log.d(packageName, "$TUN2SOCKS exited ($exitCode), restarting owned session")
-                    runTun2socks(generation)
+                if (exitCode != null) {
+                    if (tunProcesses.departed(generation, child)) {
+                        Log.d(packageName, "$TUN2SOCKS exited ($exitCode), restarting owned session")
+                        runTun2socks(generation)
+                    } else if (tunProcesses.isCurrent(generation)) {
+                        // This was the owned child but the bounded restart budget
+                        // is exhausted. Do not leave an apparently running VPN
+                        // with no tun2socks bridge.
+                        Log.e(packageName, "$TUN2SOCKS restart budget exhausted")
+                        stopV2Ray()
+                    }
                 }
             }, "tun2socks-watch").start()
 

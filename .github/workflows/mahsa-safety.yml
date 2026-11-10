@@ -45,6 +45,8 @@ jobs:
           SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
           "$SDKMANAGER" "platforms;android-35" "build-tools;34.0.0"
+      - name: Check unsupported MASQUE/WARP screens remain archived
+        run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh
       - name: Compile Android application
         working-directory: V2rayNG
         run: bash ./gradlew --no-daemon :app:compileDevDebugKotlin

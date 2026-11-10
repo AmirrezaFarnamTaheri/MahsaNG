@@ -39,17 +39,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val tcpingTestScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     private val testRuns = TestRunTracker()
     private var realPingScheduleJob: Job? = null
+    private var nativeTestRunPending = false
 
     /**
      * Called on the UI thread. Snapshot identifiers before scheduling any background work.
      * A new run invalidates both previous TCP callbacks and in-flight native callbacks.
      */
-    private fun beginTestRun(visibleGuids: List<String>): String {
+    private fun beginTestRun(visibleGuids: List<String>, native: Boolean): String {
         tcpingTestScope.coroutineContext[Job]?.cancelChildren()
         realPingScheduleJob?.cancel()
         SpeedtestUtil.closeAllTcpSockets()
         val runId = testRuns.begin(visibleGuids)
-        MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG_CANCEL, runId)
+        // Starting a TCP-only run must not launch a native service unnecessarily.
+        // If a real-ping run preceded it, this command cancels that native run.
+        if (native || nativeTestRunPending) {
+            MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG_CANCEL, runId)
+        }
+        nativeTestRunPending = native
         MmkvManager.clearTestDelayResults(visibleGuids)
         updateListAction.value = -1
         return runId
@@ -65,7 +71,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<AngApplication>().unregisterReceiver(mMsgReceiver)
         testRuns.invalidate()
         realPingScheduleJob?.cancel()
-        MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG_CANCEL, "")
+        // Do not send a global native Cancel from an obsolete ViewModel: a new
+        // activity may already own the native service with a newer run token.
         tcpingTestScope.cancel()
         SpeedtestUtil.closeAllTcpSockets()
         Log.i(ANG_PACKAGE, "Main ViewModel is cleared")
@@ -121,7 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun testAllTcping() {
         val snapshot = synchronized(this) { serversCache.toList() }
-        val runId = beginTestRun(snapshot.map { it.guid })
+        val runId = beginTestRun(snapshot.map { it.guid }, native = false)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
 
         for (item in snapshot) {
@@ -144,7 +151,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun testAllRealPing() {
         // Never iterate serversCache on Dispatchers.Default; reloading clears the mutable list.
         val guids = synchronized(this) { serversCache.map { it.guid } }
-        val runId = beginTestRun(guids)
+        val runId = beginTestRun(guids, native = true)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
 
         realPingScheduleJob = viewModelScope.launch(Dispatchers.Default) {

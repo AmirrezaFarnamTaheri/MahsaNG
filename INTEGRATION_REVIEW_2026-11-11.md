@@ -15,13 +15,15 @@ This draft integrates original PRs #1–#7 plus one new GUID-based filtered reor
 
 `MmkvManager.kt` reconciles #1/#2/#4/#7; `MainActivity.kt` reconciles #1/#4/#7 and replaces the unavailable RxPermissions dependency with AndroidX Activity Result contracts. Android's document URI access uses the picker-provided read grant.
 
-- Duplicate removal is now confirmed and restricted to the exact visible GUIDs, keeps the active selected profile even if it appears later in an equal-outbound group, recomputes candidates at commit time, and uses a single synchronized index publication instead of O(n^2) pairwise UI comparisons and per-profile index writes. Seven isolated JUnit4 cases cover this policy (expected isolated suite total: **54**).
+- Duplicate removal is now confirmed and restricted to the exact visible GUIDs, keeps the active selected profile even if it appears later in an equal-outbound group, recomputes candidates at commit time, and uses a single synchronized index publication instead of O(n^2) pairwise UI comparisons and per-profile index writes. Seven isolated JUnit4 cases cover this policy.
 
-- TLS certificate security: corrected the preference key to the existing `pref_allow_insecure` checkbox, default off. Four imports no longer unconditionally set `allowInsecure=true`; legacy flags cannot override the user setting. Non-custom managed profiles recheck TLS and Reality bypass flags at configuration generation time, including profiles previously saved with insecure flags. Explicitly user-authored raw custom JSON is not rewritten. Seven pure JUnit tests cover the secure policy; expected isolated suite count after this change: **61** (awaiting hosted CI).
+- TLS certificate security: corrected the preference key to the existing `pref_allow_insecure` checkbox, default off. Four imports no longer unconditionally set `allowInsecure=true`; legacy flags cannot override the user setting. Non-custom managed profiles recheck TLS and Reality bypass flags at configuration generation time, including profiles previously saved with insecure flags. Explicitly user-authored raw custom JSON is not rewritten. Seven pure JUnit tests cover the secure policy. This changes managed TLS verification behavior and requires on-device compatibility and security testing.
+
+- Privacy: full generated and custom proxy JSON is no longer written to Android debug logs. `V2rayNG/pure-tests/check-no-config-logging.sh` runs in GitHub CI to prevent direct Android logging from the configuration generator.
 
 ## Actual CI results (not a claimed APK build)
 
-**54/54 isolated Kotlin/JUnit4 tests passed** in [run 42916109776](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42916109776); the seven new TLS tests await the next run. in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
+**61/61 pure Kotlin/JUnit4 tests passed** in hosted [workflow 42917968450](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42917968450). The isolated build compiles 12 production helpers and their JUnit tests; it does **not** build Android services, JNI, UI or an APK. The same workflow also ran the checked-in raw-configuration-log guard successfully, preventing the generator from logging JSON containing proxy credentials.
 
 The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation, dependencies and resource processing but **fails** during Android resource linking. It is not marked optional, so the integration remains red/not release-ready.
 
@@ -41,7 +43,7 @@ The last Android compilation in run [42913620208](https://github.com/AmirrezaFar
 - Colors: `red`, `donor_link`.
 - Strings: `warp_gen_new_ip`, `warp_gen_new_key`, `warp_gen_paste`, `warp_clear`, `warp_section_endpoint_keys`, `warp_ip`, `masque_gen_description`, `masque_hint_ip`.
 
-This is an observed, non-exhaustive first batch of missing references. The authoring/layout source for this security-sensitive feature must be restored or intentionally redesigned, not filled with fake labels/icons solely for a green build.
+The MASQUE layouts entered the upstream repository in [commit b049f70](https://github.com/GFW-knocker/MahsaNG/commit/b049f70296b95ee8d4e9e1af7f6f0e368aa98902), an upload containing layouts but not their companion string/color/drawable definitions. This is an observed, non-exhaustive first batch of missing references. The authoring/layout source for this security-sensitive feature must be restored or intentionally redesigned, not filled with fake labels/icons solely for a green build.
 
 ### Additional source-provenance blocker
 

@@ -162,7 +162,7 @@
     <string name="toast_warning_pref_proxysharing_short">Allow connections from the LAN, Make sure you are in a trusted network</string>
 
     <string name="title_pref_allow_insecure">Allow insecure TLS certificates (unsafe)</string>
-    <string name="summary_pref_allow_insecure">Opt in to skipping certificate checks for imported profiles. Keep off to verify TLS certificates; turning it off also protects previously imported managed profiles.</string>
+    <string name="summary_pref_allow_insecure">Allow imported managed profiles to skip TLS certificate checks. Keep off to verify their certificates. Custom JSON is not changed and can disable certificate checks even when this setting is off.</string>
 
     <string name="title_pref_socks_port">SOCKS5 proxy port</string>
     <string name="summary_pref_socks_port">SOCKS5 proxy port</string>

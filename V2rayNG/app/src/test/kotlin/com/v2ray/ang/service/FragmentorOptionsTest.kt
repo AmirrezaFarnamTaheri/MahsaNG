@@ -15,7 +15,7 @@ class FragmentorOptionsTest {
         assertEquals("node.example", options.targetHost)
         assertEquals(443, options.targetPort)
         assertEquals(90, options.fragments)
-        assertEquals(0.007, options.delaySeconds)
+        assertEquals(0.007, options.delaySeconds, 1e-9)
     }
 
     @Test fun manualIpOverrideFollowsTheSettingsToggle() {

@@ -84,6 +84,8 @@ object MmkvManager {
         if (subid.isBlank() || stagedProfiles.isEmpty()) return false
         val main = mainStorage ?: return false
         val payloads = serverStorage ?: return false
+        // An update downloaded before subscription deletion must not resurrect it.
+        if (subStorage?.decodeString(subid).isNullOrBlank()) return false
 
         return try {
             val oldIndex = decodeServerList()
@@ -151,16 +153,24 @@ object MmkvManager {
         }
     }
 
+    /** Remove one subscription with a single index update under the writer gate. */
+    @Synchronized
     fun removeServerViaSubid(subid: String) {
-        if (subid.isBlank()) {
-            return
+        if (subid.isBlank()) return
+        val indexed = decodeServerList()
+        val removed = serverStorage?.allKeys()?.mapNotNull { guid ->
+            val config = runCatching { decodeServerConfig(guid) }.getOrNull()
+            guid.takeIf { config?.subscriptionId == subid }
+        }?.toSet().orEmpty()
+        if (removed.isEmpty()) return
+        val survivors = indexed.filterNot { it in removed }
+        if (mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(survivors)) != true) return
+        if (mainStorage?.decodeString(KEY_SELECTED_SERVER) in removed) {
+            mainStorage?.remove(KEY_SELECTED_SERVER)
         }
-        serverStorage?.allKeys()?.forEach { key ->
-            decodeServerConfig(key)?.let { config ->
-                if (config.subscriptionId == subid) {
-                    removeServer(key)
-                }
-            }
+        removed.forEach { guid ->
+            serverStorage?.remove(guid)
+            serverAffStorage?.remove(guid)
         }
     }
 
@@ -219,11 +229,13 @@ object MmkvManager {
         return subscriptions
     }
 
+    @Synchronized
     fun removeSubscription(subid: String) {
         subStorage?.remove(subid)
         removeServerViaSubid(subid)
     }
 
+    @Synchronized
     fun removeAllServer() {
         mainStorage?.clearAll()
         serverStorage?.clearAll()

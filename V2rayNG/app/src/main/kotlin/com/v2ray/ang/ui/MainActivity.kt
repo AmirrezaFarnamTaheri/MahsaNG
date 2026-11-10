@@ -316,17 +316,39 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             true
         }
         R.id.del_invalid_config -> {
-            AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    MmkvManager.removeInvalidServer()
-                    mainViewModel.reloadServerList()
+            // Snapshot the displayed list: hidden subscriptions and filters are never deletion targets.
+            val visibleGuids = mainViewModel.serversCache.map { it.guid }.toList()
+            lifecycleScope.launch {
+                val candidates = withContext(Dispatchers.IO) {
+                    MmkvManager.findFailedServerGuids(visibleGuids)
                 }
-                .show()
+                if (candidates.isEmpty()) {
+                    toast(R.string.toast_none_data)
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(getString(R.string.del_failed_config_confirmation, candidates.size))
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            lifecycleScope.launch {
+                                // Recheck only the previewed candidates; a new failure cannot
+                                // silently expand the deletion after the confirmation was shown.
+                                withContext(Dispatchers.IO) {
+                                    MmkvManager.removeInvalidServer(candidates)
+                                }
+                                mainViewModel.reloadServerList()
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
             true
         }
         R.id.sort_by_test_results -> {
-            MmkvManager.sortByTestResults()
-            mainViewModel.reloadServerList()
+            // Sorting may read thousands of stored profiles; keep it off the UI thread.
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) { MmkvManager.sortByTestResults() }
+                mainViewModel.reloadServerList()
+            }
             true
         }
         R.id.filter_config -> {
@@ -398,22 +420,27 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
 
     fun importBatchConfig(server: String?, subid: String = "") {
-        val subid2 = if(subid.isNullOrEmpty()){
-            mainViewModel.subscriptionId
-        }else{
-            subid
-        }
-        val append = subid.isNullOrEmpty()
+        val targetSubid = if (subid.isBlank()) mainViewModel.subscriptionId else subid
+        val append = subid.isBlank()
 
-        var count = AngConfigManager.importBatchConfig(server, subid2, append)
-        if (count <= 0) {
-            count = AngConfigManager.importBatchConfig(Utils.decode(server!!), subid2, append)
-        }
-        if (count > 0) {
-            toast(R.string.toast_success)
-            mainViewModel.reloadServerList()
-        } else {
-            toast(R.string.toast_failure)
+        // Parsing and MMKV writes can be expensive for long subscriptions.
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                var imported = AngConfigManager.importBatchConfig(server, targetSubid, append)
+                if (imported <= 0 && !server.isNullOrBlank()) {
+                    val decoded = runCatching { Utils.decode(server) }.getOrNull()
+                    if (!decoded.isNullOrBlank() && decoded != server) {
+                        imported = AngConfigManager.importBatchConfig(decoded, targetSubid, append)
+                    }
+                }
+                imported
+            }
+            if (count > 0) {
+                toast(R.string.toast_success)
+                mainViewModel.reloadServerList()
+            } else {
+                toast(R.string.toast_failure)
+            }
         }
     }
 

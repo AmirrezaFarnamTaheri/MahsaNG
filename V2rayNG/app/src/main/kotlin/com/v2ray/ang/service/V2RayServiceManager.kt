@@ -25,9 +25,7 @@ import com.v2ray.ang.util.MmkvManager
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.util.V2rayConfigUtil
 import go.Seq
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import libv2ray.Libv2ray
 import libv2ray.V2RayPoint
 import libv2ray.V2RayVPNServiceSupportsSet
@@ -42,19 +40,26 @@ object V2RayServiceManager {
     private const val NOTIFICATION_PENDING_INTENT_STOP_V2RAY = 1
     private const val NOTIFICATION_ICON_THRESHOLD = 3000
 
+    @Volatile
     var TLS_serv: backServ? = null
+
+    private val coreStopGate = CoreStopGate()
+    // Native cleanup must finish even after an Android Service has been stopped.
+    private val nativeCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val v2rayPoint: V2RayPoint = Libv2ray.newV2RayPoint(V2RayCallback(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
     private val mMsgReceive = ReceiveMessageHandler()
     private val mainStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
     private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
+    @Volatile
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
             Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()))
         }
+    @Volatile
     var currentConfig: ServerConfig? = null
 
     private var lastQueryTime = 0L
@@ -123,77 +128,115 @@ object V2RayServiceManager {
     }
 
     fun startV2rayPoint() {
-
-        // ------- GFW-knocker fragmentor service ----------------------
-        TLS_serv = backServ()
-        TLS_serv!!.start_HTTPS_service()
-        TLS_serv!!.start_TLS_service()
-        // -------------------------------------------------------------
+        // If stopLoop is still executing, coalesce starts into one deferred retry.
+        if (!coreStopGate.requestStart()) return
 
         val service = serviceControl?.get()?.getService() ?: return
-        val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER) ?: return
+        val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
+            ?.takeIf { it.isNotBlank() } ?: return
         val config = MmkvManager.decodeServerConfig(guid) ?: return
-        if (!v2rayPoint.isRunning) {
-            val result = V2rayConfigUtil.getV2rayConfig(service, guid)
-            if (!result.status)
-                return
+        if (v2rayPoint.isRunning) return
+        val result = V2rayConfigUtil.getV2rayConfig(service, guid)
+        if (!result.status) {
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
 
-            try {
-                val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
-                mFilter.addAction(Intent.ACTION_SCREEN_ON)
-                mFilter.addAction(Intent.ACTION_SCREEN_OFF)
-                mFilter.addAction(Intent.ACTION_USER_PRESENT)
-                service.registerReceiver(mMsgReceive, mFilter)
-            } catch (e: Exception) {
-                Log.d(ANG_PACKAGE, e.toString())
+        var receiverRegistered = false
+        var fragmentor: backServ? = null
+        try {
+            // Configuration must be valid before allocating optional local listeners.
+            // Read the exact keys used by the existing GFW settings screen.
+            val outbound = config.getProxyOutbound()
+            val options = runCatching {
+                val preferences = my_preference_storage(service)
+                FragmentorOptions.fromSettings(
+                    outbound?.getServerAddress(), outbound?.getServerPort()
+                ) { key, fallback -> preferences.get_value(key, fallback) }
+            }.getOrNull()
+            if (options != null) {
+                fragmentor = backServ(
+                    service.applicationContext, service, options.targetHost,
+                    options.targetPort, options.fragments, options.delaySeconds,
+                    false // HTTPS/DoH is optional; no public setting identifies YouTube mode.
+                )
+                fragmentor.start_TLS_service()
+                fragmentor.start_HTTPS_service()
+                TLS_serv = fragmentor
             }
+
+            val filter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
+            filter.addAction(Intent.ACTION_SCREEN_ON)
+            filter.addAction(Intent.ACTION_SCREEN_OFF)
+            filter.addAction(Intent.ACTION_USER_PRESENT)
+            service.registerReceiver(mMsgReceive, filter)
+            receiverRegistered = true
 
             v2rayPoint.configureFileContent = result.content
             v2rayPoint.domainName = config.getV2rayPointDomainAndPort()
             currentConfig = config
+            v2rayPoint.runLoop(settingsStorage?.decodeBool(AppConfig.PREF_PREFER_IPV6) ?: false)
+            if (!v2rayPoint.isRunning) error("Native core failed to enter running state")
 
-            try {
-                v2rayPoint.runLoop(settingsStorage?.decodeBool(AppConfig.PREF_PREFER_IPV6) ?: false)
-            } catch (e: Exception) {
-                Log.d(ANG_PACKAGE, e.toString())
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
+            runCatching { showNotification() }.onFailure { Log.d(ANG_PACKAGE, "Notification: $it") }
+        } catch (failure: Exception) {
+            Log.d(ANG_PACKAGE, "Native core start failed: $failure")
+            runCatching { fragmentor?.stop_HTTPS_service() }
+            runCatching { fragmentor?.stop_TLS_service() }
+            if (TLS_serv === fragmentor) TLS_serv = null
+            if (receiverRegistered) {
+                runCatching { service.unregisterReceiver(mMsgReceive) }
             }
-
-            if (v2rayPoint.isRunning) {
-                MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
-                showNotification()
-            } else {
-                MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
-                cancelNotification()
-            }
+            currentConfig = null
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
         }
     }
 
     fun stopV2rayPoint() {
-        // ------- GFW-knocker fragmentor service ----------------------
-        TLS_serv!!.stop_HTTPS_service()
-        TLS_serv!!.stop_TLS_service()
-        // -------------------------------------------------------------
+        // Idempotent while an earlier stopLoop remains in flight.
+        val stopToken = coreStopGate.beginStop() ?: return
+        val service = serviceControl?.get()?.getService()
+        val fragmentor = TLS_serv
+        TLS_serv = null
 
+        nativeCleanupScope.launch {
+            var stopped = false
+            try {
+                if (v2rayPoint.isRunning) v2rayPoint.stopLoop()
+                stopped = !v2rayPoint.isRunning
+            } catch (failure: Exception) {
+                Log.d(ANG_PACKAGE, "Native stopLoop failed: $failure")
+            } finally {
+                runCatching { fragmentor?.stop_HTTPS_service() }
+                runCatching { fragmentor?.stop_TLS_service() }
+            }
 
-        val service = serviceControl?.get()?.getService() ?: return
+            // A successful stop broadcast must follow native socket cleanup,
+            // not precede it as it did with unowned GlobalScope.
+            withContext(Dispatchers.Main) {
+                if (stopped) {
+                    cancelNotificationFor(service)
+                    if (service != null) {
+                        runCatching { service.unregisterReceiver(mMsgReceive) }
+                        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+                    }
+                    currentConfig = null
+                } else if (service != null) {
+                    // Do not claim the core stopped if stopLoop failed or is still running.
+                    val actualState = if (v2rayPoint.isRunning) {
+                        AppConfig.MSG_STATE_RUNNING
+                    } else {
+                        AppConfig.MSG_STATE_NOT_RUNNING
+                    }
+                    MessageUtil.sendMsg2UI(service, actualState, "")
+                }
 
-        if (v2rayPoint.isRunning) {
-            GlobalScope.launch(Dispatchers.Default) {
-                try {
-                    v2rayPoint.stopLoop()
-                } catch (e: Exception) {
-                    Log.d(ANG_PACKAGE, e.toString())
+                val restartToken = coreStopGate.completeStop(stopToken, stopped)
+                if (restartToken != null && coreStopGate.canResume(restartToken)) {
+                    startV2rayPoint()
                 }
             }
-        }
-
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        cancelNotification()
-
-        try {
-            service.unregisterReceiver(mMsgReceive)
-        } catch (e: Exception) {
-            Log.d(ANG_PACKAGE, e.toString())
         }
     }
 
@@ -329,8 +372,11 @@ object V2RayServiceManager {
     }
 
     fun cancelNotification() {
-        val service = serviceControl?.get()?.getService() ?: return
-        service.stopForeground(true)
+        cancelNotificationFor(serviceControl?.get()?.getService())
+    }
+
+    private fun cancelNotificationFor(service: Service?) {
+        runCatching { service?.stopForeground(true) }
         mBuilder = null
         mSubscription?.unsubscribe()
         mSubscription = null

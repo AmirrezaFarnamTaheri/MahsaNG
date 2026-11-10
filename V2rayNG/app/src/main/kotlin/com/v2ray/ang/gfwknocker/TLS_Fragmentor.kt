@@ -22,13 +22,13 @@ class TLS_Fragmentor(
 ) : Thread() {
     var ss: ServerSocket? = null
     var client_sock: Socket? = null
-    var is_ready = false
+    @Volatile var is_ready = false
 
 
 
     override fun run() {
         try {
-            ss = ServerSocket(listen_port, 128) // up to 128 concurrent connection queued
+            ss = FragmentorSocketBinding.bind(listen_ip, listen_port) // configured address; normally loopback
             listen_port = ss!!.localPort
             println("TLS Listening at $listen_ip:$listen_port")
             println("target $target_ip:$target_port\r\nnum_fragment:$num_fragment\r\nfragment_sleep:$fragment_sleep\r\nuse_fragment:$isFragment")
@@ -76,13 +76,8 @@ class TLS_Fragmentor(
     }
 
     fun safely_stop_server() {
-        try {
-            ss!!.close()
-        } catch (e: Exception) {
-//            println("Safe Stop ERR: " + e.message)
-            return
-        }
-//        println("TLS server socket safely stopped")
+        FragmentorSocketBinding.closeQuietly(ss)
+        is_ready = false
     }
 } //class Server
 

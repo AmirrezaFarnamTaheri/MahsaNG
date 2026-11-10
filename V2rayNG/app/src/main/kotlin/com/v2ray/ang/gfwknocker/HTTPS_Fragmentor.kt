@@ -19,10 +19,10 @@ class HTTPS_Fragmentor(
 ) : Thread() {
     var ss: ServerSocket? = null
     var client_sock: Socket? = null
-    var is_ready = false
+    @Volatile var is_ready = false
     override fun run() {
         try {
-            ss = ServerSocket(listen_port, 128) // up to 128 concurrent connection queued
+            ss = FragmentorSocketBinding.bind(listen_ip, listen_port) // configured address; normally loopback
             listen_port = ss!!.localPort
             println("HTTPS Listening at $listen_ip:$listen_port")
             is_ready = true
@@ -72,13 +72,8 @@ class HTTPS_Fragmentor(
     }
 
     fun safely_stop_server() {
-        try {
-            ss!!.close()
-        } catch (e: Exception) {
-            println("Safe Stop ERR: " + e.message)
-            return
-        }
-        println("server socket safely stopped")
+        FragmentorSocketBinding.closeQuietly(ss)
+        is_ready = false
     }
 } //class Server
 

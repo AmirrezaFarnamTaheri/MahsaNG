@@ -41,6 +41,7 @@ object MmkvManager {
         return Gson().fromJson(json, ServerConfig::class.java)
     }
 
+    @Synchronized
     fun encodeServerConfig(guid: String, config: ServerConfig): String {
         val key = guid.ifBlank { Utils.getUuid() }
         serverStorage?.encode(key, Gson().toJson(config))
@@ -55,6 +56,7 @@ object MmkvManager {
         return key
     }
 
+    @Synchronized
     fun removeServer(guid: String) {
         if (guid.isBlank()) {
             return
@@ -69,16 +71,106 @@ object MmkvManager {
         serverAffStorage?.remove(guid)
     }
 
-    fun removeServerViaSubid(subid: String) {
-        if (subid.isBlank()) {
-            return
-        }
-        serverStorage?.allKeys()?.forEach { key ->
-            decodeServerConfig(key)?.let { config ->
-                if (config.subscriptionId == subid) {
-                    removeServer(key)
+    /**
+     * Stage new payloads first, atomically publish the serialized GUID index, and
+     * only then retire the old subscription payloads. This is an in-process
+     * critical section, not a claim of cross-process MMKV transactions.
+     */
+    @Synchronized
+    fun replaceSubscriptionServers(
+        subid: String,
+        stagedProfiles: Map<String, ServerConfig>,
+    ): Boolean {
+        if (subid.isBlank() || stagedProfiles.isEmpty()) return false
+        val main = mainStorage ?: return false
+        val payloads = serverStorage ?: return false
+        // An update downloaded before subscription deletion must not resurrect it.
+        if (subStorage?.decodeString(subid).isNullOrBlank()) return false
+
+        return try {
+            val oldIndex = decodeServerList()
+            val oldGuids = oldIndex.filter { guid ->
+                decodeServerConfig(guid)?.subscriptionId == subid
+            }.toSet()
+            val newIndex = SubscriptionReplacementPlan.mergedIndex(
+                oldIndex, oldGuids, stagedProfiles.keys.toList()
+            )
+
+            if (stagedProfiles.values.any { config ->
+                    val outbound = config.getProxyOutbound()
+                    val address = outbound?.getServerAddress()
+                    val port = outbound?.getServerPort()
+                    config.subscriptionId != subid ||
+                        address.isNullOrBlank() || port == null || port !in 1..65535
+                }) return false
+
+            val selectedGuid = main.decodeString(KEY_SELECTED_SERVER)?.takeIf { it.isNotBlank() }
+            val selectedConfig = selectedGuid?.let { decodeServerConfig(it) }
+            val selectedAfter = SubscriptionReplacementPlan.matchSelected(
+                selectedGuid, oldGuids, selectedConfig, stagedProfiles
+            ) { before, after ->
+                before.getProxyOutbound()?.getServerAddress() ==
+                    after.getProxyOutbound()?.getServerAddress() &&
+                    before.getProxyOutbound()?.getServerPort() ==
+                    after.getProxyOutbound()?.getServerPort()
+            } ?: if (selectedGuid == null) stagedProfiles.keys.firstOrNull() else null
+
+            val written = mutableListOf<String>()
+            try {
+                for ((guid, config) in stagedProfiles) {
+                    // Record the key before writing: an exception after a partial
+                    // write must not leave it looking like a committed profile.
+                    written.add(guid)
+                    if (!payloads.encode(guid, Gson().toJson(config))) {
+                        error("Failed to stage subscription profile")
+                    }
+                }
+                if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(newIndex))) {
+                    error("Failed to publish subscription index")
+                }
+            } catch (_: Exception) {
+                written.forEach { guid -> runCatching { payloads.remove(guid) } }
+                return false
+            }
+
+            // A published replacement must never retain an old selected GUID.
+            if (selectedAfter != selectedGuid) {
+                runCatching {
+                    if (selectedAfter == null || !main.encode(KEY_SELECTED_SERVER, selectedAfter)) {
+                        main.remove(KEY_SELECTED_SERVER)
+                    }
                 }
             }
+            // Leaving old, unindexed payloads after interruption is recoverable;
+            // removing the old index before publication would lose user profiles.
+            oldGuids.forEach { guid ->
+                runCatching { payloads.remove(guid) }
+                runCatching { serverAffStorage?.remove(guid) }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Remove one subscription with a single index update under the writer gate. */
+    @Synchronized
+    fun removeServerViaSubid(subid: String) {
+        if (subid.isBlank()) return
+        val indexed = decodeServerList()
+        val removed = serverStorage?.allKeys()?.mapNotNull { guid ->
+            val config = runCatching { decodeServerConfig(guid) }.getOrNull()
+            guid.takeIf { config?.subscriptionId == subid }
+        }?.toSet().orEmpty()
+        if (removed.isEmpty()) return
+        val survivors = indexed.filterNot { it in removed }
+        if (mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(survivors)) != true) return
+        if (mainStorage?.decodeString(KEY_SELECTED_SERVER) in removed) {
+            mainStorage?.remove(KEY_SELECTED_SERVER)
+        }
+        removed.forEach { guid ->
+            serverStorage?.remove(guid)
+            serverAffStorage?.remove(guid)
         }
     }
 
@@ -93,6 +185,7 @@ object MmkvManager {
         return Gson().fromJson(json, ServerAffiliationInfo::class.java)
     }
 
+    @Synchronized
     fun encodeServerTestDelayMillis(guid: String, testResult: Long) {
         if (guid.isBlank()) {
             return
@@ -107,6 +200,17 @@ object MmkvManager {
             decodeServerAffiliationInfo(key)?.let { aff ->
                 aff.testDelayMillis = 0
                 serverAffStorage?.encode(key, Gson().toJson(aff))
+            }
+        }
+    }
+
+    /** Reset only the selected run's profiles; hidden subscriptions keep their test results. */
+    @Synchronized
+    fun clearTestDelayResults(visibleGuids: Collection<String>) {
+        visibleGuids.distinct().forEach { guid ->
+            runCatching { decodeServerAffiliationInfo(guid) }.getOrNull()?.let { affiliation ->
+                affiliation.testDelayMillis = 0L
+                serverAffStorage?.encode(guid, Gson().toJson(affiliation))
             }
         }
     }
@@ -137,43 +241,72 @@ object MmkvManager {
         return subscriptions
     }
 
+    @Synchronized
     fun removeSubscription(subid: String) {
         subStorage?.remove(subid)
         removeServerViaSubid(subid)
     }
 
+    @Synchronized
     fun removeAllServer() {
         mainStorage?.clearAll()
         serverStorage?.clearAll()
         serverAffStorage?.clearAll()
     }
 
-    fun removeInvalidServer() {
-        serverAffStorage?.allKeys()?.forEach { key ->
-            decodeServerAffiliationInfo(key)?.let { aff ->
-                if (aff.testDelayMillis <= 0L) {
-                    removeServer(key)
-                }
-            }
+    /**
+     * Returns only measured failures in the caller's visible/selected scope.
+     * Missing records and zero (untested/pending) never qualify.
+     */
+    @Synchronized
+    fun findFailedServerGuids(visibleGuids: Collection<String>): List<String> =
+        FailedServerSelection.findFailed(visibleGuids, decodeServerList()) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
         }
+
+    /**
+     * Rechecks the confirmed candidate list at commit time, removing only profiles
+     * that still exist and still have an explicit negative test result.
+     * The serialized index is written once instead of once per deleted profile.
+     */
+    @Synchronized
+    fun removeInvalidServer(confirmedCandidates: Collection<String>): Int {
+        if (confirmedCandidates.isEmpty()) return 0
+        val main = mainStorage ?: return 0
+        val currentGuids = decodeServerList()
+        val failedGuids = FailedServerSelection.findFailed(confirmedCandidates, currentGuids) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
+        }
+        if (failedGuids.isEmpty()) return 0
+
+        val failedSet = failedGuids.toHashSet()
+        val survivingGuids = currentGuids.filterNot { it in failedSet }
+        if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(survivingGuids))) return 0
+
+        if (main.decodeString(KEY_SELECTED_SERVER) in failedSet) {
+            main.remove(KEY_SELECTED_SERVER)
+        }
+        failedGuids.forEach { guid ->
+            serverStorage?.remove(guid)
+            serverAffStorage?.remove(guid)
+        }
+        return failedGuids.size
     }
 
-    fun sortByTestResults( ) {
-        data class ServerDelay(var guid: String, var testDelayMillis: Long)
-
-        val serverDelays = mutableListOf<ServerDelay>()
-        val serverList = decodeServerList()
-        serverList.forEach { key ->
-            val delay = decodeServerAffiliationInfo(key)?.testDelayMillis ?: 0L
-            serverDelays.add(ServerDelay(key, if (delay <= 0L) 999999 else delay))
+    /**
+     * Sort against one immutable result snapshot. A concurrent profile-index
+     * modification aborts publishing rather than overwriting imported GUIDs.
+     * This is same-process coordination; MMKV writes are not cross-process transactions.
+     */
+    @Synchronized
+    fun sortByTestResults(): Boolean {
+        val initial = runCatching { decodeServerList().toList() }.getOrNull() ?: return false
+        val ordered = ProfileDelayOrder.order(initial) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
         }
-        serverDelays.sortBy { it.testDelayMillis }
-
-        serverDelays.forEach {
-            serverList.remove(it.guid)
-            serverList.add(it.guid)
-        }
-
-        mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(serverList))
+        if (ordered == initial) return true
+        val latest = runCatching { decodeServerList() }.getOrNull() ?: return false
+        if (latest != initial) return false
+        return mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(ordered)) == true
     }
 }

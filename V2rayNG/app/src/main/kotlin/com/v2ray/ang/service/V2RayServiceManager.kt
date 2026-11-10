@@ -127,6 +127,9 @@ object V2RayServiceManager {
         }
     }
 
+    // Serialize native startup with stop's resource snapshot; onRevoke cannot
+    // observe an unstarted core and then leave a concurrently started core alive.
+    @Synchronized
     fun startV2rayPoint() {
         // If stopLoop is still executing, coalesce starts into one deferred retry.
         if (!coreStopGate.requestStart()) return
@@ -193,6 +196,7 @@ object V2RayServiceManager {
         }
     }
 
+    @Synchronized
     fun stopV2rayPoint() {
         // Idempotent while an earlier stopLoop remains in flight.
         val stopToken = coreStopGate.beginStop() ?: return

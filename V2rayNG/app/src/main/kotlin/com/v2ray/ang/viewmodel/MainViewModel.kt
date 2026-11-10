@@ -106,9 +106,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun swapServer(fromPosition: Int, toPosition: Int) {
-        Collections.swap(serverList, fromPosition, toPosition)
-        Collections.swap(serversCache, fromPosition, toPosition)
-        mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(serverList))
+        val firstGuid = serversCache.getOrNull(fromPosition)?.guid ?: return
+        val secondGuid = serversCache.getOrNull(toPosition)?.guid ?: return
+        if (MmkvManager.swapServerPositions(firstGuid, secondGuid)) {
+            serverList = MmkvManager.decodeServerList()
+            Collections.swap(serversCache, fromPosition, toPosition)
+        } else {
+            // Another writer may have replaced one of the profiles.
+            reloadServerList()
+        }
     }
 
     @Synchronized

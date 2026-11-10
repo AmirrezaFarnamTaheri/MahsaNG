@@ -72,6 +72,18 @@ object MmkvManager {
     }
 
     /**
+     * Reorder by GUIDs from the currently visible list, not filtered UI positions.
+     * Uses the authoritative index under the same-process writer lock.
+     */
+    @Synchronized
+    fun swapServerPositions(firstGuid: String, secondGuid: String): Boolean {
+        val current = runCatching { decodeServerList() }.getOrNull() ?: return false
+        val reordered = ProfileIndexSwap.swap(current, firstGuid, secondGuid) ?: return false
+        if (reordered == current) return true
+        return mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(reordered)) == true
+    }
+
+    /**
      * Stage new payloads first, atomically publish the serialized GUID index, and
      * only then retire the old subscription payloads. This is an in-process
      * critical section, not a claim of cross-process MMKV transactions.

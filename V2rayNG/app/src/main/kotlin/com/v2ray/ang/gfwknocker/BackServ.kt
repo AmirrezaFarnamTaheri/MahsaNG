@@ -83,20 +83,21 @@ class backServ(ctx1 : Context , svc1 : Service , target_ip : String , target_por
 
 
     fun start_HTTPS_service() {
-        HTTPS_serv!!.start()
+        // YouTube/DoH forwarding is optional; it is not created for normal profiles.
+        HTTPS_serv?.let { if (it.state == Thread.State.NEW) it.start() }
     }
 
     fun stop_HTTPS_service() {
-        HTTPS_serv!!.safely_stop_server()
-        DoH_service!!.safely_stop_DoH()
+        runCatching { HTTPS_serv?.safely_stop_server() }
+        runCatching { DoH_service?.safely_stop_DoH() }
     }
 
     fun start_TLS_service() {
-        TLS_serv!!.start()
+        TLS_serv?.let { if (it.state == Thread.State.NEW) it.start() }
     }
 
     fun stop_TLS_service() {
-        TLS_serv!!.safely_stop_server()
+        runCatching { TLS_serv?.safely_stop_server() }
     }
 
 }

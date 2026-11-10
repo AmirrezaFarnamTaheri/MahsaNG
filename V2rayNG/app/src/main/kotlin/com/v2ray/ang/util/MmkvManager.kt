@@ -41,6 +41,7 @@ object MmkvManager {
         return Gson().fromJson(json, ServerConfig::class.java)
     }
 
+    @Synchronized
     fun encodeServerConfig(guid: String, config: ServerConfig): String {
         val key = guid.ifBlank { Utils.getUuid() }
         serverStorage?.encode(key, Gson().toJson(config))
@@ -55,6 +56,7 @@ object MmkvManager {
         return key
     }
 
+    @Synchronized
     fun removeServer(guid: String) {
         if (guid.isBlank()) {
             return
@@ -67,6 +69,86 @@ object MmkvManager {
         mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(serverList))
         serverStorage?.remove(guid)
         serverAffStorage?.remove(guid)
+    }
+
+    /**
+     * Stage new payloads first, atomically publish the serialized GUID index, and
+     * only then retire the old subscription payloads. This is an in-process
+     * critical section, not a claim of cross-process MMKV transactions.
+     */
+    @Synchronized
+    fun replaceSubscriptionServers(
+        subid: String,
+        stagedProfiles: Map<String, ServerConfig>,
+    ): Boolean {
+        if (subid.isBlank() || stagedProfiles.isEmpty()) return false
+        val main = mainStorage ?: return false
+        val payloads = serverStorage ?: return false
+
+        return try {
+            val oldIndex = decodeServerList()
+            val oldGuids = oldIndex.filter { guid ->
+                decodeServerConfig(guid)?.subscriptionId == subid
+            }.toSet()
+            val newIndex = SubscriptionReplacementPlan.mergedIndex(
+                oldIndex, oldGuids, stagedProfiles.keys.toList()
+            )
+
+            if (stagedProfiles.values.any { config ->
+                    val outbound = config.getProxyOutbound()
+                    val address = outbound?.getServerAddress()
+                    val port = outbound?.getServerPort()
+                    config.subscriptionId != subid ||
+                        address.isNullOrBlank() || port == null || port !in 1..65535
+                }) return false
+
+            val selectedGuid = main.decodeString(KEY_SELECTED_SERVER)?.takeIf { it.isNotBlank() }
+            val selectedConfig = selectedGuid?.let { decodeServerConfig(it) }
+            val selectedAfter = SubscriptionReplacementPlan.matchSelected(
+                selectedGuid, oldGuids, selectedConfig, stagedProfiles
+            ) { before, after ->
+                before.getProxyOutbound()?.getServerAddress() ==
+                    after.getProxyOutbound()?.getServerAddress() &&
+                    before.getProxyOutbound()?.getServerPort() ==
+                    after.getProxyOutbound()?.getServerPort()
+            } ?: if (selectedGuid == null) stagedProfiles.keys.firstOrNull() else null
+
+            val written = mutableListOf<String>()
+            try {
+                for ((guid, config) in stagedProfiles) {
+                    // Record the key before writing: an exception after a partial
+                    // write must not leave it looking like a committed profile.
+                    written.add(guid)
+                    if (!payloads.encode(guid, Gson().toJson(config))) {
+                        error("Failed to stage subscription profile")
+                    }
+                }
+                if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(newIndex))) {
+                    error("Failed to publish subscription index")
+                }
+            } catch (_: Exception) {
+                written.forEach { guid -> runCatching { payloads.remove(guid) } }
+                return false
+            }
+
+            // A published replacement must never retain an old selected GUID.
+            if (selectedAfter != selectedGuid) {
+                runCatching {
+                    if (selectedAfter == null || !main.encode(KEY_SELECTED_SERVER, selectedAfter)) {
+                        main.remove(KEY_SELECTED_SERVER)
+                    }
+                }
+            }
+            // Leaving old, unindexed payloads after interruption is recoverable;
+            // removing the old index before publication would lose user profiles.
+            oldGuids.forEach { guid ->
+                runCatching { payloads.remove(guid) }
+                runCatching { serverAffStorage?.remove(guid) }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun removeServerViaSubid(subid: String) {

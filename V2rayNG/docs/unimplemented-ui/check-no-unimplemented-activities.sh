@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Quarantine can only be safe while the missing Activities are genuinely absent.
-if grep -REn 'AddMasqueActivity|AddWarpActivity|R\\.layout\\.activity_add_(masque|warp)' \
+if grep -REn 'AddMasqueActivity|AddWarpActivity|R[.]layout[.]activity_add_(masque|warp)' \
     V2rayNG/app/src/main/java V2rayNG/app/src/main/kotlin V2rayNG/app/src/main/AndroidManifest.xml; then
   echo "ERROR: MASQUE/WARP screen implementation now exists; restore and review archived layouts." >&2
   exit 1

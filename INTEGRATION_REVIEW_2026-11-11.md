@@ -25,7 +25,7 @@ This draft integrates original PRs #1–#7 plus one new GUID-based filtered reor
 
 **61/61 pure Kotlin/JUnit4 tests passed** in hosted [workflow 42917968450](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42917968450). The isolated build compiles 12 production helpers and their JUnit tests; it does **not** build Android services, JNI, UI or an APK. The same workflow also ran the checked-in raw-configuration-log guard successfully, preventing the generator from logging JSON containing proxy credentials.
 
-The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation, dependencies and resource processing but **fails** during Android resource linking. It is not marked optional, so the integration remains red/not release-ready.
+The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation and dependency resolution but **fails** during Android resource linking on missing active-screen resources. It is not marked optional, so the integration remains red/not release-ready.
 
 The build preflight has already exposed and corrected:
 1. Incompatible Gradle wrapper 7.5 and obsolete Java 17 `-XX:MaxPermSize`.
@@ -35,15 +35,38 @@ The build preflight has already exposed and corrected:
 5. Android 15 style attributes requiring modern compilation tools (now **AGP 8.6.1, Gradle 8.7, compileSdk 35, Build Tools 34.0.0, JDK 17**). **targetSdk remains 33**; no targeting upgrade was made.
 6. Orphaned About-page reference names. A limited compatibility shim uses *existing* checked-in theme colors, the actual `ic_banner` image and explanatory vector fallbacks. This is not a restoration of unpublished artwork or translations; visual QA is mandatory.
 
-### Current Android blocker — missing MASQUE/WARP screen resources
+### Current Android blocker — missing resources in implemented screens
 
-The last Android compilation in run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208) failed in `:app:processDevDebugResources`, before Kotlin compilation, because `res/layout/activity_add_masque.xml` refers to untracked resources including:
+The integration now keeps **seven unimplemented layout XML files** out of the
+Android resource graph, while preserving their original blobs verbatim in
+`V2rayNG/docs/unimplemented-ui/` with an explicit source-restoration checklist
+and a CI guard. Their declared MASQUE/WARP, DNS-scanner and newer Telegram
+proxy Activity classes are absent from the public source and manifest.
+**This does not implement or activate those features.** Existing GFW
+activities and working menus remain in place.
 
-- Drawables: `bg_button_theme`, `bg_card`, `bg_edit_field`, `ic_shield_guard_filled`, `ic_key`, `ic_clipboard_filled_import`.
-- Colors: `red`, `donor_link`.
-- Strings: `warp_gen_new_ip`, `warp_gen_new_key`, `warp_gen_paste`, `warp_clear`, `warp_section_endpoint_keys`, `warp_ip`, `masque_gen_description`, `masque_hint_ip`.
+After that narrowly scoped quarantine, the compilation in
+[run 42920169618](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42920169618)
+still **fails during `:app:processDevDebugResources`**, now on legitimate,
+currently compiled screens. The observed missing resource names include:
 
-The MASQUE layouts entered the upstream repository in [commit b049f70](https://github.com/GFW-knocker/MahsaNG/commit/b049f70296b95ee8d4e9e1af7f6f0e368aa98902), an upload containing layouts but not their companion string/color/drawable definitions. This is an observed, non-exhaustive first batch of missing references. The authoring/layout source for this security-sensitive feature must be restored or intentionally redesigned, not filled with fake labels/icons solely for a green build.
+- Main app/update screen images: `report_flag1`, `ic_stat_name_m2`,
+  `mahsa4`
+- Psiphon UI arrays: `psiphon_country_list`,
+  `psiphon_protocol_list`, `psiphon_aggressive_list`
+- DNSTT/MasterDNS lists: `dnstt_protocol`, `dnstt_permit`,
+  `masterdns_encryption_method`
+- Missing shared server editor: `layout_address_port`
+- Hysteria2 labels: `server_lab_bandwidth_down`,
+  `server_lab_bandwidth_up`, `server_lab_finalmask_hysteria2`
+- Legacy GFW theme resource `color_btn_light_blue2`
+
+These active resource references **cannot simply be removed**; source
+provenance, content, correct UX options and secure protocol behavior must be
+verified before supplying replacements. Some generic bandwidth strings appear
+in the GPL-3.0 v2rayNG upstream, but Mahsa-specific Psiphon/DNSTT option sets
+and artwork have not been found in the public fork. Neither Java/Kotlin
+compilation nor native VPN operation has been validated.
 
 ### Additional source-provenance blocker
 

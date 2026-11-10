@@ -179,6 +179,7 @@
     <string name="title_cant_delete_selected">نمیشود پاک کرد چون انتخاب شده</string>
     <string name="title_del_duplicate_config">حذف کانفیگ های تکراری</string>
     <string name="title_del_invalid_config">حذف پروفایل‌های دارای نتیجه تست ناموفق</string>
+    <string name="del_duplicate_config_confirmation">آیا %1$d پیکربندی تکراری از فهرست نمایش‌داده‌شده حذف شوند؟ پیکربندی انتخاب‌شده حفظ می‌شود.</string>
     <string name="del_failed_config_confirmation">آیا %1$d پروفایل ناموفق از فهرست نمایش‌داده‌شده حذف شوند؟</string>
     <string name="title_export_all">خروجی گرفتن کانفیگ کاستوم در کلیپ‌بورد</string>
     <string name="title_sub_setting">تنظیمات گروهی اشتراک</string>

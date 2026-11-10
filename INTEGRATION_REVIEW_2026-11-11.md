@@ -15,9 +15,11 @@ This draft integrates original PRs #1–#7 plus one new GUID-based filtered reor
 
 `MmkvManager.kt` reconciles #1/#2/#4/#7; `MainActivity.kt` reconciles #1/#4/#7 and replaces the unavailable RxPermissions dependency with AndroidX Activity Result contracts. Android's document URI access uses the picker-provided read grant.
 
+- Duplicate removal is now confirmed and restricted to the exact visible GUIDs, keeps the active selected profile even if it appears later in an equal-outbound group, recomputes candidates at commit time, and uses a single synchronized index publication instead of O(n^2) pairwise UI comparisons and per-profile index writes. Seven isolated JUnit4 cases cover this policy (expected isolated suite total: **54**).
+
 ## Actual CI results (not a claimed APK build)
 
-**47/47 standalone Kotlin/JUnit4 regressions passed** in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
+**47/47 standalone Kotlin/JUnit4 regressions passed before the new duplicate tests; the **54-test** combined suite must be verified by the next hosted CI run** in the GitHub-hosted `Pure Kotlin regressions (real JUnit)` job (for example, run [42913620208](https://github.com/AmirrezaFarnamTaheri/MahsaNG/actions/runs/42913620208)). This isolated test project compiles ten production helpers, but does **not** build Android services, native JNI, UI or an APK.
 
 The GitHub-hosted `Android source build (no suppressed errors)` job advances through SDK installation, dependencies and resource processing but **fails** during Android resource linking. It is not marked optional, so the integration remains red/not release-ready.
 

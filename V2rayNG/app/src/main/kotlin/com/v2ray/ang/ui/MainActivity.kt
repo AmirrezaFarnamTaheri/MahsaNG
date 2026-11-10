@@ -324,12 +324,36 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     .show()
             true
         }
-        R.id.del_duplicate_config-> {
-            AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    mainViewModel.removeDuplicateServer()
+        R.id.del_duplicate_config -> {
+            // The user confirms the exact visible candidates, never hidden groups.
+            val visibleGuids = mainViewModel.serversCache.map { it.guid }.toList()
+            lifecycleScope.launch {
+                val candidates = withContext(Dispatchers.IO) {
+                    MmkvManager.findDuplicateServerGuids(visibleGuids)
                 }
-                .show()
+                if (candidates.isEmpty()) {
+                    toast(R.string.toast_none_data)
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(getString(R.string.del_duplicate_config_confirmation, candidates.size))
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            lifecycleScope.launch {
+                                // Recheck selected profile and endpoint identities at commit time.
+                                val removed = withContext(Dispatchers.IO) {
+                                    MmkvManager.removeDuplicateServers(candidates, visibleGuids)
+                                }
+                                mainViewModel.reloadServerList()
+                                if (removed > 0) {
+                                    toast(getString(R.string.title_del_duplicate_config_count, removed))
+                                } else {
+                                    toast(R.string.toast_none_data)
+                                }
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
             true
         }
         R.id.del_invalid_config -> {

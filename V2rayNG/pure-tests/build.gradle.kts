@@ -21,6 +21,7 @@ val productionHelpers = listOf(
     "FragmentorSocketBinding",
     "ProfileDelayOrder",
     "ProfileIndexSwap",
+    "DuplicateProfileSelection",
 )
 
 sourceSets {

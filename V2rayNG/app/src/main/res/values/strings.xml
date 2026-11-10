@@ -204,6 +204,7 @@
     <string name="title_cant_delete_selected">can\'t delete, because its selected</string>
     <string name="title_del_duplicate_config">Delete duplicate configs</string>
     <string name="title_del_invalid_config">Delete failed profiles (test first)</string>
+    <string name="del_duplicate_config_confirmation">Delete %1$d duplicate profiles from the displayed list? The selected profile will be kept.</string>
     <string name="del_failed_config_confirmation">Delete %1$d failed profiles from the displayed list?</string>
     <string name="title_export_all">Export non-custom configs to clipboard</string>
     <string name="title_sub_setting">Subscription group setting</string>

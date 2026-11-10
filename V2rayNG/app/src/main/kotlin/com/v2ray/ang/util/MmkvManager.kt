@@ -306,6 +306,48 @@ object MmkvManager {
     }
 
     /**
+     * Preview duplicates only among the currently displayed GUIDs. A selected
+     * profile wins over an earlier duplicate and is never a deletion candidate.
+     */
+    @Synchronized
+    fun findDuplicateServerGuids(visibleGuids: Collection<String>): List<String> {
+        val stored = runCatching { decodeServerList() }.getOrNull() ?: return emptyList()
+        val selected = mainStorage?.decodeString(KEY_SELECTED_SERVER)
+        return DuplicateProfileSelection.findDuplicateGuids(visibleGuids, stored, selected) { guid ->
+            runCatching { decodeServerConfig(guid)?.getProxyOutbound() }.getOrNull()
+        }
+    }
+
+    /**
+     * Recompute the preview under the shared writer lock: a changed selection,
+     * endpoint or subscription must not extend the confirmed destructive action.
+     * Publish a single updated GUID index before retiring the payloads.
+     */
+    @Synchronized
+    fun removeDuplicateServers(
+        confirmedCandidates: Collection<String>,
+        visibleGuids: Collection<String>,
+    ): Int {
+        val allowed = confirmedCandidates.toSet()
+        if (allowed.isEmpty()) return 0
+        val main = mainStorage ?: return 0
+        val stored = runCatching { decodeServerList() }.getOrNull() ?: return 0
+        val selected = main.decodeString(KEY_SELECTED_SERVER)
+        val removable = DuplicateProfileSelection.findDuplicateGuids(visibleGuids, stored, selected) { guid ->
+            runCatching { decodeServerConfig(guid)?.getProxyOutbound() }.getOrNull()
+        }.filter { it in allowed }
+        if (removable.isEmpty()) return 0
+        val toRemove = removable.toHashSet()
+        val surviving = stored.filterNot { it in toRemove }
+        if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(surviving))) return 0
+        removable.forEach { guid ->
+            serverStorage?.remove(guid)
+            serverAffStorage?.remove(guid)
+        }
+        return removable.size
+    }
+
+    /**
      * Sort against one immutable result snapshot. A concurrent profile-index
      * modification aborts publishing rather than overwriting imported GUIDs.
      * This is same-process coordination; MMKV writes are not cross-process transactions.

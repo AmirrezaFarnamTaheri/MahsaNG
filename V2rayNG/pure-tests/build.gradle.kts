@@ -26,11 +26,11 @@ val productionHelpers = listOf(
 sourceSets {
     main {
         kotlin.srcDir("../app/src/main/kotlin")
-        kotlin.include(productionHelpers.map { "**/${it}.kt" })
+        kotlin.include(*productionHelpers.map { "**/${it}.kt" }.toTypedArray())
     }
     test {
         kotlin.srcDir("../app/src/test/kotlin")
-        kotlin.include(productionHelpers.map { "**/${it}Test.kt" })
+        kotlin.include(*productionHelpers.map { "**/${it}Test.kt" }.toTypedArray())
     }
 }
 

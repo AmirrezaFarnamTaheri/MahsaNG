@@ -25,7 +25,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Run isolated production helper tests
         working-directory: V2rayNG
-        run: ./gradlew -p pure-tests --no-daemon test
+        run: bash ./gradlew -p pure-tests --no-daemon test
 
   android-compile:
     name: Android source build (no suppressed errors)
@@ -38,9 +38,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - uses: android-actions/setup-android@v3
       - name: Install declared Android SDK
-        run: sdkmanager "platforms;android-33" "build-tools;33.0.2"
+        run: |
+          SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-33" "build-tools;33.0.2"
       - name: Compile Android application
         working-directory: V2rayNG
-        run: ./gradlew --no-daemon :app:compileDevDebugKotlin
+        run: bash ./gradlew --no-daemon :app:compileDevDebugKotlin

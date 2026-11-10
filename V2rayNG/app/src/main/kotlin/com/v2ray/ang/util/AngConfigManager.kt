@@ -985,8 +985,7 @@ object AngConfigManager {
      */
     fun importBatchConfig(servers: String?, subid: String, append: Boolean): Int {
         if (servers.isNullOrBlank()) return 0
-        if (!append) {
-            if (subid.isBlank()) return 0
+        if (!append && subid.isNotBlank()) {
             val staged = linkedMapOf<String, ServerConfig>()
             val parsed = SubscriptionReplacementPlan.stage(servers) { line ->
                 if (importConfig(line, subid, null, staged) == 0) true else null
@@ -1629,8 +1628,7 @@ object AngConfigManager {
     // -------------------GFW knocker ---------------------------------------------
     fun GFW_importBatchConfig_return_guid(servers: String?, subid: String, append: Boolean): Array<String> {
         if (servers.isNullOrBlank()) return emptyArray()
-        if (!append) {
-            if (subid.isBlank()) return emptyArray()
+        if (!append && subid.isNotBlank()) {
             val staged = linkedMapOf<String, ServerConfig>()
             val guids = SubscriptionReplacementPlan.stage(servers) { line ->
                 GFW_importConfig_return_guid(line, subid, null, staged).takeIf { it.isNotBlank() }

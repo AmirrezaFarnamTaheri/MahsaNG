@@ -1630,7 +1630,7 @@ object AngConfigManager {
             if (subid.isBlank()) return emptyArray()
             val staged = linkedMapOf<String, ServerConfig>()
             val guids = SubscriptionReplacementPlan.stage(servers) { line ->
-                GFW_importConfig_return_guid(line, subid, null, staged).ifBlank { null }
+                GFW_importConfig_return_guid(line, subid, null, staged).takeIf { it.isNotBlank() }
             } ?: return emptyArray()
             return if (MmkvManager.replaceSubscriptionServers(subid, staged)) {
                 guids.toTypedArray()

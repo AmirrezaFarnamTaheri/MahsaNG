@@ -148,14 +148,43 @@ object MmkvManager {
         serverAffStorage?.clearAll()
     }
 
-    fun removeInvalidServer() {
-        serverAffStorage?.allKeys()?.forEach { key ->
-            decodeServerAffiliationInfo(key)?.let { aff ->
-                if (aff.testDelayMillis <= 0L) {
-                    removeServer(key)
-                }
-            }
+    /**
+     * Returns only measured failures in the caller's visible/selected scope.
+     * Missing records and zero (untested/pending) never qualify.
+     */
+    @Synchronized
+    fun findFailedServerGuids(visibleGuids: Collection<String>): List<String> =
+        FailedServerSelection.findFailed(visibleGuids, decodeServerList()) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
         }
+
+    /**
+     * Rechecks the confirmed candidate list at commit time, removing only profiles
+     * that still exist and still have an explicit negative test result.
+     * The serialized index is written once instead of once per deleted profile.
+     */
+    @Synchronized
+    fun removeInvalidServer(confirmedCandidates: Collection<String>): Int {
+        if (confirmedCandidates.isEmpty()) return 0
+        val main = mainStorage ?: return 0
+        val currentGuids = decodeServerList()
+        val failedGuids = FailedServerSelection.findFailed(confirmedCandidates, currentGuids) { guid ->
+            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
+        }
+        if (failedGuids.isEmpty()) return 0
+
+        val failedSet = failedGuids.toHashSet()
+        val survivingGuids = currentGuids.filterNot { it in failedSet }
+        if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(survivingGuids))) return 0
+
+        if (main.decodeString(KEY_SELECTED_SERVER) in failedSet) {
+            main.remove(KEY_SELECTED_SERVER)
+        }
+        failedGuids.forEach { guid ->
+            serverStorage?.remove(guid)
+            serverAffStorage?.remove(guid)
+        }
+        return failedGuids.size
     }
 
     fun sortByTestResults( ) {

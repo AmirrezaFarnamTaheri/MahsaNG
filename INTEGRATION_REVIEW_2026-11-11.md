@@ -6,6 +6,7 @@ This branch combines draft PRs #1–#7 into a single reviewable change based on 
 
 - `MmkvManager.kt`: PR #4 staged subscription writer plus PR #1 confirmed scoped deletion, PR #2 per-test-run result clearing, and PR #7 stable sort; measured delay updates and clears share the in-process synchronized writer lock.
 - `MainActivity.kt`: PR #4 asynchronous subscription import plus PR #1 scoped deletion confirmation and PR #7 background sorting.
+- `MainViewModel.swapServer` now delegates filtered drag/drop reordering to `MmkvManager.swapServerPositions` under the same writer lock, preventing a stale full-index overwrite. Five new GUID swap tests were added.
 - All other modified paths are pinned to their corresponding individual PR head SHAs.
 
 ## Build and verification
@@ -13,7 +14,7 @@ This branch combines draft PRs #1–#7 into a single reviewable change based on 
 - Gradle wrapper updated from 7.5 to 8.6 to match Android Gradle Plugin 8.4.2 (JDK 17 minimum).
 - Declared SDK: compileSdk 33 and Build Tools 33.0.2; see `V2rayNG/gradle.properties`.
 - Build command after restoring missing dependencies: `cd V2rayNG && ./gradlew :app:assembleDevDebug :app:testDevDebugUnitTest`.
-- 42 focused pure Kotlin/JVM regression tests pass together under local `kotlinc`; they are not a full Android build.
+- 47 focused pure Kotlin/JVM regression tests pass together under local `kotlinc`; they are not a full Android build.
 - Full Android build **not verified**: the public repository lacks source for GFW types such as `my_preference_storage`, `config_pkg_reader`, and other referenced features. Native and SDK dependencies also require verification. Do not add guessed networking stubs.
 
 ## Mandatory QA before merging

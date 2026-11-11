@@ -289,7 +289,7 @@ public class GFW_setting_Activity extends AppCompatActivity {
 
 
         String[] myiplist = mystrg.get_array("cfip_list");
-        if(myiplist.length>0) {
+        if(myiplist != null && myiplist.length > 0) {
 //            System.out.println("cfip_list in mystrg ->"+Arrays.toString(myiplist));
 
             ArrayAdapter<String> adpt = new ArrayAdapter<String>(this,
@@ -299,9 +299,11 @@ public class GFW_setting_Activity extends AppCompatActivity {
             cfip_list.setAdapter(adpt);
         }
 
-        int cflist_id = Integer.parseInt(mystrg.get_value("cflist_item_index","0"));
+        int cflist_id = FragmentorNumericSettings.selectedIndex(
+                mystrg.get_value("cflist_item_index","0"), cfip_list.getCount());
         cfip_list.setSelection(cflist_id);
-        int isp_id = Integer.parseInt(mystrg.get_value("isp_item_index","0"));
+        int isp_id = FragmentorNumericSettings.selectedIndex(
+                mystrg.get_value("isp_item_index","0"), isp_spinner.getCount());
         isp_spinner.setSelection(isp_id);
         nfrag.setText(mystrg.get_value("nfrag","90"));
         sleepfrag.setText(mystrg.get_value("sleepfrag","0.007"));

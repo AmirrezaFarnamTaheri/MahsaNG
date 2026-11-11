@@ -29,6 +29,7 @@ object AppConfig {
     const val PREF_HTTP_PORT = "pref_http_port"
     const val PREF_LOGLEVEL = "pref_core_loglevel"
     const val PREF_LANGUAGE = "pref_language"
+    const val PREF_UI_MODE_NIGHT = "pref_ui_mode_night"
     const val PREF_PREFER_IPV6 = "pref_prefer_ipv6"
     const val PREF_ROUTING_DOMAIN_STRATEGY = "pref_routing_domain_strategy"
     const val PREF_ROUTING_MODE = "pref_routing_mode"
@@ -40,6 +41,10 @@ object AppConfig {
     const val PREF_BYPASS_APPS = "pref_bypass_apps"
     const val PREF_CONFIRM_REMOVE = "pref_confirm_remove"
     const val PREF_START_SCAN_IMMEDIATE = "pref_start_scan_immediate"
+
+    // Standard stable 204 endpoints from the original v2flyNG client.
+    const val DelayTestUrl = "https://www.gstatic.com/generate_204"
+    const val DelayTestUrl2 = "https://www.google.com/generate_204"
 
     const val HTTP_PROTOCOL: String = "http://"
     const val HTTPS_PROTOCOL: String = "https://"

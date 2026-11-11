@@ -25,6 +25,12 @@ class AppConfigSourceContractTests(unittest.TestCase):
             with self.subTest(file=file.name):
                 self.assertFalse(set(imports) - defined, "Undefined AppConfig imports: " + str(set(imports) - defined))
 
+    def test_night_mode_and_probe_urls_match_original_client_defaults(self):
+        code = APP_CONFIG.read_text(encoding="utf-8")
+        self.assertIn('const val PREF_UI_MODE_NIGHT = "pref_ui_mode_night"', code)
+        self.assertIn('const val DelayTestUrl = "https://www.gstatic.com/generate_204"', code)
+        self.assertIn('const val DelayTestUrl2 = "https://www.google.com/generate_204"', code)
+
     def test_wireguard_defaults_are_source_backed_or_disabled(self):
         text = APP_CONFIG.read_text(encoding="utf-8")
         self.assertIn('const val WIREGUARD_LOCAL_ADDRESS_V4 = "172.16.0.2/32"', text)

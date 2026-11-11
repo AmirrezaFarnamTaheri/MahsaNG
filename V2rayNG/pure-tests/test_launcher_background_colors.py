@@ -13,11 +13,13 @@ RES = Path(__file__).resolve().parents[1] / "app/src/main/res"
 class LauncherBackgroundColorTests(unittest.TestCase):
     def test_both_adaptive_icon_backgrounds_resolve_to_values_colors(self):
         defined = {}
+        counts = {}
         for path in (RES / "values").glob("*.xml"):
             root = ET.parse(path).getroot()
             if root.tag == "resources":
                 for entry in root.findall("color"):
                     defined[entry.get("name")] = (entry.text or "").strip()
+                    counts[entry.get("name")] = counts.get(entry.get("name"), 0) + 1
         for icon, color in (
             ("ic_launcher", "ic_launcher_background"),
             ("ic_banner", "ic_banner_background"),
@@ -30,6 +32,7 @@ class LauncherBackgroundColorTests(unittest.TestCase):
                 self.assertEqual("@color/" + color, backgrounds[0].get(android + "drawable"))
                 self.assertIn(color, defined)
                 self.assertEqual("#FFFFFF", defined[color])
+                self.assertEqual(1, counts[color], "Duplicate Android color resources: " + color)
 
     def test_color_resources_are_not_misplaced_in_drawable_color_directory(self):
         for name in ("ic_launcher_background", "ic_banner_background"):

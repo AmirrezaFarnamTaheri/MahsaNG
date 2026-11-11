@@ -25,11 +25,10 @@ internal data class FragmentorOptions(
             val local = host.lowercase().removeSurrounding("[", "]")
             if (host.isBlank() || local == "localhost" || local == "0.0.0.0" ||
                 local == "::" || local == "::1" || local.startsWith("127.")) return null
-            val fragments = preference("nfrag", "90").toIntOrNull()
-                ?.takeIf { it in 1..2048 } ?: return null
-            val pause = preference("sleepfrag", "0.007").toDoubleOrNull()
-                ?.takeIf { it.isFinite() && it in 0.0..1.0 } ?: return null
-            return FragmentorOptions(host, profilePort, fragments, pause)
+            val numeric = FragmentorNumericSettings.parse(
+                preference("nfrag", "90"), preference("sleepfrag", "0.007")
+            ) ?: return null
+            return FragmentorOptions(host, profilePort, numeric.fragments, numeric.delaySeconds)
         }
     }
 }

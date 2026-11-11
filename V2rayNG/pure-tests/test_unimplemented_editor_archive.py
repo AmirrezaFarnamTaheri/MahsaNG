@@ -21,6 +21,8 @@ ORPHANS = (
     'activity_tunnel_config',
     'activity_update',
     'activity_warp_setting',
+    'activity_youtube_config',
+    'bottom_sheet_result',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):
@@ -39,7 +41,10 @@ class UnimplementedEditorArchiveTest(unittest.TestCase):
         self.assertTrue((APP / 'res/layout/activity_gfw_psiphon_settings.xml').is_file())
 
     def test_no_source_compiles_against_missing_editor_layouts(self):
-        pattern = re.compile(r'R\.layout\.(' + '|'.join(ORPHANS) + r')\b')
+        bindings = tuple(''.join(part.title() for part in name.split('_')) + 'Binding'
+                         for name in ORPHANS)
+        pattern = re.compile(r'R\.layout\.(' + '|'.join(ORPHANS) + r')\b|'
+                             + r'\b(' + '|'.join(bindings) + r')\b')
         for location in (APP / 'java', APP / 'kotlin'):
             for file in location.rglob('*'):
                 if file.suffix in ('.kt', '.java'):

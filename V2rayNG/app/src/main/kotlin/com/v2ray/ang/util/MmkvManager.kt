@@ -272,15 +272,15 @@ object MmkvManager {
      * modified profile that happens to keep the same GUID.
      */
     @Synchronized
-    fun findConfirmedFailedServerCandidates(visibleGuids: Collection<String>): List<FailedServerEvidence> =
-        FailedServerSelection.snapshotFailures(
+    fun findConfirmedFailedServerCandidates(visibleGuids: Collection<String>): List<FailedServerEvidence> {
+        val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return emptyList()
+        return FailedServerSelection.snapshotFailures(
             visibleGuids,
-            runCatching { decodeServerList() }.getOrNull() ?: return emptyList(),
-            { guid ->
-                runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
-            },
+            currentGuids,
+            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
             { guid -> serverStorage?.decodeString(guid) },
         )
+    }
 
     /**
      * Remove only the same observed failures and revisions shown in the user's

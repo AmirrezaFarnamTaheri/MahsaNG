@@ -58,6 +58,20 @@ class ExtendedServerFieldsTest {
         assertEquals("OFF", outbound.mux!!.status)
         outbound.populateMux(stat = "")
         assertNull(outbound.mux)
+        for (invalid in listOf(0, -1)) {
+            try {
+                outbound.populateMux(stat = "ON", concr = invalid)
+                fail("Invalid mux concurrency was silently corrected")
+            } catch (_: IllegalArgumentException) {
+                // A malformed editor value must not be made plausible by clamping.
+            }
+        }
+        try {
+            outbound.populateMux(stat = "UNKNOWN")
+            fail("Unknown mux mode silently changed the user's settings")
+        } catch (_: IllegalArgumentException) {
+            // Only the three modes in gfw_mux are supported.
+        }
     }
 
     @Test fun tlsEchValuesSurviveProfileRoundTrip() {

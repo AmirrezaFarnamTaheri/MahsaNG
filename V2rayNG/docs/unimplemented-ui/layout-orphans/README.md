@@ -1,6 +1,6 @@
 # Archived protocol and utility screens awaiting backing Android source
 
-The ten XML files here are **original layout sources**, preserved outside the
+The twelve XML files here are **original layout sources**, preserved outside the
 Android resource graph until their backing Activities, protocol implementations,
 and option-list resources can be restored and reviewed.
 
@@ -10,7 +10,7 @@ Shadowsocks, SOCKS, HTTP, VLESS, MVLESS, Trojan, WireGuard, and Hysteria2
 editors. In particular, the five archived protocol editors (DNSTT, GooseRelay,
 MasterDNS, Psiphon, Skirk) are not routed to by `ServerActivity`, while
 their original protocol-specific array definitions are not present. The
-remaining five GFW utility/legacy layouts also reference assets or labels
+remaining seven GFW utility/legacy layouts also reference assets or labels
 absent from the published repository.
 
 Original XML files are preserved by name:
@@ -25,11 +25,13 @@ Original XML files are preserved by name:
 - `activity_tunnel_config.xml`
 - `activity_update.xml`
 - `activity_warp_setting.xml`
+- `activity_youtube_config.xml`
+- `bottom_sheet_result.xml`
 
 `V2rayNG/pure-tests/test_unimplemented_editor_archive.py` fails CI if an
 archived file is missing, if the layout is placed back into the active
 resources without reimplementation, or if a compiled Java/Kotlin source starts
-referring to one of these layouts without restoring the whole feature.
+referring to one of these layouts (by R.layout or generated ViewBinding) without restoring the whole feature.
 
 **This does not implement the missing protocols or validate their behavior.**
 Restoration requires original/reviewed data model and Activity code, exact
@@ -52,3 +54,9 @@ The archived `activity_warp_setting.xml` depends on original WARP UI assets
 and strings (including `warp_description`, `ic_internal_warp` and the button
 styles), none present in the published source. Restore it only with the
 corresponding reviewed and registered WARP settings Activity and resources.
+
+The YouTube configuration layout references absent original help/feature
+resources. The result bottom-sheet layout references absent specialized
+background/drag-handle resources. The CI guard checks for code references
+before allowing these UI resources to stay quarantined; if a real usage is
+discovered, the entire backing screen must be restored instead.

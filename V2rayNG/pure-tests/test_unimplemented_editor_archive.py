@@ -19,6 +19,7 @@ ORPHANS = (
     'activity_gfw_update',
     'activity_terms_service',
     'activity_tunnel_config',
+    'activity_update',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):

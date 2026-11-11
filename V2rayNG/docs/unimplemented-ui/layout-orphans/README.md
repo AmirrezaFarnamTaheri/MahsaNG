@@ -1,6 +1,6 @@
 # Archived protocol and utility screens awaiting backing Android source
 
-The thirteen XML files here are **original layout sources**, preserved outside the
+The fourteen XML files here are **original layout sources**, preserved outside the
 Android resource graph until their backing Activities, protocol implementations,
 and option-list resources can be restored and reviewed.
 
@@ -28,6 +28,7 @@ Original XML files are preserved by name:
 - `activity_youtube_config.xml`
 - `bottom_sheet_result.xml`
 - `gfw_permit_layout.xml`
+- `activity_donate_config.xml`
 
 `V2rayNG/pure-tests/test_unimplemented_editor_archive.py` fails CI if an
 archived file is missing, if the layout is placed back into the active
@@ -67,3 +68,10 @@ or list is absent. The compile guard now rejects both Java/Kotlin references
 and active resource-XML includes to archived layouts, so any discovered
 consumer requires restoring the real implementation rather than inventing
 selector values.
+
+The original television-only `activity_donate_config.xml` was present in
+`res/layout-television` but no compiled or registered donation configuration
+Activity could be located. It references unpublished TV donation action labels
+and icons. Its original XML is preserved here verbatim; the archive guard
+checks all `layout*` resource qualifiers to prevent compiling an unsupported
+variant. Restore it with its working Activity and complete resources.

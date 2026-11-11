@@ -17,16 +17,28 @@ class HTTPS_Fragmentor(
     var num_fragment: Int, // in second
     var fragment_sleep: Double
 ) : Thread() {
-    var ss: ServerSocket? = null
+    @Volatile var ss: ServerSocket? = null
+    @Volatile private var stopRequested = false
+    private val listenerLock = Any()
     var client_sock: Socket? = null
-    var is_ready = false
+    @Volatile var is_ready = false
     override fun run() {
         try {
-            ss = ServerSocket(listen_port, 128) // up to 128 concurrent connection queued
-            listen_port = ss!!.localPort
+            val bound = FragmentorSocketBinding.bind(listen_ip, listen_port) // configured address; normally loopback
+            // Publish or close under the same lock as shutdown, so stop during bind
+            // cannot leave a listener alive even if it was not yet assigned.
+            synchronized(listenerLock) {
+                if (stopRequested) {
+                    FragmentorSocketBinding.closeQuietly(bound)
+                    return
+                }
+                ss = bound
+                listen_port = bound.localPort
+            }
             println("HTTPS Listening at $listen_ip:$listen_port")
+            if (stopRequested) return
             is_ready = true
-            while (true) {
+            while (!stopRequested) {
 //                println("HTTPS waiting for input socket ...")
                 client_sock = ss!!.accept()
                 val up_thread = My_upstream_H(
@@ -46,6 +58,7 @@ class HTTPS_Fragmentor(
         } finally {
 //            println("HTTPS Server Stopped. Listening Finished.")
             is_ready = false
+            FragmentorSocketBinding.closeQuietly(ss)
         }
         println("HTTPS Server Thread Finished")
     } // run
@@ -72,13 +85,11 @@ class HTTPS_Fragmentor(
     }
 
     fun safely_stop_server() {
-        try {
-            ss!!.close()
-        } catch (e: Exception) {
-            println("Safe Stop ERR: " + e.message)
-            return
+        synchronized(listenerLock) {
+            stopRequested = true
+            FragmentorSocketBinding.closeQuietly(ss)
+            is_ready = false
         }
-        println("server socket safely stopped")
     }
 } //class Server
 

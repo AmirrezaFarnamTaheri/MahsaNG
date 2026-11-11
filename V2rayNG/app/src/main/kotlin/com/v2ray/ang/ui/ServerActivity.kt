@@ -864,7 +864,7 @@ class ServerActivity : BaseActivity() {
         val echForceQuery = et_echForceQuery?.text?.toString()
 
         val allowInsecure = if (allowInsecureField == null || allowinsecures[allowInsecureField].isBlank()) {
-            !(settingsStorage?.decodeBool(PREF_ALLOW_INSECURE) ?: false)
+            settingsStorage?.decodeBool(PREF_ALLOW_INSECURE) ?: false
         } else {
             allowinsecures[allowInsecureField].toBoolean()
         }

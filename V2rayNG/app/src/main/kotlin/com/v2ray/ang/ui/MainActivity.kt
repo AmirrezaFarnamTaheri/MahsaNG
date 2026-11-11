@@ -7,7 +7,7 @@ import android.net.VpnService
 import androidx.recyclerview.widget.LinearLayoutManager
 import android.view.Menu
 import android.view.MenuItem
-import com.tbruyelle.rxpermissions.RxPermissions
+import android.view.View
 import com.v2ray.ang.R
 import android.os.Bundle
 import android.text.TextUtils
@@ -55,6 +55,29 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             startV2Ray()
         }
     }
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) toast(R.string.toast_permission_denied)
+        }
+
+    private val requestCameraForConfig =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                scanQRCodeForConfig.launch(Intent(this, ScannerActivity::class.java))
+            } else {
+                toast(R.string.toast_permission_denied)
+            }
+        }
+
+    private val requestCameraForCustomUrl =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                scanQRCodeForUrlToCustomConfig.launch(Intent(this, ScannerActivity::class.java))
+            } else {
+                toast(R.string.toast_permission_denied)
+            }
+        }
+
     private var mItemTouchHelper: ItemTouchHelper? = null
     val mainViewModel: MainViewModel by viewModels()
 
@@ -110,12 +133,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         migrateLegacy()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            RxPermissions(this)
-                .request(Manifest.permission.POST_NOTIFICATIONS)
-                .subscribe {
-                    if (!it)
-                        toast(R.string.toast_permission_denied)
-                }
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -307,26 +325,72 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     .show()
             true
         }
-        R.id.del_duplicate_config-> {
-            AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    mainViewModel.removeDuplicateServer()
+        R.id.del_duplicate_config -> {
+            // The user confirms the exact visible candidates, never hidden groups.
+            val visibleGuids = mainViewModel.serversCache.map { it.guid }.toList()
+            lifecycleScope.launch {
+                val candidates = withContext(Dispatchers.IO) {
+                    MmkvManager.findDuplicateServerGuids(visibleGuids)
                 }
-                .show()
+                if (candidates.isEmpty()) {
+                    toast(R.string.toast_none_data)
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(getString(R.string.del_duplicate_config_confirmation, candidates.size))
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            lifecycleScope.launch {
+                                // Recheck selected profile and endpoint identities at commit time.
+                                val removed = withContext(Dispatchers.IO) {
+                                    MmkvManager.removeDuplicateServers(candidates, visibleGuids)
+                                }
+                                mainViewModel.reloadServerList()
+                                if (removed > 0) {
+                                    toast(getString(R.string.title_del_duplicate_config_count, removed))
+                                } else {
+                                    toast(R.string.toast_none_data)
+                                }
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
             true
         }
         R.id.del_invalid_config -> {
-            AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    MmkvManager.removeInvalidServer()
-                    mainViewModel.reloadServerList()
+            // Snapshot the displayed list: hidden subscriptions and filters are never deletion targets.
+            val visibleGuids = mainViewModel.serversCache.map { it.guid }.toList()
+            lifecycleScope.launch {
+                val candidates = withContext(Dispatchers.IO) {
+                    MmkvManager.findFailedServerGuids(visibleGuids)
                 }
-                .show()
+                if (candidates.isEmpty()) {
+                    toast(R.string.toast_none_data)
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(getString(R.string.del_failed_config_confirmation, candidates.size))
+                        .setPositiveButton(android.R.string.ok) { _, _ ->
+                            lifecycleScope.launch {
+                                // Recheck only the previewed candidates; a new failure cannot
+                                // silently expand the deletion after the confirmation was shown.
+                                withContext(Dispatchers.IO) {
+                                    MmkvManager.removeInvalidServer(candidates)
+                                }
+                                mainViewModel.reloadServerList()
+                            }
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                }
+            }
             true
         }
         R.id.sort_by_test_results -> {
-            MmkvManager.sortByTestResults()
-            mainViewModel.reloadServerList()
+            // Sorting may read thousands of stored profiles; keep it off the UI thread.
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) { MmkvManager.sortByTestResults() }
+                mainViewModel.reloadServerList()
+            }
             true
         }
         R.id.filter_config -> {
@@ -350,23 +414,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
      * import config from qrcode
      */
     fun importQRcode(forConfig: Boolean): Boolean {
-//        try {
-//            startActivityForResult(Intent("com.google.zxing.client.android.SCAN")
-//                    .addCategory(Intent.CATEGORY_DEFAULT)
-//                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP), requestCode)
-//        } catch (e: Exception) {
-        RxPermissions(this)
-                .request(Manifest.permission.CAMERA)
-                .subscribe {
-                    if (it)
-                        if (forConfig)
-                            scanQRCodeForConfig.launch(Intent(this, ScannerActivity::class.java))
-                        else
-                            scanQRCodeForUrlToCustomConfig.launch(Intent(this, ScannerActivity::class.java))
-                    else
-                        toast(R.string.toast_permission_denied)
-                }
-//        }
+        if (forConfig) {
+            requestCameraForConfig.launch(Manifest.permission.CAMERA)
+        } else {
+            requestCameraForCustomUrl.launch(Manifest.permission.CAMERA)
+        }
         return true
     }
 
@@ -398,22 +450,27 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
 
     fun importBatchConfig(server: String?, subid: String = "") {
-        val subid2 = if(subid.isNullOrEmpty()){
-            mainViewModel.subscriptionId
-        }else{
-            subid
-        }
-        val append = subid.isNullOrEmpty()
+        val targetSubid = if (subid.isBlank()) mainViewModel.subscriptionId else subid
+        val append = subid.isBlank()
 
-        var count = AngConfigManager.importBatchConfig(server, subid2, append)
-        if (count <= 0) {
-            count = AngConfigManager.importBatchConfig(Utils.decode(server!!), subid2, append)
-        }
-        if (count > 0) {
-            toast(R.string.toast_success)
-            mainViewModel.reloadServerList()
-        } else {
-            toast(R.string.toast_failure)
+        // Parsing and MMKV writes can be expensive for long subscriptions.
+        lifecycleScope.launch {
+            val count = withContext(Dispatchers.IO) {
+                var imported = AngConfigManager.importBatchConfig(server, targetSubid, append)
+                if (imported <= 0 && !server.isNullOrBlank()) {
+                    val decoded = runCatching { Utils.decode(server) }.getOrNull()
+                    if (!decoded.isNullOrBlank() && decoded != server) {
+                        imported = AngConfigManager.importBatchConfig(decoded, targetSubid, append)
+                    }
+                }
+                imported
+            }
+            if (count > 0) {
+                toast(R.string.toast_success)
+                mainViewModel.reloadServerList()
+            } else {
+                toast(R.string.toast_failure)
+            }
         }
     }
 
@@ -558,25 +615,19 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
      * read content from uri
      */
     private fun readContentFromUri(uri: Uri) {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        // ACTION_GET_CONTENT grants read access to the returned URI.
+        // A JSON configuration is not a photo and needs no READ_MEDIA_IMAGES grant.
+        try {
+            contentResolver.openInputStream(uri).use { input ->
+                importCustomizeConfig(input?.bufferedReader()?.readText())
+            }
+        } catch (e: SecurityException) {
+            Log.w(ANG_PACKAGE, "Selected document URI cannot be read", e)
+            toast(R.string.toast_permission_denied)
+        } catch (e: Exception) {
+            Log.e(ANG_PACKAGE, "Error reading selected configuration document", e)
+            toast(R.string.toast_failure)
         }
-        RxPermissions(this)
-                .request(permission)
-                .subscribe {
-                    if (it) {
-                        try {
-                            contentResolver.openInputStream(uri).use { input ->
-                                importCustomizeConfig(input?.bufferedReader()?.readText())
-                            }
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    } else
-                        toast(R.string.toast_permission_denied)
-                }
     }
 
     /**
@@ -622,7 +673,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
 
     fun showCircle() {
-        binding.fabProgressCircle.show()
+        binding.fabProgressCircle.visibility = View.VISIBLE
     }
 
     fun hideCircle() {
@@ -632,7 +683,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     .subscribe {
                         try {
                             if (binding.fabProgressCircle.isShown) {
-                                binding.fabProgressCircle.hide()
+                                binding.fabProgressCircle.visibility = View.GONE
                             }
                         } catch (e: Exception) {
                             Log.w(ANG_PACKAGE, e)

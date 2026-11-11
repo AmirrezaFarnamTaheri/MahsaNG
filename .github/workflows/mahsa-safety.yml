@@ -1,0 +1,105 @@
+name: MahsaNG safety checks
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches:
+      - 'integration/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded PR/push runs for the same integration branch, not any test jobs.
+concurrency:
+  group: mahsa-safety-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  pure-kotlin-regressions:
+    name: Pure Kotlin regressions (real JUnit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify restored resources and localized strings
+        run: python3 -m unittest discover -s V2rayNG/pure-tests -p 'test_*.py'
+      - name: Reject logs in V2rayConfigUtil configuration generator
+        run: bash V2rayNG/pure-tests/check-no-config-logging.sh
+      - name: Run isolated production helper tests
+        working-directory: V2rayNG
+        run: bash ./gradlew -p pure-tests --no-daemon test
+
+  android-compile:
+    name: Android source build (no suppressed errors)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.7'
+      - name: Inventory unresolved app resource references (diagnostic)
+        run: python3 V2rayNG/pure-tests/resource_reference_audit.py
+      - name: Install declared Android SDK
+        run: |
+          SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;34.0.0" "ndk;27.2.12479018"
+      - name: Build pinned Mahsa native Xray AAR
+        env:
+          NATIVE_CORE_SHA: 48f35be868ee247e53a8036e284a8c2f97c80068
+        run: |
+          set -euo pipefail
+          NATIVE_DIR="$RUNNER_TEMP/mahsa-native"
+          git init "$NATIVE_DIR"
+          git -C "$NATIVE_DIR" remote add origin https://github.com/GFW-knocker/AndroidLibXrayLite.git
+          git -C "$NATIVE_DIR" fetch --depth 1 origin "$NATIVE_CORE_SHA"
+          git -C "$NATIVE_DIR" checkout --detach FETCH_HEAD
+          test "$(git -C "$NATIVE_DIR" rev-parse HEAD)" = "$NATIVE_CORE_SHA"
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export PATH="$HOME/go/bin:$PATH"
+          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260217195705-b56b3793a9c4
+          go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260217195705-b56b3793a9c4
+          gomobile init
+          mkdir -p V2rayNG/app/libs
+          (
+            cd "$NATIVE_DIR"
+            go mod download
+            go mod verify
+            gomobile bind -v -androidapi 21 -trimpath -ldflags='-s -w -buildid= -checklinkname=0' \
+              -o "$GITHUB_WORKSPACE/V2rayNG/app/libs/libv2ray.aar" ./
+          )
+          test -s V2rayNG/app/libs/libv2ray.aar
+          unzip -p V2rayNG/app/libs/libv2ray.aar classes.jar > "$RUNNER_TEMP/mahsa-core-classes.jar"
+          jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/Libv2ray.class"
+          jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/V2RayPoint.class"
+          jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/V2RayVPNServiceSupportsSet.class"
+      - name: Check unsupported MASQUE/WARP screens remain archived
+        run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh
+      - name: Assemble Android application (Kotlin, Java, resources, DEX and packaging)
+        working-directory: V2rayNG
+        run: bash ./gradlew --no-daemon :app:assembleDevDebug
+      - name: Assert debug APK was produced
+        working-directory: V2rayNG
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print
+          test "$(find app/build/outputs/apk -type f -name '*.apk' | wc -l)" -gt 0
+      - name: Run full Android module unit tests, including profile model contracts
+        working-directory: V2rayNG
+        run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest

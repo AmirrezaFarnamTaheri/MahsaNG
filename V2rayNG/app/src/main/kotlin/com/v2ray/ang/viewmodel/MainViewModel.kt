@@ -36,7 +36,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val updateListAction by lazy { MutableLiveData<Int>() }
     val updateTestResultAction by lazy { MutableLiveData<String>() }
 
-    private val tcpingTestScope by lazy { CoroutineScope(Dispatchers.IO) }
+    private val tcpingTestScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+    private val testRuns = TestRunTracker()
+    private var realPingScheduleJob: Job? = null
+    private var nativeTestRunPending = false
+
+    /**
+     * Called on the UI thread. Snapshot identifiers before scheduling any background work.
+     * A new run invalidates both previous TCP callbacks and in-flight native callbacks.
+     */
+    private fun beginTestRun(visibleGuids: List<String>, native: Boolean): String {
+        tcpingTestScope.coroutineContext[Job]?.cancelChildren()
+        realPingScheduleJob?.cancel()
+        SpeedtestUtil.closeAllTcpSockets()
+        val runId = testRuns.begin(visibleGuids)
+        // Starting a TCP-only run must not launch a native service unnecessarily.
+        // If a real-ping run preceded it, this command cancels that native run.
+        if (native || nativeTestRunPending) {
+            MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG_CANCEL, runId)
+        }
+        nativeTestRunPending = native
+        MmkvManager.clearTestDelayResults(visibleGuids)
+        updateListAction.value = -1
+        return runId
+    }
 
     fun startListenBroadcast() {
         isRunning.value = false
@@ -46,7 +69,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         getApplication<AngApplication>().unregisterReceiver(mMsgReceiver)
-        tcpingTestScope.coroutineContext[Job]?.cancelChildren()
+        testRuns.invalidate()
+        realPingScheduleJob?.cancel()
+        // Do not send a global native Cancel from an obsolete ViewModel: a new
+        // activity may already own the native service with a newer run token.
+        tcpingTestScope.cancel()
         SpeedtestUtil.closeAllTcpSockets()
         Log.i(ANG_PACKAGE, "Main ViewModel is cleared")
         super.onCleared()
@@ -79,9 +106,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun swapServer(fromPosition: Int, toPosition: Int) {
-        Collections.swap(serverList, fromPosition, toPosition)
-        Collections.swap(serversCache, fromPosition, toPosition)
-        mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(serverList))
+        val firstGuid = serversCache.getOrNull(fromPosition)?.guid ?: return
+        val secondGuid = serversCache.getOrNull(toPosition)?.guid ?: return
+        if (MmkvManager.swapServerPositions(firstGuid, secondGuid)) {
+            serverList = MmkvManager.decodeServerList()
+            Collections.swap(serversCache, fromPosition, toPosition)
+        } else {
+            // Another writer may have replaced one of the profiles.
+            reloadServerList()
+        }
     }
 
     @Synchronized
@@ -100,23 +133,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testAllTcping() {
-        tcpingTestScope.coroutineContext[Job]?.cancelChildren()
-        SpeedtestUtil.closeAllTcpSockets()
-        MmkvManager.clearAllTestDelayResults()
-        updateListAction.value = -1 // update all
-
+        val snapshot = synchronized(this) { serversCache.toList() }
+        val runId = beginTestRun(snapshot.map { it.guid }, native = false)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
-        for (item in serversCache) {
-            item.config.getProxyOutbound()?.let { outbound ->
-                val serverAddress = outbound.getServerAddress()
-                val serverPort = outbound.getServerPort()
-                if (serverAddress != null && serverPort != null) {
-                    tcpingTestScope.launch {
-                        val testResult = SpeedtestUtil.tcping(serverAddress, serverPort)
-                        launch(Dispatchers.Main) {
-                            MmkvManager.encodeServerTestDelayMillis(item.guid, testResult)
-                            updateListAction.value =  getPosition(item.guid)
-                        }
+
+        for (item in snapshot) {
+            val outbound = item.config.getProxyOutbound() ?: continue
+            val address = outbound.getServerAddress() ?: continue
+            val port = outbound.getServerPort() ?: continue
+            val guid = item.guid
+            tcpingTestScope.launch {
+                val delay = SpeedtestUtil.tcping(address, port)
+                withContext(Dispatchers.Main) {
+                    if (testRuns.accepts(runId, guid) && MmkvManager.decodeServerConfig(guid) != null) {
+                        MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                        updateListAction.value = getPosition(guid)
                     }
                 }
             }
@@ -124,16 +155,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testAllRealPing() {
-        MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG_CANCEL, "")
-        MmkvManager.clearAllTestDelayResults()
-        updateListAction.value = -1 // update all
-
+        // Never iterate serversCache on Dispatchers.Default; reloading clears the mutable list.
+        val guids = synchronized(this) { serversCache.map { it.guid } }
+        val runId = beginTestRun(guids, native = true)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
-        viewModelScope.launch(Dispatchers.Default) { // without Dispatchers.Default viewModelScope will launch in main thread
-            for (item in serversCache) {
-                val config = V2rayConfigUtil.getV2rayConfig(getApplication(), item.guid)
-                if (config.status) {
-                    MessageUtil.sendMsg2TestService(getApplication(), AppConfig.MSG_MEASURE_CONFIG, Pair(item.guid, config.content))
+
+        realPingScheduleJob = viewModelScope.launch(Dispatchers.Default) {
+            for (guid in guids) {
+                if (!isActive || !testRuns.accepts(runId, guid)) break
+                val config = V2rayConfigUtil.getV2rayConfig(getApplication(), guid)
+                if (config.status && isActive && testRuns.accepts(runId, guid)) {
+                    MessageUtil.sendMsg2TestService(
+                        getApplication(),
+                        AppConfig.MSG_MEASURE_CONFIG,
+                        ConfigTestRequest(guid, config.content, runId),
+                    )
                 }
             }
         }
@@ -201,27 +237,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return -1
     }
 
-    fun removeDuplicateServer() {
-        val deleteServer = mutableListOf<String>()
-        serversCache.forEachIndexed { index, it ->
-            val outbound = it.config.getProxyOutbound()
-            serversCache.forEachIndexed { index2, it2 ->
-                if(index2 > index){
-                    val outbound2 = it2.config.getProxyOutbound()
-                    if( outbound == outbound2 && !deleteServer.contains(it2.guid))
-                    {
-                        deleteServer.add(it2.guid)
-                    }
-                }
-            }
-        }
-        for(it in deleteServer){
-            MmkvManager.removeServer(it)
-        }
-        reloadServerList()
-        getApplication<AngApplication>().toast(getApplication<AngApplication>().getString(R.string.title_del_duplicate_config_count, deleteServer.count()))
-    }
-
     private val mMsgReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             when (intent?.getIntExtra("key", 0)) {
@@ -246,9 +261,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     updateTestResultAction.value = intent.getStringExtra("content")
                 }
                 AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> {
-                    val resultPair = intent.getSerializableExtra("content") as Pair<String, Long>
-                    MmkvManager.encodeServerTestDelayMillis(resultPair.first, resultPair.second)
-                    updateListAction.value = getPosition(resultPair.first)
+                    val result = intent.getSerializableExtra("content") as? ConfigTestResult ?: return
+                    if (testRuns.accepts(result.runId, result.guid) &&
+                        MmkvManager.decodeServerConfig(result.guid) != null
+                    ) {
+                        MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
+                        updateListAction.value = getPosition(result.guid)
+                    }
                 }
             }
         }

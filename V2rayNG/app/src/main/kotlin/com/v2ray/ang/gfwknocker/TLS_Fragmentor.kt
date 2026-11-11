@@ -20,21 +20,33 @@ class TLS_Fragmentor(
     var num_fragment: Int,
     var fragment_sleep: Double // in second
 ) : Thread() {
-    var ss: ServerSocket? = null
+    @Volatile var ss: ServerSocket? = null
+    @Volatile private var stopRequested = false
+    private val listenerLock = Any()
     var client_sock: Socket? = null
-    var is_ready = false
+    @Volatile var is_ready = false
 
 
 
     override fun run() {
         try {
-            ss = ServerSocket(listen_port, 128) // up to 128 concurrent connection queued
-            listen_port = ss!!.localPort
+            val bound = FragmentorSocketBinding.bind(listen_ip, listen_port) // configured address; normally loopback
+            // Publish or close under the same lock as shutdown, so stop during bind
+            // cannot leave a listener alive even if it was not yet assigned.
+            synchronized(listenerLock) {
+                if (stopRequested) {
+                    FragmentorSocketBinding.closeQuietly(bound)
+                    return
+                }
+                ss = bound
+                listen_port = bound.localPort
+            }
             println("TLS Listening at $listen_ip:$listen_port")
             println("target $target_ip:$target_port\r\nnum_fragment:$num_fragment\r\nfragment_sleep:$fragment_sleep\r\nuse_fragment:$isFragment")
 
+            if (stopRequested) return
             is_ready = true
-            while (true) {
+            while (!stopRequested) {
 //                println("TLS waiting for input socket ...")
                 client_sock = ss!!.accept()
 
@@ -54,6 +66,7 @@ class TLS_Fragmentor(
         } finally {
 //            println("TLS Server Stopped. Listening Finished.")
             is_ready = false
+            FragmentorSocketBinding.closeQuietly(ss)
         }
 //        println("TLS Server Thread Finished")
     } // run
@@ -76,13 +89,11 @@ class TLS_Fragmentor(
     }
 
     fun safely_stop_server() {
-        try {
-            ss!!.close()
-        } catch (e: Exception) {
-//            println("Safe Stop ERR: " + e.message)
-            return
+        synchronized(listenerLock) {
+            stopRequested = true
+            FragmentorSocketBinding.closeQuietly(ss)
+            is_ready = false
         }
-//        println("TLS server socket safely stopped")
     }
 } //class Server
 

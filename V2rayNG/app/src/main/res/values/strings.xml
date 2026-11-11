@@ -161,8 +161,8 @@
     <string name="summary_pref_proxy_sharing_enabled">Other devices can connect to proxy by your ip address through socks/http, Only enable in trusted network to avoid unauthorized connection</string>
     <string name="toast_warning_pref_proxysharing_short">Allow connections from the LAN, Make sure you are in a trusted network</string>
 
-    <string name="title_pref_allow_insecure" translatable="false">Disable Allow Insecure</string>
-    <string name="summary_pref_allow_insecure" translatable="false">Verify config\'s cert, Don\'t allow self-signed config</string>
+    <string name="title_pref_allow_insecure">Allow insecure TLS certificates (unsafe)</string>
+    <string name="summary_pref_allow_insecure">Allow imported managed profiles to skip TLS certificate checks. Keep off to verify their certificates. Custom JSON is not changed and can disable certificate checks even when this setting is off.</string>
 
     <string name="title_pref_socks_port">SOCKS5 proxy port</string>
     <string name="summary_pref_socks_port">SOCKS5 proxy port</string>
@@ -203,7 +203,9 @@
     <string name="title_clear_test_result">clear current test result</string>
     <string name="title_cant_delete_selected">can\'t delete, because its selected</string>
     <string name="title_del_duplicate_config">Delete duplicate configs</string>
-    <string name="title_del_invalid_config">Delete invalid configs(Test first)</string>
+    <string name="title_del_invalid_config">Delete failed profiles (test first)</string>
+    <string name="del_duplicate_config_confirmation">Delete %1$d duplicate profiles from the displayed list? The selected profile will be kept.</string>
+    <string name="del_failed_config_confirmation">Delete %1$d failed profiles from the displayed list?</string>
     <string name="title_export_all">Export non-custom configs to clipboard</string>
     <string name="title_sub_setting">Subscription group setting</string>
     <string name="sub_setting_remarks">remarks</string>
@@ -233,7 +235,7 @@
 
     <string name="connection_test_pending">Check Connectivity</string>
     <string name="connection_test_testing">Testing…</string>
-    <string name="connection_test_available">Success: ping [ %d , %d ] ms</string>
+    <string name="connection_test_available">Success: ping [ %1$d , %2$d ] ms</string>
     <string name="connection_test_error">Fail to detect internet connection: %s</string>
     <string name="connection_test_fail">Internet Unavailable</string>
     <string name="connection_test_error_status_code">Error code: #%d</string>

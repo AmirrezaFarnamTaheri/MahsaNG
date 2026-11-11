@@ -137,6 +137,8 @@
 
     <string name="title_pref_proxy_sharing_enabled">اجازه اتصالات از طریق LAN</string>
     <string name="summary_pref_proxy_sharing_enabled">دستگاه‌های دیگر می‌توانند از طریق socks/http به پراکسی توسط نشانی آی‌پی شما متصل شوند، فقط در شبکه مورد اعتماد فعال می‌شوند تا از اتصال غیرمجاز جلوگیری کنند</string>
+    <string name="title_pref_allow_insecure">اجازهٔ گواهی TLS نامعتبر (ناامن)</string>
+    <string name="summary_pref_allow_insecure">این گزینه به پروفایل‌های واردشده و مدیریت‌شده اجازه می‌دهد بررسی گواهی TLS را غیرفعال کنند. برای بررسی گواهی‌های این پروفایل‌ها، گزینه را خاموش نگه دارید. پیکربندی JSON سفارشی تغییر نمی‌کند و حتی با خاموش بودن این گزینه ممکن است بررسی گواهی را غیرفعال کند.</string>
     <string name="toast_warning_pref_proxysharing_short">اتصالات از طریق LAN را مجاز کنید، مطمئن شوید که در یک شبکه قابل اعتماد هستید</string>
 
     <string name="title_pref_socks_port">پورت پروکسی SOCKS5</string>
@@ -178,7 +180,9 @@
     <string name="title_clear_test_result">پاک کردن نتایج تست</string>
     <string name="title_cant_delete_selected">نمیشود پاک کرد چون انتخاب شده</string>
     <string name="title_del_duplicate_config">حذف کانفیگ های تکراری</string>
-    <string name="title_del_invalid_config">حذف کانفیگهای بدون پینگ (اول تست کنید)</string>
+    <string name="title_del_invalid_config">حذف پروفایل‌های دارای نتیجهٔ تست ناموفق (ابتدا تست کنید)</string>
+    <string name="del_duplicate_config_confirmation">آیا %1$d پیکربندی تکراری از فهرست نمایش‌داده‌شده حذف شوند؟ پیکربندی انتخاب‌شده حفظ می‌شود.</string>
+    <string name="del_failed_config_confirmation">آیا %1$d پروفایل ناموفق از فهرست نمایش‌داده‌شده حذف شوند؟</string>
     <string name="title_export_all">خروجی گرفتن کانفیگ کاستوم در کلیپ‌بورد</string>
     <string name="title_sub_setting">تنظیمات گروهی اشتراک</string>
     <string name="sub_setting_remarks">ملاحظات</string>
@@ -208,7 +212,7 @@
 
     <string name="connection_test_pending">اتصال را بررسی کنید</string>
     <string name="connection_test_testing">در حال آزمایش...</string>
-    <string name="connection_test_available">موفق: پینگ [ %d , %d ] </string>
+    <string name="connection_test_available">موفق: پینگ [ %1$d , %2$d ] </string>
     <string name="connection_test_error">اتصال به اینترنت شناسایی نشد: %s</string>
     <string name="connection_test_fail">اینترنت در دسترس نیست</string>
     <string name="connection_test_error_status_code">کد خطا: #%d</string>

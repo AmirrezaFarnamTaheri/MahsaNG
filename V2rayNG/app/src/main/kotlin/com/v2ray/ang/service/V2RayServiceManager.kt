@@ -57,7 +57,7 @@ object V2RayServiceManager {
         set(value) {
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
-            Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()))
+            Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), "")
         }
     @Volatile
     var currentConfig: ServerConfig? = null
@@ -293,7 +293,7 @@ object V2RayServiceManager {
             var errstr = ""
             if (v2rayPoint.isRunning) {
                 try {
-                    time = v2rayPoint.measureDelay()
+                    time = v2rayPoint.measureDelay(AppConfig.DelayTestUrl)
                 } catch (e: Exception) {
                     Log.d(ANG_PACKAGE, "measureV2rayDelay: $e")
                     errstr = e.message?.substringAfter("\":") ?: "empty message"

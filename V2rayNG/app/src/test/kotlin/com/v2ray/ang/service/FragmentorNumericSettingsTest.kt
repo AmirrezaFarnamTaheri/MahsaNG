@@ -34,4 +34,13 @@ class FragmentorNumericSettingsTest {
         assertNotNull(FragmentorNumericSettings.parse("1", "0"))
         assertNotNull(FragmentorNumericSettings.parse("2048", "1"))
     }
+
+    @Test fun corruptOrOutOfBoundsStoredSpinnerIndicesAreClamped() {
+        assertEquals(0, FragmentorNumericSettings.selectedIndex(null, 5))
+        assertEquals(0, FragmentorNumericSettings.selectedIndex("bad", 5))
+        assertEquals(0, FragmentorNumericSettings.selectedIndex("-3", 5))
+        assertEquals(4, FragmentorNumericSettings.selectedIndex("99", 5))
+        assertEquals(2, FragmentorNumericSettings.selectedIndex("2", 5))
+        assertEquals(0, FragmentorNumericSettings.selectedIndex("2", 0))
+    }
 }

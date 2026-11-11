@@ -16,12 +16,12 @@ FILES = [
 class AppConfigSourceContractTests(unittest.TestCase):
     def test_imported_static_app_config_constants_exist(self):
         text = APP_CONFIG.read_text(encoding="utf-8")
-        defined = set(re.findall(r"\\b(?:const\\s+val|val)\\s+([A-Za-z_][A-Za-z_0-9]*)", text))
+        defined = set(re.findall(r"\b(?:const\s+val|val)\s+([A-Za-z_][A-Za-z_0-9]*)", text))
         for file in FILES:
             if not file.is_file():
                 continue
             contents = file.read_text(encoding="utf-8")
-            imports = re.findall(r"import com\\.v2ray\\.ang\\.AppConfig\\.([A-Za-z_][A-Za-z_0-9]*)", contents)
+            imports = re.findall(r"import com\.v2ray\.ang\.AppConfig\.([A-Za-z_][A-Za-z_0-9]*)", contents)
             with self.subTest(file=file.name):
                 self.assertFalse(set(imports) - defined, "Undefined AppConfig imports: " + str(set(imports) - defined))
 

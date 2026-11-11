@@ -13,6 +13,7 @@ kotlin {
 val productionHelpers = listOf(
     "FailedServerSelection",
     "SafeAssetFilename",
+    "ServerEditorInputRules",
     "TestRunTracker",
     "SocketConnectTimer",
     "SubscriptionReplacementPlan",

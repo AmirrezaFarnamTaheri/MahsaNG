@@ -11,10 +11,13 @@ ANDROID = "{http://schemas.android.com/apk/res/android}"
 
 class EchEditorContractTests(unittest.TestCase):
     def test_source_resource_has_real_controls_for_existing_activity_fields(self):
-        root = ET.parse(RES / "layout/tls_layout.xml").getroot()
+        tls = (RES / "layout/tls_layout.xml").read_text(encoding="utf-8")
+        self.assertEqual(1, tls.count('layout="@layout/gfw_ech_layout"'))
+        root = ET.parse(RES / "layout/gfw_ech_layout.xml").getroot()
         ids = {node.attrib.get(ANDROID + "id", "").removeprefix("@+id/"): node
                for node in root.iter() if node.attrib.get(ANDROID + "id")}
         self.assertEqual("LinearLayout", ids["l_ech"].tag)
+        self.assertNotIn('android:id="@+id/l_ech"', tls)
         self.assertEqual("gone", ids["l_ech"].get(ANDROID + "visibility"))
         for name in ("et_echConfigList", "et_echServerKeys", "et_echForceQuery"):
             self.assertEqual("EditText", ids[name].tag)

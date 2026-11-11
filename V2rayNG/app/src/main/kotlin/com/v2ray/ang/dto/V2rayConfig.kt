@@ -469,8 +469,11 @@ data class V2rayConfig(
             mux = when (stat) {
                 "" -> null
                 "OFF" -> MuxBean(enabled = false, status = "OFF")
-                "ON" -> MuxBean(enabled = true, concurrency = concr.coerceAtLeast(1), status = "ON")
-                else -> null
+                "ON" -> {
+                    require(concr > 0) { "Mux concurrency must be positive" }
+                    MuxBean(enabled = true, concurrency = concr, status = "ON")
+                }
+                else -> throw IllegalArgumentException("Unknown mux mode")
             }
         }
 

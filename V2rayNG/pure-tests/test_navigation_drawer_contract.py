@@ -24,6 +24,17 @@ class NavigationDrawerTests(unittest.TestCase):
         for item in choices:
             self.assertRegex(navigation, r"R\.id\." + re.escape(item) + r"\s*->")
 
+    def test_optional_feedback_and_promotion_handlers_keep_declared_ids(self):
+        # These legacy handler constants must compile even though they are not
+        # exposed in the reduced navigation drawer.
+        source = ACTIVITY.read_text(encoding="utf-8")
+        for name in ("feedback", "promotion"):
+            with self.subTest(name=name):
+                self.assertIn("R.id." + name + " ->", source)
+                ids = ET.parse(RES / "values/legacy_drawer_ids.xml").getroot()
+                self.assertTrue(any(n.tag == "item" and n.get("type") == "id"
+                                    and n.get("name") == name for n in ids))
+
     def test_unimplemented_legacy_menus_remain_archived(self):
         for name in ("menu_telegram_proxy", "menu_warp_setting"):
             with self.subTest(name=name):

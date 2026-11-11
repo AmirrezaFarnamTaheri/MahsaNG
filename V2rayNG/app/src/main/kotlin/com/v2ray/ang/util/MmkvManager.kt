@@ -267,28 +267,36 @@ object MmkvManager {
     }
 
     /**
-     * Returns only measured failures in the caller's visible/selected scope.
-     * Missing records and zero (untested/pending) never qualify.
+     * Preview only confirmed negative results from the currently displayed GUIDs.
+     * Retain the raw stored profile revision in memory to avoid deleting a
+     * modified profile that happens to keep the same GUID.
      */
     @Synchronized
-    fun findFailedServerGuids(visibleGuids: Collection<String>): List<String> =
-        FailedServerSelection.findFailed(visibleGuids, decodeServerList()) { guid ->
-            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
-        }
+    fun findConfirmedFailedServerCandidates(visibleGuids: Collection<String>): List<FailedServerEvidence> =
+        FailedServerSelection.snapshotFailures(
+            visibleGuids,
+            runCatching { decodeServerList() }.getOrNull() ?: return emptyList(),
+            { guid ->
+                runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
+            },
+            { guid -> serverStorage?.decodeString(guid) },
+        )
 
     /**
-     * Rechecks the confirmed candidate list at commit time, removing only profiles
-     * that still exist and still have an explicit negative test result.
-     * The serialized index is written once instead of once per deleted profile.
+     * Remove only the same observed failures and revisions shown in the user's
+     * confirmation. Do not expand the candidate set after confirmation.
+     * Publish the serialized index only once; preserve profiles if writing fails.
      */
     @Synchronized
-    fun removeInvalidServer(confirmedCandidates: Collection<String>): Int {
-        if (confirmedCandidates.isEmpty()) return 0
+    fun removeConfirmedFailedServers(confirmed: Collection<FailedServerEvidence>): Int {
+        if (confirmed.isEmpty()) return 0
         val main = mainStorage ?: return 0
-        val currentGuids = decodeServerList()
-        val failedGuids = FailedServerSelection.findFailed(confirmedCandidates, currentGuids) { guid ->
-            runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
-        }
+        val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return 0
+        val failedGuids = FailedServerSelection.reconfirmFailures(
+            confirmed, currentGuids,
+            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
+            { guid -> serverStorage?.decodeString(guid) },
+        )
         if (failedGuids.isEmpty()) return 0
 
         val failedSet = failedGuids.toHashSet()

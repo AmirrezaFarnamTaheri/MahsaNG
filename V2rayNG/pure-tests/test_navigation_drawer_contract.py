@@ -22,7 +22,7 @@ class NavigationDrawerTests(unittest.TestCase):
         code = ACTIVITY.read_text(encoding="utf-8")
         navigation = code[code.index("override fun onNavigationItemSelected"): ]
         for item in choices:
-            self.assertRegex(navigation, r"R\\.id\\." + re.escape(item) + r"\\s*->")
+            self.assertRegex(navigation, r"R\.id\." + re.escape(item) + r"\s*->")
 
     def test_archived_original_remains_available_for_full_feature_restoration(self):
         archived = ROOT / "docs/unimplemented-ui/menu-orphans/menu_drawer_original.xml"

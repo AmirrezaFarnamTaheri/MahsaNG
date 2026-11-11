@@ -51,6 +51,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Inventory unresolved app resource references (diagnostic)
+        run: python3 V2rayNG/pure-tests/resource_reference_audit.py
       - name: Install declared Android SDK
         run: |
           SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"

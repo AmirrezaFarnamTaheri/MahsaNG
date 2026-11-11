@@ -16,7 +16,7 @@ class NativeBindingContractTests(unittest.TestCase):
     def test_native_initialization_uses_explicit_optional_empty_key(self):
         service = (SRC / "service/V2RayServiceManager.kt").read_text(encoding="utf-8")
         tester = (SRC / "service/V2RayTestService.kt").read_text(encoding="utf-8")
-        self.assertIn("Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), \"\" )".replace(' \"' , '\"'), service)
+        self.assertIn('Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), "")', service)
         self.assertIn('Libv2ray.initV2Env(Utils.userAssetPath(this), "")', tester)
 
     def test_delay_measurements_supply_http_204_url(self):

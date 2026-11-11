@@ -56,10 +56,12 @@ currently compiled screens. The observed missing resource names include:
   `psiphon_protocol_list`, `psiphon_aggressive_list`
 - DNSTT/MasterDNS lists: `dnstt_protocol`, `dnstt_permit`,
   `masterdns_encryption_method`
-- Missing shared server editor: `layout_address_port`
-- Hysteria2 labels: `server_lab_bandwidth_down`,
-  `server_lab_bandwidth_up`, `server_lab_finalmask_hysteria2`
-- Legacy GFW theme resource `color_btn_light_blue2`
+- The shared Hysteria2 address/port editor and its labels have since been restored
+  from the checked-in VLESS editor structure and upstream label conventions;
+  two structural regression tests now guard their IDs and the labels.
+- The legacy GFW `color_btn_light_blue2` name now aliases the retained
+  `color_btn_subfilter_manage` theme color. This is a visual compatibility
+  fallback, not an assertion that unpublished artwork was recovered.
 
 These active resource references **cannot simply be removed**; source
 provenance, content, correct UX options and secure protocol behavior must be
@@ -67,6 +69,8 @@ verified before supplying replacements. Some generic bandwidth strings appear
 in the GPL-3.0 v2rayNG upstream, but Mahsa-specific Psiphon/DNSTT option sets
 and artwork have not been found in the public fork. Neither Java/Kotlin
 compilation nor native VPN operation has been validated.
+
+**Incremental restoration (2026-11-11):** The shared editor `layout_address_port.xml`, Hysteria2 label resources, and a stable light-blue theme color alias now exist in the integration branch. `V2rayNG/pure-tests/test_shared_editor_resources.py` verifies field IDs and critical labels; the new test passed locally and is wired into hosted CI. It does not replace the unavailable Psiphon/DNSTT protocol arrays, original artwork, or the missing GFW code dependencies. An Android APK remains blocked pending source restoration and a fresh hosted build.
 
 ### Additional source-provenance blocker
 

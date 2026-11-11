@@ -24,6 +24,17 @@ class NavigationDrawerTests(unittest.TestCase):
         for item in choices:
             self.assertRegex(navigation, r"R\.id\." + re.escape(item) + r"\s*->")
 
+    def test_unimplemented_legacy_menus_remain_archived(self):
+        for name in ("menu_telegram_proxy", "menu_warp_setting"):
+            with self.subTest(name=name):
+                self.assertTrue((ROOT / "docs/unimplemented-ui/menu-orphans" / (name + ".xml")).is_file())
+                self.assertFalse((RES / "menu" / (name + ".xml")).exists())
+                for code in (ROOT / "app/src/main").rglob("*"):
+                    if code.suffix in (".java", ".kt"):
+                        self.assertNotIn("R.menu." + name, code.read_text(encoding="utf-8"))
+                for xml in RES.rglob("*.xml"):
+                    self.assertNotIn("@menu/" + name, xml.read_text(encoding="utf-8"))
+
     def test_archived_original_remains_available_for_full_feature_restoration(self):
         archived = ROOT / "docs/unimplemented-ui/menu-orphans/menu_drawer_original.xml"
         self.assertTrue(archived.is_file())

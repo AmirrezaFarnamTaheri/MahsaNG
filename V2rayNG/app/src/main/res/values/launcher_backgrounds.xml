@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Moved from the malformed upstream res/color/*.xml files.
-         Adaptive-icon backgrounds reference these names as @color resources. -->
-    <color name="ic_launcher_background">#FFFFFF</color>
-    <color name="ic_banner_background">#FFFFFF</color>
-</resources>

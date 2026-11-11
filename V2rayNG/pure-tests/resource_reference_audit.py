@@ -17,7 +17,7 @@ RE_KINDS = (
     "anim", "animator",
 )
 REF_PATTERN = re.compile(
-    r"(?<![\\w])@(" + "|".join(RE_KINDS) + r")/([A-Za-z_][A-Za-z0-9_.]*)"
+    r"(?<![\w])@(" + "|".join(RE_KINDS) + r")/([A-Za-z_][A-Za-z0-9_.]*)"
 )
 EXTERNAL_STYLE_PREFIXES = (
     "Theme.AppCompat", "Theme.MaterialComponents", "TextAppearance.AppCompat",

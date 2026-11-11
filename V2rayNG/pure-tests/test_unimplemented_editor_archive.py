@@ -30,6 +30,12 @@ class UnimplementedEditorArchiveTest(unittest.TestCase):
                 self.assertFalse((APP / 'res/layout' / (name + '.xml')).exists(),
                                  'Unimplemented editor cannot compile without its backing feature')
 
+    def test_referenced_psiphon_settings_layout_remains_compiled(self):
+        activity = APP / 'java/com/v2ray/ang/GFW_psiphonSettings_Activity.java'
+        self.assertIn('R.layout.activity_gfw_psiphon_settings',
+                      activity.read_text(encoding='utf-8'))
+        self.assertTrue((APP / 'res/layout/activity_gfw_psiphon_settings.xml').is_file())
+
     def test_no_source_compiles_against_missing_editor_layouts(self):
         pattern = re.compile(r'R\.layout\.(' + '|'.join(ORPHANS) + r')\b')
         for location in (APP / 'java', APP / 'kotlin'):

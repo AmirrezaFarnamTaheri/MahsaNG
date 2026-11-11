@@ -92,6 +92,22 @@ class ExtendedServerFieldsTest {
         assertNull(restored.realitySettings)
     }
 
+    @Test fun switchingFromTlsToRealityDropsUnsupportedEchValues() {
+        val stream = V2rayConfig.OutboundBean.StreamSettingsBean()
+        stream.populateTlsSettings(
+            streamSecurity = "reality", allowInsecure = false, sni = "host.example",
+            fingerprint = "chrome", alpns = null,
+            publicKey = "public", shortId = "abc", spiderX = "/",
+            echConfigList = "stale-ech-config", echServerKeys = "stale-private-keys",
+            echForceQuery = "true",
+        )
+        assertNull(stream.tlsSettings)
+        assertNotNull(stream.realitySettings)
+        assertNull(stream.realitySettings?.echConfigList)
+        assertNull(stream.realitySettings?.echServerKeys)
+        assertNull(stream.realitySettings?.echForceQuery)
+    }
+
     @Test fun hysteriaEditorFieldsRoundTrip() {
         val settings = V2rayConfig.OutboundBean.OutSettingsBean(
             portHopping = "2000-3000",

@@ -26,9 +26,9 @@ class EchEditorContractTests(unittest.TestCase):
         source = (KOTLIN / "ui/ServerActivity.kt").read_text(encoding="utf-8")
         self.assertIn("container_ech?.visibility = if (streamSecuritys[position] == TLS)", source)
         dto = (KOTLIN / "dto/V2rayConfig.kt").read_text(encoding="utf-8")
-        self.assertIn("echConfigList = echConfigList", dto)
-        self.assertIn("echServerKeys = echServerKeys", dto)
-        self.assertIn("echForceQuery = echForceQuery", dto)
+        self.assertIn("echConfigList = if (streamSecurity == TLS) echConfigList else null", dto)
+        self.assertIn("echServerKeys = if (streamSecurity == TLS) echServerKeys else null", dto)
+        self.assertIn("echForceQuery = if (streamSecurity == TLS) echForceQuery else null", dto)
 
 
 if __name__ == "__main__":

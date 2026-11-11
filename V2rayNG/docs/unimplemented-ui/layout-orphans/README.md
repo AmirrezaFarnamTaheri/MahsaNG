@@ -1,6 +1,6 @@
 # Archived protocol and utility screens awaiting backing Android source
 
-The seventeen XML files here are **original layout sources**, preserved outside the
+The nineteen XML files here are **original layout sources**, preserved outside the
 Android resource graph until their backing Activities, protocol implementations,
 and option-list resources can be restored and reviewed.
 
@@ -32,6 +32,8 @@ Original XML files are preserved by name:
 - `activity_gfw_tunnel_config.xml`
 - `activity_github_config.xml`
 - `activity_ip_scanner.xml`
+- `activity_lan_info.xml`
+- `license_dialog.xml`
 
 `V2rayNG/pure-tests/test_unimplemented_editor_archive.py` fails CI if an
 archived file is missing, if the layout is placed back into the active
@@ -85,3 +87,8 @@ layout implementations in the published fork and reference strings/drawables
 that were not included in its resources. They are preserved byte-for-byte
 until their feature code and assets are available. The XML/source-reference
 guard runs on all layout qualifiers and must succeed before this can be merged.
+
+The television-only LAN information and license dialog layouts also reference
+missing, unpublished UI definitions. Neither has a default layout fallback.
+Their original source is archived here. Compiled source/XML must not refer to
+these archived names; a source-backed implementation must be restored first.

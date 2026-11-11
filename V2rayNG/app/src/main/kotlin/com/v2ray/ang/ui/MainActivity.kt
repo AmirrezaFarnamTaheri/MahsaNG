@@ -7,6 +7,7 @@ import android.net.VpnService
 import androidx.recyclerview.widget.LinearLayoutManager
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import com.v2ray.ang.R
 import android.os.Bundle
 import android.text.TextUtils
@@ -672,7 +673,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
 
     fun showCircle() {
-        binding.fabProgressCircle.show()
+        binding.fabProgressCircle.visibility = View.VISIBLE
     }
 
     fun hideCircle() {
@@ -682,7 +683,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     .subscribe {
                         try {
                             if (binding.fabProgressCircle.isShown) {
-                                binding.fabProgressCircle.hide()
+                                binding.fabProgressCircle.visibility = View.GONE
                             }
                         } catch (e: Exception) {
                             Log.w(ANG_PACKAGE, e)

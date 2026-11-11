@@ -656,6 +656,9 @@ object AngConfigManager {
         try {
             val config = MmkvManager.decodeServerConfig(guid) ?: return ""
             val outbound = config.getProxyOutbound() ?: return ""
+            // No tested serializer exists for HTTP and Hysteria2 share links.
+            if (config.configType == EConfigType.HTTP ||
+                config.configType == EConfigType.HYSTERIA2) return ""
             val streamSetting =
                 outbound.streamSettings ?: V2rayConfig.OutboundBean.StreamSettingsBean()
             if (config.configType != EConfigType.WIREGUARD) {
@@ -720,12 +723,13 @@ object AngConfigManager {
                     url + remark
                 }
 
-                EConfigType.VLESS,
+                EConfigType.VLESS, EConfigType.MVLESS,
                 EConfigType.TROJAN -> {
                     val remark = "#" + Utils.urlEncode(config.remarks)
 
                     val dicQuery = HashMap<String, String>()
-                    if (config.configType == EConfigType.VLESS) {
+                    if (config.configType == EConfigType.VLESS ||
+                        config.configType == EConfigType.MVLESS) {
                         outbound.settings?.vnext?.get(0)?.users?.get(0)?.flow?.let {
                             if (!TextUtils.isEmpty(it)) {
                                 dicQuery["flow"] = it

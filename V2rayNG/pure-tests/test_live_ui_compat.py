@@ -7,6 +7,12 @@ RES = Path(__file__).resolve().parents[1] / "app/src/main/res"
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 
 class LiveUiCompatibilityTests(unittest.TestCase):
+    def test_active_ui_colors_reference_existing_theme_palette(self):
+        root = ET.parse(RES / "values/active_ui_color_aliases.xml").getroot()
+        aliases = {e.get("name"): (e.text or "").strip() for e in root.findall("color")}
+        self.assertEqual("@color/color_fab_active", aliases["fab_orange_dark"])
+        self.assertEqual("@color/colorBg", aliases["white"])
+
     def test_snackbar_palette_and_icons_exist(self):
         palette = RES / "values/snackbar_compat.xml"
         names = {e.get("name") for e in ET.parse(palette).getroot().findall("color")}

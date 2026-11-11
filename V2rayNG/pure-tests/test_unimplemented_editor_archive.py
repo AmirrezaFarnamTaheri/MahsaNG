@@ -28,7 +28,7 @@ class UnimplementedEditorArchiveTest(unittest.TestCase):
                                  'Unimplemented editor cannot compile without its backing feature')
 
     def test_no_source_compiles_against_missing_editor_layouts(self):
-        pattern = re.compile(r'R\\.layout\\.(' + '|'.join(ORPHANS) + r')\\b')
+        pattern = re.compile(r'R\.layout\.(' + '|'.join(ORPHANS) + r')\b')
         for location in (APP / 'java', APP / 'kotlin'):
             for file in location.rglob('*'):
                 if file.suffix in ('.kt', '.java'):

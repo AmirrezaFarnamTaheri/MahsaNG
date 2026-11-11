@@ -19,6 +19,7 @@ val productionHelpers = listOf(
     "CoreStopGate",
     "FragmentorOptions",
     "FragmentorNumericSettings",
+    "EConfigType",
     "GfwPreferenceArrayCodec",
     "GFW_client_ip",
     "FragmentorSocketBinding",

@@ -58,6 +58,11 @@ jobs:
           "$SDKMANAGER" "platforms;android-35" "build-tools;34.0.0"
       - name: Check unsupported MASQUE/WARP screens remain archived
         run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh
-      - name: Compile Android application
+      - name: Assemble Android application (Kotlin, Java, resources, DEX and packaging)
         working-directory: V2rayNG
-        run: bash ./gradlew --no-daemon :app:compileDevDebugKotlin
+        run: bash ./gradlew --no-daemon :app:assembleDevDebug
+      - name: Assert debug APK was produced
+        working-directory: V2rayNG
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -print
+          test "$(find app/build/outputs/apk -type f -name '*.apk' | wc -l)" -gt 0

@@ -79,6 +79,12 @@ object Utils {
         }
     }
 
+    /** Reject invalid transport ports; never silently wrap them into a usable port. */
+    fun validate_port(port: Int): Int = ServerEditorInputRules.requirePort(port)
+
+    /** Validate a single fragment value or an increasing positive inclusive range. */
+    fun fragment_param_check(value: String?): Boolean = ServerEditorInputRules.validPositiveRange(value)
+
     /**
      * get text from clipboard
      */

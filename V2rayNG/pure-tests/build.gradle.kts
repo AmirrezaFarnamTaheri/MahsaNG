@@ -18,6 +18,7 @@ val productionHelpers = listOf(
     "TunnelProcessOwner",
     "CoreStopGate",
     "FragmentorOptions",
+    "FragmentorNumericSettings",
     "FragmentorSocketBinding",
     "ProfileDelayOrder",
     "ProfileIndexSwap",

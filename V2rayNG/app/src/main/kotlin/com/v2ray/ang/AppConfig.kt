@@ -91,6 +91,10 @@ object AppConfig {
     const val PORT_LOCAL_DNS = "10853"
     const val PORT_SOCKS = "10808"
     const val PORT_HTTP = "10809"
+    // Psiphon 0 means the OS selects a free proxy port, reported by its notice callback.
+    // This must not reuse V2Ray\'s own fixed proxy ports.
+    const val PSIPHON_SOCKS = "0"
+    const val PSIPHON_HTTP = "0"
 
     const val MSG_REGISTER_CLIENT = 1
     const val MSG_STATE_RUNNING = 11

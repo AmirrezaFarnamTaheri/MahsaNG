@@ -3,6 +3,7 @@ package com.v2ray.ang.ui
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.system.Os
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
@@ -21,11 +22,13 @@ import com.v2ray.ang.databinding.ItemRecyclerUserAssetBinding
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.SafeAssetFilename
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -99,14 +102,31 @@ class UserAssetActivity : BaseActivity() {
         }
 
     private fun copyFile(uri: Uri): String {
-        val targetFile = File(extDir, getCursorName(uri) ?: uri.toString())
-        contentResolver.openInputStream(uri).use { inputStream ->
-            targetFile.outputStream().use { fileOut ->
-                inputStream?.copyTo(fileOut)
-                toast(R.string.toast_success)
-                binding.recyclerView.adapter?.notifyDataSetChanged()
-            }
+        val fileName = SafeAssetFilename.validate(getCursorName(uri))
+            ?: throw IOException("Document provider returned an invalid filename")
+        val root = extDir.canonicalFile
+        if (!root.isDirectory && !root.mkdirs()) {
+            throw IOException("Cannot prepare asset directory")
         }
+        val targetFile = File(root, fileName).canonicalFile
+        if (targetFile.parentFile != root) {
+            throw SecurityException("Document filename escapes asset directory")
+        }
+
+        // A failed stream or partial copy must never replace the existing asset.
+        val staged = File.createTempFile(".asset-import-", ".tmp", root)
+        try {
+            val copiedBytes = contentResolver.openInputStream(uri)?.use { input ->
+                staged.outputStream().use { output -> input.copyTo(output) }
+            } ?: throw IOException("Unable to open selected document")
+            if (copiedBytes <= 0L) throw IOException("Selected document is empty")
+            // Same-directory rename atomically publishes the validated data.
+            Os.rename(staged.absolutePath, targetFile.absolutePath)
+        } finally {
+            staged.delete()
+        }
+        toast(R.string.toast_success)
+        binding.recyclerView.adapter?.notifyDataSetChanged()
         return targetFile.path
     }
 

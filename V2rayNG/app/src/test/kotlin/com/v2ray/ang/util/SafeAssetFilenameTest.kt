@@ -18,6 +18,11 @@ class SafeAssetFilenameTest {
         }
     }
 
+    @Test fun rejectsUtf8NamesBeyondFilesystemByteLimit() {
+        assertNull(SafeAssetFilename.validate("é".repeat(130)))
+        assertEquals("é".repeat(100), SafeAssetFilename.validate("é".repeat(100)))
+    }
+
     @Test fun rejectsMissingControlAndOversizeNames() {
         for (name in listOf(null, "", "  ", "a\u0000b", "line\nfeed", "x".repeat(256))) {
             assertNull("Accepted unsafe file name", SafeAssetFilename.validate(name))

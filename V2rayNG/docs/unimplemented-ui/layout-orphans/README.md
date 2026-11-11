@@ -1,6 +1,6 @@
 # Archived protocol and utility screens awaiting backing Android source
 
-The nine XML files here are **original layout sources**, preserved outside the
+The eight XML files here are **original layout sources**, preserved outside the
 Android resource graph until their backing Activities, protocol implementations,
 and option-list resources can be restored and reviewed.
 
@@ -10,7 +10,7 @@ Shadowsocks, SOCKS, HTTP, VLESS, MVLESS, Trojan, WireGuard, and Hysteria2
 editors. In particular, the five archived protocol editors (DNSTT, GooseRelay,
 MasterDNS, Psiphon, Skirk) are not routed to by `ServerActivity`, while
 their original protocol-specific array definitions are not present. The
-remaining four GFW utility/legacy layouts also reference assets or labels
+remaining three GFW utility/legacy layouts also reference assets or labels
 absent from the published repository.
 
 Original XML files are preserved by name:
@@ -20,7 +20,6 @@ Original XML files are preserved by name:
 - `activity_server_masterdns.xml`
 - `activity_server_psiphon.xml`
 - `activity_server_skirk.xml`
-- `activity_gfw_psiphon_settings.xml`
 - `activity_gfw_update.xml`
 - `activity_terms_service.xml`
 - `activity_tunnel_config.xml`
@@ -36,3 +35,9 @@ protocol option mappings, complete resources, security review, and Android
 device tests before moving files back under `src/main/res`. These archives
 must not be treated as dummy working screens or a replacement for complete
 source code.
+
+`activity_gfw_psiphon_settings.xml` is intentionally **not** archived:
+`GFW_psiphonSettings_Activity.java` still directly references it.
+Its missing original Psiphon option arrays must be restored from documented
+protocol choices before Android resource linking can succeed; do not invent
+or silently replace its selector values.

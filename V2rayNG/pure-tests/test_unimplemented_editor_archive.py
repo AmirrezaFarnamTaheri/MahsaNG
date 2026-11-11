@@ -16,6 +16,10 @@ ORPHANS = (
     'activity_server_masterdns',
     'activity_server_psiphon',
     'activity_server_skirk',
+    'activity_gfw_psiphon_settings',
+    'activity_gfw_update',
+    'activity_terms_service',
+    'activity_tunnel_config',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):

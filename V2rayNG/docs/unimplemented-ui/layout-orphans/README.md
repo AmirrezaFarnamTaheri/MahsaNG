@@ -1,6 +1,6 @@
 # Archived protocol and utility screens awaiting backing Android source
 
-The twelve XML files here are **original layout sources**, preserved outside the
+The thirteen XML files here are **original layout sources**, preserved outside the
 Android resource graph until their backing Activities, protocol implementations,
 and option-list resources can be restored and reviewed.
 
@@ -27,6 +27,7 @@ Original XML files are preserved by name:
 - `activity_warp_setting.xml`
 - `activity_youtube_config.xml`
 - `bottom_sheet_result.xml`
+- `gfw_permit_layout.xml`
 
 `V2rayNG/pure-tests/test_unimplemented_editor_archive.py` fails CI if an
 archived file is missing, if the layout is placed back into the active
@@ -60,3 +61,9 @@ resources. The result bottom-sheet layout references absent specialized
 background/drag-handle resources. The CI guard checks for code references
 before allowing these UI resources to stay quarantined; if a real usage is
 discovered, the entire backing screen must be restored instead.
+
+`gfw_permit_layout.xml` is preserved because the published DNSTT permit enum
+or list is absent. The compile guard now rejects both Java/Kotlin references
+and active resource-XML includes to archived layouts, so any discovered
+consumer requires restoring the real implementation rather than inventing
+selector values.

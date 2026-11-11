@@ -4,6 +4,13 @@ package com.v2ray.ang.service
 object FragmentorNumericSettings {
     data class Parsed(val fragments: Int, val delaySeconds: Double)
 
+    /** Ignore corrupt legacy spinner indices and stay within the currently available choices. */
+    @JvmStatic
+    fun selectedIndex(raw: String?, choiceCount: Int): Int {
+        if (choiceCount <= 0) return 0
+        return (raw?.trim()?.toIntOrNull() ?: 0).coerceIn(0, choiceCount - 1)
+    }
+
     @JvmStatic
     fun parse(fragmentsText: String?, delayText: String?): Parsed? {
         val fragments = fragmentsText?.trim()?.toIntOrNull() ?: return null

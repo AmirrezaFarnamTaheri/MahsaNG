@@ -28,6 +28,8 @@ ORPHANS = (
     'activity_gfw_tunnel_config',
     'activity_github_config',
     'activity_ip_scanner',
+    'activity_lan_info',
+    'license_dialog',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):

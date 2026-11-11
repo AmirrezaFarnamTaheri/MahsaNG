@@ -33,8 +33,9 @@ class UnimplementedEditorArchiveTest(unittest.TestCase):
             with self.subTest(layout=name):
                 self.assertTrue((ARCHIVE / (name + '.xml')).is_file(),
                                 'Preserve original XML before removing it from resources')
-                self.assertFalse((APP / 'res/layout' / (name + '.xml')).exists(),
-                                 'Unimplemented editor cannot compile without its backing feature')
+                for resource_dir in (APP / 'res').glob('layout*'):
+                    self.assertFalse((resource_dir / (name + '.xml')).exists(),
+                                     'Unimplemented editor must not compile in any resource qualifier')
 
     def test_archived_layouts_have_no_live_xml_includes(self):
         for path in (APP / 'res').rglob('*.xml'):

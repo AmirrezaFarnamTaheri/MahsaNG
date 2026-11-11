@@ -443,9 +443,9 @@ data class V2rayConfig(
                     publicKey = publicKey,
                     shortId = shortId,
                     spiderX = spiderX,
-                    echConfigList = echConfigList,
-                    echServerKeys = echServerKeys,
-                    echForceQuery = echForceQuery
+                    echConfigList = if (streamSecurity == TLS) echConfigList else null,
+                    echServerKeys = if (streamSecurity == TLS) echServerKeys else null,
+                    echForceQuery = if (streamSecurity == TLS) echForceQuery else null
                 )
                 if (security == TLS) {
                     tlsSettings = tlsSetting

@@ -610,11 +610,10 @@ class ServerActivity : BaseActivity() {
 
         val config = MmkvManager.decodeServerConfig(editGuid) ?: ServerConfig.create(createConfigType)
 
-        if (config.configType != EConfigType.HYSTERIA2) {
-            if ( (port <= 0) || (port >= 65536) ) {
-                toast(R.string.server_lab_port)
-                return false
-            }
+        if (port !in 1..65535) {
+            // Even with optional hopping, the primary transport port must be valid.
+            toast(R.string.server_lab_port)
+            return false
         }
 
         port = Utils.validate_port(port)

@@ -21,8 +21,6 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ERoutingMode
-import com.v2ray.ang.gfwknocker.GFW_sutil
-import com.v2ray.ang.gfwknocker.GFW_txt_crypt
 import com.v2ray.ang.gfwknocker.my_preference_storage
 import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.MmkvManager
@@ -467,7 +465,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private fun updateNotification(text: String) {
         try {
             val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_name_m2)
+                .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_LOW)

@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR/push runs for the same integration branch, not any test jobs.
+concurrency:
+  group: mahsa-safety-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   pure-kotlin-regressions:
     name: Pure Kotlin regressions (real JUnit)

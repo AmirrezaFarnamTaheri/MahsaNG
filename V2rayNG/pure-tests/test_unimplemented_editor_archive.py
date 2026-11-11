@@ -23,6 +23,7 @@ ORPHANS = (
     'activity_warp_setting',
     'activity_youtube_config',
     'bottom_sheet_result',
+    'gfw_permit_layout',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):
@@ -33,6 +34,14 @@ class UnimplementedEditorArchiveTest(unittest.TestCase):
                                 'Preserve original XML before removing it from resources')
                 self.assertFalse((APP / 'res/layout' / (name + '.xml')).exists(),
                                  'Unimplemented editor cannot compile without its backing feature')
+
+    def test_archived_layouts_have_no_live_xml_includes(self):
+        for path in (APP / 'res').rglob('*.xml'):
+            content = path.read_text(encoding='utf-8')
+            for name in ORPHANS:
+                with self.subTest(path=path.name, layout=name):
+                    self.assertNotIn('@layout/' + name, content,
+                                     'Restore the complete feature instead of archiving a referenced layout')
 
     def test_referenced_psiphon_settings_layout_remains_compiled(self):
         activity = APP / 'java/com/v2ray/ang/GFW_psiphonSettings_Activity.java'

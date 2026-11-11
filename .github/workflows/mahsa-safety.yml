@@ -68,3 +68,6 @@ jobs:
         run: |
           find app/build/outputs/apk -type f -name '*.apk' -print
           test "$(find app/build/outputs/apk -type f -name '*.apk' | wc -l)" -gt 0
+      - name: Run full Android module unit tests, including profile model contracts
+        working-directory: V2rayNG
+        run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest

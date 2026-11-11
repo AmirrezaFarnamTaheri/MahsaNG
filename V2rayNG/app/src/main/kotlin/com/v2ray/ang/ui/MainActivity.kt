@@ -362,7 +362,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             val visibleGuids = mainViewModel.serversCache.map { it.guid }.toList()
             lifecycleScope.launch {
                 val candidates = withContext(Dispatchers.IO) {
-                    MmkvManager.findFailedServerGuids(visibleGuids)
+                    MmkvManager.findConfirmedFailedServerCandidates(visibleGuids)
                 }
                 if (candidates.isEmpty()) {
                     toast(R.string.toast_none_data)
@@ -371,10 +371,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                         .setMessage(getString(R.string.del_failed_config_confirmation, candidates.size))
                         .setPositiveButton(android.R.string.ok) { _, _ ->
                             lifecycleScope.launch {
-                                // Recheck only the previewed candidates; a new failure cannot
-                                // silently expand the deletion after the confirmation was shown.
+                                // Recheck the exact previewed GUIDs, negative measurements and
+                                // profile revisions; an import or retest cannot expand deletion.
                                 withContext(Dispatchers.IO) {
-                                    MmkvManager.removeInvalidServer(candidates)
+                                    MmkvManager.removeConfirmedFailedServers(candidates)
                                 }
                                 mainViewModel.reloadServerList()
                             }

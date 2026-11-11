@@ -38,6 +38,8 @@ class KotlinSourceContractTests(unittest.TestCase):
         self.assertIn("Intent.ACTION_PACKAGE_REMOVED", code)
         self.assertIn('filter.addDataScheme("package")', code)
         self.assertIn("cachedPlugins = null", manager)
+        # Repeated invalidation must not leak another registered receiver each time.
+        self.assertNotIn("receiver = null", manager)
         self.assertIn("getPackageInfo(componentInfo.packageName)", resolved)
 
 

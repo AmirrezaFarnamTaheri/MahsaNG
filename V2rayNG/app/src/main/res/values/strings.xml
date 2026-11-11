@@ -59,6 +59,9 @@
     <string name="server_lab_stream_alpn" translatable="false">Alpn</string>
     <string name="server_lab_allow_insecure">allowInsecure</string>
     <string name="server_lab_sni">SNI</string>
+    <string name="server_lab_ech_config_list">ECH config list (TLS client)</string>
+    <string name="server_lab_ech_server_keys">ECH server keys (server-side)</string>
+    <string name="server_lab_ech_force_query">ECH force query</string>
     <string name="server_lab_address3">ip address</string>
     <string name="server_lab_port3">port</string>
     <string name="server_lab_id3">password</string>

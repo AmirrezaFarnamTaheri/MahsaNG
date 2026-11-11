@@ -43,6 +43,21 @@ object AppConfig {
 
     const val HTTP_PROTOCOL: String = "http://"
     const val HTTPS_PROTOCOL: String = "https://"
+    // Compatibility names used by legacy importers; same URLs, not new protocols.
+    const val PROTOCOL_HTTP = HTTP_PROTOCOL
+    const val PROTOCOL_HTTPS = HTTPS_PROTOCOL
+
+    // Original v2flyNG WireGuard IPv4/IPv6 and MTU defaults.
+    const val WIREGUARD_LOCAL_ADDRESS_V4 = "172.16.0.2/32"
+    const val WIREGUARD_LOCAL_ADDRESS_V6 = "2606:4700:110:8f81:d551:a0:532e:a2b3/128"
+    const val WIREGUARD_LOCAL_MTU = "1420"
+    // Unpublished GFW WireGuard noise knobs remain disabled by default.
+    const val WIREGUARD_keep_alive = "0"
+    const val WIREGUARD_wnoise = ""
+    const val WIREGUARD_wnoisecount = ""
+    const val WIREGUARD_wnoisedelay = ""
+    const val WIREGUARD_wpayloadsize = ""
+
 
     const val BROADCAST_ACTION_SERVICE = "com.v2ray.ang.action.service"
     const val BROADCAST_ACTION_ACTIVITY = "com.v2ray.ang.action.activity"

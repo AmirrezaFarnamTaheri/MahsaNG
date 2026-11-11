@@ -25,8 +25,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Verify shared editor XML and labels
-        run: python3 -m unittest discover -s V2rayNG/pure-tests -p 'test_shared_editor_resources.py'
+      - name: Verify restored resources and localized strings
+        run: python3 -m unittest discover -s V2rayNG/pure-tests -p 'test_*.py'
       - name: Reject logs in V2rayConfigUtil configuration generator
         run: bash V2rayNG/pure-tests/check-no-config-logging.sh
       - name: Run isolated production helper tests

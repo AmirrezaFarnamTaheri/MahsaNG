@@ -25,6 +25,9 @@ ORPHANS = (
     'bottom_sheet_result',
     'gfw_permit_layout',
     'activity_donate_config',
+    'activity_gfw_tunnel_config',
+    'activity_github_config',
+    'activity_ip_scanner',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):

@@ -23,6 +23,15 @@ class AndroidPermissionContractTests(unittest.TestCase):
                 self.assertNotIn("READ_MEDIA_IMAGES", source)
                 self.assertNotIn("READ_EXTERNAL_STORAGE", source)
 
+    def test_untrusted_asset_stream_is_staged_before_publication(self):
+        source = (SOURCES / "UserAssetActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("SafeAssetFilename.validate(getCursorName(uri))", source)
+        self.assertIn("File.createTempFile(", source)
+        self.assertIn("targetFile.parentFile != root", source)
+        self.assertIn("Os.rename(staged.absolutePath, targetFile.absolutePath)", source)
+        self.assertIn("copiedBytes <= 0L", source)
+        self.assertIn("staged.delete()", source)
+
     def test_camera_uses_lifecycle_owned_activity_result_contract(self):
         for name in ("ScScannerActivity", "RoutingSettingsFragment"):
             with self.subTest(name=name):

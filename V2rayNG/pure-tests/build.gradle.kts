@@ -22,6 +22,7 @@ val productionHelpers = listOf(
     "EConfigType",
     "GfwPreferenceArrayCodec",
     "GFW_client_ip",
+    "StringWhitespace",
     "FragmentorSocketBinding",
     "ProfileDelayOrder",
     "ProfileIndexSwap",

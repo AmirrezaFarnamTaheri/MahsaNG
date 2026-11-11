@@ -1,10 +1,8 @@
 package com.v2ray.ang.ui
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
@@ -15,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.tbruyelle.rxpermissions.RxPermissions
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
@@ -76,31 +73,16 @@ class UserAssetActivity : BaseActivity() {
     }
 
     private fun showFileChooser() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        // The document provider grants access to the selected URI.
+        // This also permits selecting non-image geo assets on Android 13+.
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
         }
-        RxPermissions(this)
-            .request(permission)
-            .subscribe {
-            if (it) {
-                val intent = Intent(Intent.ACTION_GET_CONTENT)
-                intent.type = "*/*"
-                intent.addCategory(Intent.CATEGORY_OPENABLE)
-
-                try {
-                    chooseFile.launch(
-                        Intent.createChooser(
-                            intent,
-                            getString(R.string.title_file_chooser)
-                        )
-                    )
-                } catch (ex: android.content.ActivityNotFoundException) {
-                    toast(R.string.toast_require_file_manager)
-                }
-            } else
-                toast(R.string.toast_permission_denied)
+        try {
+            chooseFile.launch(Intent.createChooser(intent, getString(R.string.title_file_chooser)))
+        } catch (ex: android.content.ActivityNotFoundException) {
+            toast(R.string.toast_require_file_manager)
         }
     }
 

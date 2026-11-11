@@ -693,6 +693,8 @@ object AngConfigManager {
                 }
 
                 EConfigType.CUSTOM -> ""
+                // These links are explicitly rejected above; keep this when exhaustive.
+                EConfigType.HTTP, EConfigType.HYSTERIA2 -> ""
 
                 EConfigType.SHADOWSOCKS -> {
                     val remark = "#" + Utils.urlEncode(config.remarks)

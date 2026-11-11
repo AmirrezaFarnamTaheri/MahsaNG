@@ -233,6 +233,20 @@
                     app:layout_anchorGravity="bottom|right|end" />
 
 
+                <ProgressBar
+                    android:id="@+id/fab_progress_circle"
+                    style="?android:attr/progressBarStyleSmall"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_marginEnd="28dp"
+                    android:layout_marginBottom="24dp"
+                    android:indeterminate="true"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:visibility="gone"
+                    android:contentDescription="@string/connection_test_pending" />
+
             </androidx.coordinatorlayout.widget.CoordinatorLayout>
         </RelativeLayout>
     </LinearLayout>

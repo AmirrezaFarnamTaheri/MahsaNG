@@ -26,7 +26,7 @@ class V2RayTestService : Service() {
     override fun onCreate() {
         super.onCreate()
         Seq.setContext(this)
-        Libv2ray.initV2Env(Utils.userAssetPath(this))
+        Libv2ray.initV2Env(Utils.userAssetPath(this), "")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

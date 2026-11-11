@@ -7,7 +7,7 @@ package com.v2ray.ang.util
 internal object SafeAssetFilename {
     fun validate(displayName: String?): String? {
         val name = displayName?.trim() ?: return null
-        if (name.isEmpty() || name == "." || name == ".." || name.length > 255) return null
+        if (name.isEmpty() || name == "." || name == ".." || name.toByteArray(Charsets.UTF_8).size > 255) return null
         if (name.any { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) return null
         return name
     }

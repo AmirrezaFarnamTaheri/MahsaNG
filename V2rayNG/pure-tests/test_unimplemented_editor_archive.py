@@ -24,6 +24,7 @@ ORPHANS = (
     'activity_youtube_config',
     'bottom_sheet_result',
     'gfw_permit_layout',
+    'activity_donate_config',
 )
 
 class UnimplementedEditorArchiveTest(unittest.TestCase):

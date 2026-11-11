@@ -272,7 +272,7 @@ object MmkvManager {
      * modified profile that happens to keep the same GUID.
      */
     @Synchronized
-    fun findConfirmedFailedServerCandidates(visibleGuids: Collection<String>): List<FailedServerEvidence> {
+    internal fun findConfirmedFailedServerCandidates(visibleGuids: Collection<String>): List<FailedServerEvidence> {
         val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return emptyList()
         return FailedServerSelection.snapshotFailures(
             visibleGuids,
@@ -288,7 +288,7 @@ object MmkvManager {
      * Publish the serialized index only once; preserve profiles if writing fails.
      */
     @Synchronized
-    fun removeConfirmedFailedServers(confirmed: Collection<FailedServerEvidence>): Int {
+    internal fun removeConfirmedFailedServers(confirmed: Collection<FailedServerEvidence>): Int {
         if (confirmed.isEmpty()) return 0
         val main = mainStorage ?: return 0
         val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return 0

@@ -68,6 +68,8 @@ object VlessFmt {
 
     fun toUri(config: ServerConfig): String {
         val outbound = config.getProxyOutbound() ?: return ""
+        // Do not serialize invalid server links for malformed or removed profiles.
+        val address = outbound.getServerAddress()?.takeIf { it.isNotBlank() } ?: return ""
         val streamSetting = outbound.streamSettings ?: V2rayConfig.OutboundBean.StreamSettingsBean()
 
         val remark = "#" + Utils.urlEncode(config.remarks)
@@ -163,7 +165,7 @@ object VlessFmt {
         val url = String.format(
             "%s@%s:%s",
             outbound.getPassword(),
-            Utils.getIpv6Address(outbound.getServerAddress()),
+            Utils.getIpv6Address(address),
             outbound.getServerPort()
         )
         return url + query + remark

@@ -272,7 +272,7 @@ class ServerActivity : BaseActivity() {
                     container_sni?.visibility = View.VISIBLE
                     container_fingerprint?.visibility = View.VISIBLE
                     container_alpn?.visibility = View.VISIBLE
-                    container_ech?.visibility = View.VISIBLE
+                    container_ech?.visibility = if (streamSecuritys[position] == TLS) View.VISIBLE else View.GONE
                     if (streamSecuritys[position] == TLS) {
                         container_allow_insecure?.visibility = View.VISIBLE
                         container_public_key?.visibility = View.GONE

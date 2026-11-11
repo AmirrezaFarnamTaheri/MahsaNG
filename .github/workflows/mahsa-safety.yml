@@ -90,6 +90,9 @@ jobs:
           jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/Libv2ray.class"
           jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/V2RayPoint.class"
           jar tf "$RUNNER_TEMP/mahsa-core-classes.jar" | grep -q "libv2ray/V2RayVPNServiceSupportsSet.class"
+          echo '=== Pinned native core Java public API (for binding compatibility) ==='
+          javap -classpath "$RUNNER_TEMP/mahsa-core-classes.jar" -public libv2ray.Libv2ray libv2ray.V2RayPoint libv2ray.V2RayVPNServiceSupportsSet
+
       - name: Check unsupported MASQUE/WARP screens remain archived
         run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh
       - name: Assemble Android application (Kotlin, Java, resources, DEX and packaging)

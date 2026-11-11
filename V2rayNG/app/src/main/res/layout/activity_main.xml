@@ -229,7 +229,7 @@
                     android:contentDescription="M connect button"
                     android:focusable="true"
                     android:nextFocusLeft="@+id/layout_test"
-                    android:src="@drawable/ic_stat_name_m2"
+                    android:src="@drawable/ic_stat_name"
                     app:layout_anchorGravity="bottom|right|end" />
 
 

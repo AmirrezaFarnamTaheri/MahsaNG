@@ -127,6 +127,8 @@ jobs:
           grep -qx 'LOCAL_MODULE := tun2socks' "$MODULE"
           # Rename output only; JNI_OnLoad registers ca/psiphon/Tun2SocksJniLoader.
           sed -i 's/^LOCAL_MODULE := tun2socks$/LOCAL_MODULE := tun2socks_psiphon/' "$MODULE"
+          # Fail closed unless pinned upstream JNI source matches reviewed anchors.
+          python3 V2rayNG/pure-tests/patch_psiphon_tun2socks.py "$JNI/badvpn/tun2socks/tun2socks.c"
           NDK="$ANDROID_HOME/ndk/27.2.12479018"
           "$NDK/ndk-build" -C "$JNI" \
             NDK_PROJECT_PATH="$SRC/app/src/main" \

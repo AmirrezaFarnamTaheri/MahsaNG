@@ -41,6 +41,7 @@ object AppConfig {
     const val PREF_BYPASS_APPS = "pref_bypass_apps"
     const val PREF_CONFIRM_REMOVE = "pref_confirm_remove"
     const val PREF_START_SCAN_IMMEDIATE = "pref_start_scan_immediate"
+    const val PREF_TCP_PROBE_PRESET = "pref_tcp_probe_preset"
 
     // Standard stable 204 endpoints from the original v2flyNG client.
     const val DelayTestUrl = "https://www.gstatic.com/generate_204"

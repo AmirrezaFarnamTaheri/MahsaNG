@@ -26,6 +26,22 @@ class KotlinSourceContractTests(unittest.TestCase):
                 self.assertIn("val address = outbound.getServerAddress()?.takeIf { it.isNotBlank() } ?: return \"\"", body)
                 self.assertIn("Utils.getIpv6Address(address)", body)
 
+    def test_utils_declares_each_editor_validator_once(self):
+        source = (APP / "util/Utils.kt").read_text(encoding="utf-8")
+        self.assertEqual(1, len(re.findall(r"\\bfun\\s+validate_port\\s*\\(", source)))
+        self.assertEqual(1, len(re.findall(r"\\bfun\\s+fragment_param_check\\s*\\(", source)))
+        self.assertIn("ServerEditorInputRules.requirePort(port)", source)
+        self.assertIn("ServerEditorInputRules.validPositiveRange(value)", source)
+
+    def test_measurements_have_distinct_observation_ids_for_failed_delete(self):
+        mmkv = (APP / "util/MmkvManager.kt").read_text(encoding="utf-8")
+        affiliation = (APP / "dto/ServerAffiliationInfo.kt").read_text(encoding="utf-8")
+        self.assertIn("var observationId: String? = null", affiliation)
+        self.assertIn("aff.observationId = UUID.randomUUID().toString()", mmkv)
+        self.assertIn("aff.observationId = null", mmkv)
+        self.assertIn("affiliation.observationId = null", mmkv)
+        self.assertIn("FailedServerSelection.reconfirmFailures(", mmkv)
+
     def test_plugin_package_lookup_and_registration_are_defined(self):
         manager = (APP / "plugin/PluginManager.kt").read_text(encoding="utf-8")
         resolved = (APP / "plugin/ResolvedPlugin.kt").read_text(encoding="utf-8")

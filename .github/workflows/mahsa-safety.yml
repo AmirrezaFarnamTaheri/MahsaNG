@@ -124,3 +124,27 @@ jobs:
       - name: Run full Android module unit tests, including profile model contracts
         working-directory: V2rayNG
         run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest
+
+      - name: Allow hardware-accelerated Android emulator
+        run: |
+          if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Install and launch real devDebug APK on Android 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          script: |
+            set -euo pipefail
+            APK="$(find V2rayNG/app/build/outputs/apk/dev/debug -maxdepth 1 -type f -name '*_x86_64.apk' -print -quit)"
+            test -n "$APK"
+            adb install -r "$APK"
+            adb shell pm list packages | grep -F 'package:com.MahsaNG.EMS.dev'
+            adb logcat -c
+            adb shell am start -W -n com.MahsaNG.EMS.dev/com.v2ray.ang.ui.MainActivity
+            sleep 8
+            test -n "$(adb shell pidof com.MahsaNG.EMS.dev | tr -d '\r')"
+            adb shell dumpsys package com.MahsaNG.EMS.dev | grep -F 'PsiphonVpnService'

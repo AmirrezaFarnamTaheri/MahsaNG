@@ -497,4 +497,8 @@
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
 
+    <string name="title_tcp_probe_preset">TCP reachability test (not proxy verification)</string>
+    <string name="tcp_probe_quick">Quick: 1 attempt, 1.5 s connect timeout</string>
+    <string name="tcp_probe_balanced">Balanced: up to 2 attempts, 3 s each; stop on success</string>
+    <string name="tcp_probe_diagnostic">Diagnostic: up to 3 attempts, 5 s each; stop on success</string>
 </resources>

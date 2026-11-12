@@ -756,7 +756,11 @@ class ServerActivity : BaseActivity() {
 
         MmkvManager.encodeServerConfig(editGuid, config)
         // The endpoint changed under the same GUID; discard in-flight results.
-        if (editGuid.isNotBlank()) TestRunTracker.forgetProfile(editGuid)
+        if (editGuid.isNotBlank()) {
+            TestRunTracker.forgetProfile(editGuid)
+            // A stored pre-edit negative delay is also stale evidence.
+            MmkvManager.clearTestDelayResults(listOf(editGuid))
+        }
         toast(R.string.toast_success)
         finish()
         return true

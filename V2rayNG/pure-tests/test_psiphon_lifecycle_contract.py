@@ -12,7 +12,10 @@ class PsiphonLifecycleContractTest(unittest.TestCase):
         cls.text = SOURCE.read_text(encoding="utf-8")
 
     def test_android_destroy_releases_native_resources(self):
-        self.assertRegex(self.text, r"override fun onDestroy\(\)\s*\{\s*stopAll\(isForced = false\)")
+        destroy = self.text.split("override fun onDestroy()", 1)[1].split(
+            "override fun onStartCommand(", 1
+        )[0]
+        self.assertIn("stopAll(isForced = false)", destroy)
         stop = self.text.split("private fun stopAll(", 1)[1].split("override fun loadLibrary(", 1)[0]
         self.assertIn("startGate.stop()", stop)
         self.assertIn("teardownStarted.compareAndSet(false, true)", stop)

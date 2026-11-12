@@ -39,3 +39,25 @@ establishes a working or secure tunnel.
 For any update, use a reviewed source version and new checksum; do not
 silently change the artifact, suppress compiler tasks, invent JNI bindings,
 or force Gradle packaging overrides.
+
+## Psiphon-specific tun2socks JNI library
+
+The V2Ray app bundles `libtun2socks.so` as a **standalone executable**.
+That cannot satisfy the Java `ca.psiphon.Tun2SocksJniLoader` native methods,
+which explicitly load `libtun2socks_psiphon.so`. Compiling the Java wrapper
+without supplying this JNI library produced a misleadingly successful APK
+whose Psiphon VPN traffic path could not start.
+
+The workflow now obtains the **official upstream Psiphon-Inc Android source**
+at immutable commit
+[`c2c043da1208b34d28c3fdeef72b43dcd470dacb`](https://github.com/Psiphon-Inc/psiphon-android/commit/c2c043da1208b34d28c3fdeef72b43dcd470dacb)
+(GPLv3, compatible with this repo's GPLv3 license). It builds the upstream
+`app/src/main/jni/badvpn/Android.mk` with NDK 27.2, renaming **only**
+`LOCAL_MODULE` to `tun2socks_psiphon` in the temporary CI checkout.
+No upstream C or JNI source implementation is replaced or fabricated.
+It verifies exported `JNI_OnLoad`, copies the four ABI outputs into the
+application build, and requires their presence in the universal APK.
+
+This proves binary presence and symbol export, **not** that tunnel handoff,
+DNS forwarding, IPv6 or device reconnect work. Complete native/physical
+VPN validation and source-to-binary provenance review remain mandatory.

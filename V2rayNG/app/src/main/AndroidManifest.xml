@@ -33,6 +33,7 @@
     <application
         android:name=".AngApplication"
         android:allowBackup="false"
+        tools:replace="android:allowBackup"
         android:fullBackupContent="@xml/no_backup_legacy"
         android:dataExtractionRules="@xml/no_backup_extraction"
         android:icon="@mipmap/ic_launcher"

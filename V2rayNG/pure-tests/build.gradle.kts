@@ -12,6 +12,9 @@ kotlin {
 
 val productionHelpers = listOf(
     "FailedServerSelection",
+    "LocalSubscriptionSelection",
+    "SubscriptionItem",
+    "wget_module",
     "SafeAssetFilename",
     "PortAndFragmentInput",
     "ServerEditorInputRules",
@@ -20,6 +23,12 @@ val productionHelpers = listOf(
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "CoreStopGate",
+    "PsiphonStartGate",
+    "PsiphonRouteGate",
+    "VpnModeSelection",
+    "PsiphonProxyPortRules",
+    "MuxModeRestoration",
+    "EchLinkParameters",
     "FragmentorOptions",
     "FragmentorNumericSettings",
     "EConfigType",
@@ -31,9 +40,6 @@ val productionHelpers = listOf(
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
-    "PsiphonProxyPortRules",
-    "MuxModeRestoration",
-    "EchLinkParameters",
 )
 
 sourceSets {

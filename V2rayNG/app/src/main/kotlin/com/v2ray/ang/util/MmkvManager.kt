@@ -5,6 +5,7 @@ import com.tencent.mmkv.MMKV
 import com.v2ray.ang.dto.ServerAffiliationInfo
 import com.v2ray.ang.dto.ServerConfig
 import com.v2ray.ang.dto.SubscriptionItem
+import java.util.UUID
 
 object MmkvManager {
     const val ID_MAIN = "MAIN"
@@ -204,6 +205,7 @@ object MmkvManager {
         }
         val aff = decodeServerAffiliationInfo(guid) ?: ServerAffiliationInfo()
         aff.testDelayMillis = testResult
+        aff.observationId = UUID.randomUUID().toString()
         serverAffStorage?.encode(guid, Gson().toJson(aff))
     }
 
@@ -211,6 +213,7 @@ object MmkvManager {
         serverAffStorage?.allKeys()?.forEach { key ->
             decodeServerAffiliationInfo(key)?.let { aff ->
                 aff.testDelayMillis = 0
+                aff.observationId = null
                 serverAffStorage?.encode(key, Gson().toJson(aff))
             }
         }
@@ -222,6 +225,7 @@ object MmkvManager {
         visibleGuids.distinct().forEach { guid ->
             runCatching { decodeServerAffiliationInfo(guid) }.getOrNull()?.let { affiliation ->
                 affiliation.testDelayMillis = 0L
+                affiliation.observationId = null
                 serverAffStorage?.encode(guid, Gson().toJson(affiliation))
             }
         }
@@ -239,6 +243,22 @@ object MmkvManager {
         subItem.url = url
         subStorage?.encode(Utils.getUuid(), Gson().toJson(subItem))
         return 1
+    }
+
+    /**
+     * Create or reuse a local-only group for the bundled GFW configuration.
+     * Its URL is blank and auto-update is disabled: it is not a remote feed.
+     * Never overwrite a real subscription that happens to have the same name.
+     */
+    @Synchronized
+    fun import_Mahsa_Subscription(remark: String): String {
+        val label = remark.trim().takeIf { it.isNotEmpty() } ?: return ""
+        val existing = runCatching { decodeSubscriptions() }.getOrNull() ?: return ""
+        LocalSubscriptionSelection.existingLocalId(label, existing)?.let { return it }
+        val storage = subStorage ?: return ""
+        val id = Utils.getUuid()
+        val local = SubscriptionItem(remarks = label, url = "", enabled = false)
+        return if (storage.encode(id, Gson().toJson(local))) id else ""
     }
 
     fun decodeSubscriptions(): List<Pair<String, SubscriptionItem>> {
@@ -277,7 +297,9 @@ object MmkvManager {
         return FailedServerSelection.snapshotFailures(
             visibleGuids,
             currentGuids,
-            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
+            { guid -> runCatching {
+                decodeServerAffiliationInfo(guid)?.let { FailureObservation(it.testDelayMillis, it.observationId) }
+            }.getOrNull() },
             { guid -> serverStorage?.decodeString(guid) },
         )
     }
@@ -294,7 +316,9 @@ object MmkvManager {
         val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return 0
         val failedGuids = FailedServerSelection.reconfirmFailures(
             confirmed, currentGuids,
-            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
+            { guid -> runCatching {
+                decodeServerAffiliationInfo(guid)?.let { FailureObservation(it.testDelayMillis, it.observationId) }
+            }.getOrNull() },
             { guid -> serverStorage?.decodeString(guid) },
         )
         if (failedGuids.isEmpty()) return 0

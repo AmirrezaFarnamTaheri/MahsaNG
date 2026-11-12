@@ -107,26 +107,24 @@ public class GFW_psiphonSettings_Activity extends BaseActivity {
                 if (country1.equalsIgnoreCase("Auto")) {
                     country1 = "";
                 }
-
-                // A port of 0 means automatic allocation for either proxy.
-                // Reject malformed input instead of silently coercing it to zero.
+                // Port 0 requests automatic allocation by Psiphon.
                 if (!PsiphonProxyPortRules.isValid(socks_port, http_port)) {
                     Toast.makeText(GFW_psiphonSettings_Activity.this,
                             "Psiphon ports must be 0 (automatic) or 1-65534, distinct when nonzero, and not 10808/10809",
                             Toast.LENGTH_LONG).show();
-                } else {
-                    try {
-                        mystrg.put_value("psiphon_socks_port", socks_port.trim());
-                        mystrg.put_value("psiphon_http_port", http_port.trim());
-                        mystrg.put_value("psiphon_country_code", country1);
-                        mystrg.put_value("psiphon_protocol", proto1);
-                        mystrg.put_value("psiphon_aggressive", aggr1);
-
-                        Toast.makeText(GFW_psiphonSettings_Activity.this, "settings saved for psiphon", Toast.LENGTH_LONG).show();
-                    } catch (Exception e) {
-                        Toast.makeText(GFW_psiphonSettings_Activity.this, "ERR in saving psiphon setting", Toast.LENGTH_LONG).show();
-                    }
-
+                    return;
+                }
+                try {
+                    mystrg.put_value("psiphon_socks_port", socks_port.trim());
+                    mystrg.put_value("psiphon_http_port", http_port.trim());
+                    mystrg.put_value("psiphon_country_code", country1);
+                    mystrg.put_value("psiphon_protocol", proto1);
+                    mystrg.put_value("psiphon_aggressive", aggr1);
+                    Toast.makeText(GFW_psiphonSettings_Activity.this,
+                            "settings saved for psiphon", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    Toast.makeText(GFW_psiphonSettings_Activity.this,
+                            "ERR in saving psiphon setting", Toast.LENGTH_LONG).show();
                 }
             }
         });

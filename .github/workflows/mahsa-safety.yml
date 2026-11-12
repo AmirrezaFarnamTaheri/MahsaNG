@@ -2,10 +2,11 @@ name: MahsaNG safety checks
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, 'roadmap/**', 'fix/**']
   push:
     branches:
       - 'integration/**'
+      - 'fix/failed-deletion-observation-id-*'
   workflow_dispatch:
 
 permissions:
@@ -93,6 +94,59 @@ jobs:
           echo '=== Pinned native core Java public API (for binding compatibility) ==='
           javap -classpath "$RUNNER_TEMP/mahsa-core-classes.jar" -public libv2ray.Libv2ray libv2ray.V2RayPoint libv2ray.V2RayVPNServiceSupportsSet
 
+      - name: Verify and stage namespace-isolated Psiphon AAR (pinned SHA-256)
+        run: |
+          set -euo pipefail
+          PSIPHON_AAR="$GITHUB_WORKSPACE/V2rayNG/app/libs/libpsiphon.aar"
+          curl --fail --show-error --silent --location --retry 3 --max-time 180 \
+            "https://github.com/mahsanet/aar/releases/download/psiphon-nkr-2026-06-21/libpsiphon.aar" \
+            -o "$PSIPHON_AAR"
+          printf '%s  %s\n' 'a8eddfa98b2321793035211cfc27da0f2966f69653682aa46dbc74bfcf331086' "$PSIPHON_AAR" | sha256sum --check
+          python3 V2rayNG/pure-tests/audit_native_aar_compatibility.py \
+            --xray V2rayNG/app/libs/libv2ray.aar \
+            --psiphon "$PSIPHON_AAR" \
+            --local-tunnel-source V2rayNG/app/src/main/java/ca/psiphon/PsiphonTunnel.java
+          unzip -p "$PSIPHON_AAR" classes.jar > "$RUNNER_TEMP/psiphon-classes.jar"
+          javap -classpath "$RUNNER_TEMP/psiphon-classes.jar" -public \
+            psi.Psi psi.PsiphonProvider psi.PsiphonProviderFeedbackHandler \
+            psi.PsiphonProviderNetwork psi.PsiphonProviderNoticeHandler
+
+      - name: Build Psiphon tun2socks JNI from pinned official GPLv3 source
+        env:
+          PSIPHON_ANDROID_SOURCE_SHA: c2c043da1208b34d28c3fdeef72b43dcd470dacb
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/psiphon-android-jni"
+          git init "$SRC"
+          git -C "$SRC" remote add origin https://github.com/Psiphon-Inc/psiphon-android.git
+          git -C "$SRC" fetch --depth 1 origin "$PSIPHON_ANDROID_SOURCE_SHA"
+          git -C "$SRC" checkout --detach FETCH_HEAD
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$PSIPHON_ANDROID_SOURCE_SHA"
+          JNI="$SRC/app/src/main/jni"
+          MODULE="$JNI/badvpn/Android.mk"
+          grep -qx 'LOCAL_MODULE := tun2socks' "$MODULE"
+          # Rename output only; JNI_OnLoad registers ca/psiphon/Tun2SocksJniLoader.
+          sed -i 's/^LOCAL_MODULE := tun2socks$/LOCAL_MODULE := tun2socks_psiphon/' "$MODULE"
+          # Fail closed unless pinned upstream JNI source matches reviewed anchors.
+          python3 V2rayNG/pure-tests/patch_psiphon_tun2socks.py "$JNI/badvpn/tun2socks/tun2socks.c"
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          "$NDK/ndk-build" -C "$JNI" \
+            NDK_PROJECT_PATH="$SRC/app/src/main" \
+            APP_BUILD_SCRIPT="$JNI/Android.mk" \
+            NDK_APPLICATION_MK="$JNI/Application.mk" \
+            APP_ABI="armeabi-v7a arm64-v8a x86 x86_64" \
+            APP_PLATFORM=android-23 \
+            NDK_OUT="$RUNNER_TEMP/psiphon-jni-obj" \
+            NDK_LIBS_OUT="$RUNNER_TEMP/psiphon-jni-libs" -j4
+          READELF="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            lib="$RUNNER_TEMP/psiphon-jni-libs/$abi/libtun2socks_psiphon.so"
+            test -s "$lib"
+            "$READELF" -Ws "$lib" | grep -w 'JNI_OnLoad'
+            mkdir -p "V2rayNG/app/libs/$abi"
+            cp "$lib" "V2rayNG/app/libs/$abi/libtun2socks_psiphon.so"
+          done
+
       - name: Check unsupported MASQUE/WARP screens remain archived
         run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh
       - name: Assemble Android application (Kotlin, Java, resources, DEX and packaging)
@@ -103,6 +157,39 @@ jobs:
         run: |
           find app/build/outputs/apk -type f -name '*.apk' -print
           test "$(find app/build/outputs/apk -type f -name '*.apk' | wc -l)" -gt 0
+      - name: Verify official Psiphon JNI is packaged for every ABI
+        run: |
+          set -euo pipefail
+          APK="$(find V2rayNG/app/build/outputs/apk/dev/debug -maxdepth 1 -type f -name '*_null.apk' -print -quit)"
+          test -s "$APK"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            unzip -Z1 "$APK" | grep -Fx "lib/$abi/libtun2socks_psiphon.so"
+            unzip -Z1 "$APK" | grep -Fx "lib/$abi/libpsiphon.so"
+          done
+
       - name: Run full Android module unit tests, including profile model contracts
         working-directory: V2rayNG
         run: bash ./gradlew --no-daemon :app:testDevDebugUnitTest
+
+      - name: Allow hardware-accelerated Android emulator
+        run: |
+          if test -e /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Install and launch real devDebug APK on Android 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          # The runner executes each script line in a new /usr/bin/sh; keep state inside one Bash process.
+          script: bash V2rayNG/pure-tests/smoke-android-emulator.sh
+
+      - name: Publish short-lived unreleased debug APKs for device QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MahsaNG-devDebug-QA-${{ github.sha }}
+          path: V2rayNG/app/build/outputs/apk/dev/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error

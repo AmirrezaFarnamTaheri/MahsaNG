@@ -30,6 +30,7 @@ import com.v2ray.ang.extension.removeWhiteSpace
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.MmkvManager
 import com.v2ray.ang.util.MuxModeRestoration
+import com.v2ray.ang.util.TestRunTracker
 import com.v2ray.ang.util.MmkvManager.ID_MAIN
 import com.v2ray.ang.util.MmkvManager.KEY_SELECTED_SERVER
 import com.v2ray.ang.util.Utils
@@ -756,6 +757,12 @@ class ServerActivity : BaseActivity() {
         }
 
         MmkvManager.encodeServerConfig(editGuid, config)
+        // The endpoint changed under the same GUID; discard in-flight results.
+        if (editGuid.isNotBlank()) {
+            TestRunTracker.forgetProfile(editGuid)
+            // A stored pre-edit negative delay is also stale evidence.
+            MmkvManager.clearTestDelayResults(listOf(editGuid))
+        }
         toast(R.string.toast_success)
         finish()
         return true

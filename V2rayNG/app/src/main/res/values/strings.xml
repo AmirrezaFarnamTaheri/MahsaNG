@@ -427,6 +427,7 @@
     <string-array name="mode_entries">
         <item>VPN</item>
         <item>Proxy only</item>
+        <item>Psiphon via V2Ray (experimental)</item>
     </string-array>
 
     <string-array name="ui_mode_night">

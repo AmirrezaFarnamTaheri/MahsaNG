@@ -102,6 +102,8 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private var mInterface: ParcelFileDescriptor? = null
     private var tun2socksThread: Thread? = null
     private val isRunning = AtomicBoolean(false)
+    private val startGate = PsiphonStartGate()
+    private val teardownStarted = AtomicBoolean(false)
     private val psiphonSocksPort = AtomicInteger(0)
 
     private val psiphonHttpPort = AtomicInteger(0)
@@ -151,22 +153,24 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
 
     override fun onDestroy() {
+        // VpnService may be destroyed without ACTION_STOP or onRevoke.
+        stopAll(isForced = false)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // MUST call startForeground immediately — Android kills the process if
-        // startForegroundService() was used and startForeground() isn't called quickly
-        startForegroundNotification()
-
         if (intent?.action == ACTION_STOP) {
             stopAll()
             return START_NOT_STICKY
         }
-
-        // Start Psiphon tunnel (waits for V2Ray SOCKS port first)
-        startPsiphonTunnelAsync()
-
+        if (teardownStarted.get()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Start foreground promptly on API 26+ before asynchronous startup.
+        startForegroundNotification()
+        val attempt = startGate.beginStart() ?: return START_STICKY
+        startPsiphonTunnelAsync(attempt)
         return START_STICKY
     }
 
@@ -178,7 +182,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     // Psiphon tunnel management
     // =========================================================================
 
-    private fun startPsiphonTunnelAsync() {
+    private fun startPsiphonTunnelAsync(attempt: Long) {
         Thread {
             try {
 
@@ -190,12 +194,11 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                     )
                     Log.i(TAG, "Waiting for V2Ray SOCKS proxy on port $v2raySocksPort...")
 
-                    if (!waitForPort(v2raySocksPort)) {
-                        Log.e(
-                            TAG,
-                            "V2Ray SOCKS port $v2raySocksPort not reachable after timeout, aborting"
-                        )
-                        stopAll()
+                    if (!waitForPort(v2raySocksPort, attempt)) {
+                        if (startGate.isCurrent(attempt)) {
+                            Log.e(TAG, "V2Ray SOCKS port $v2raySocksPort unavailable; stopping")
+                            stopAll()
+                        }
                         return@Thread
                     }
                 }
@@ -208,18 +211,33 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                 //
                 // Without the VPN TUN, protect() calls in bindToDevice() may be
                 // no-ops because Android doesn't recognize us as an active VPN yet.
-                Log.i(TAG, "Establishing VPN TUN interface before starting Psiphon...")
-                establishVpnInterface()
+                // Stop/revoke cannot race a stale waiter into re-creating the VPN TUN.
+                synchronized(startGate) {
+                    if (!startGate.isCurrent(attempt)) return@Thread
+                    Log.i(TAG, "Establishing VPN TUN interface before starting Psiphon...")
+                    establishVpnInterface()
+                }
+                if (!startGate.isCurrent(attempt)) return@Thread
 
-                Log.i(TAG, "V2Ray SOCKS proxy is reachable, starting Psiphon tunnel...")
-                psiphonTunnel = PsiphonTunnel.newPsiphonTunnel(this)
-                psiphonTunnel?.setClientPlatformAffixes("", "")
-                psiphonTunnel?.setVpnMode(true)
-                psiphonTunnel?.startTunneling(getEmbeddedServerEntries())
-                Log.i(TAG, "Psiphon tunnel started successfully")
+                val tunnel = PsiphonTunnel.newPsiphonTunnel(this)
+                synchronized(startGate) {
+                    if (!startGate.isCurrent(attempt)) {
+                        runCatching { tunnel.stop() }
+                        return@Thread
+                    }
+                    psiphonTunnel = tunnel
+                }
+                if (!startGate.isCurrent(attempt)) return@Thread
+
+                Log.i(TAG, "Starting Psiphon tunnel...")
+                tunnel.setClientPlatformAffixes("", "")
+                tunnel.setVpnMode(true)
+                tunnel.startTunneling(getEmbeddedServerEntries())
+                // If stop occurred during native startup, do not leave a stale tunnel.
+                if (!startGate.isCurrent(attempt)) runCatching { tunnel.stop() }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start Psiphon tunnel: ${e.message}", e)
-                stopAll()
+                if (startGate.isCurrent(attempt)) stopAll()
             }
         }.start()
     }
@@ -228,9 +246,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
      * Wait for a TCP port on localhost to become reachable.
      * Returns true if connected within timeout, false otherwise.
      */
-    private fun waitForPort(port: Int): Boolean {
+    private fun waitForPort(port: Int, attempt: Long): Boolean {
         val deadline = System.currentTimeMillis() + V2RAY_SOCKS_PORT_CHECK_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
+        while (System.currentTimeMillis() < deadline && startGate.isCurrent(attempt)) {
             try {
                 Socket().use { socket ->
                     socket.connect(InetSocketAddress("127.0.0.1", port), 500)
@@ -347,8 +365,8 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             throw Exception("VpnService.Builder.establish() returned null — VPN permission not granted?")
         }
         isRunning.set(true)
-        isPsiphonRunning.set(true)
-        mystrg.put_value("is_psiphon_running","y")
+        // TUN creation is not a connected tunnel; publish running state only
+        // after Psiphon's SOCKS callback and tun2socks startup.
         Log.i(TAG, "VPN TUN interface established (tun2socks will start after Psiphon connects)")
 
     }
@@ -358,6 +376,8 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
      * Called from onConnected() when the Psiphon SOCKS proxy port is known.
      */
     private fun startTun2socksRouting() {
+        // Ignore late native callbacks after stop/revoke/destroy.
+        if (teardownStarted.get() || !startGate.isActive()) return
         val port = psiphonSocksPort.get()
         if (port <= 0) {
             Log.e(TAG, "Psiphon SOCKS port not available yet, cannot start tun2socks")
@@ -369,6 +389,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         }
 
         startTun2socks(port)
+        if (teardownStarted.get() || !startGate.isActive()) return
+        isPsiphonRunning.set(true)
+        mystrg.put_value("is_psiphon_running", "y")
         Log.i(TAG, "tun2socks routing to Psiphon SOCKS port $port")
 
         // Notify the UI that we're connected
@@ -487,8 +510,14 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     // =========================================================================
 
     private fun stopAll(isForced: Boolean = true) {
+        // Invalidate any worker still waiting for a local SOCKS port.
+        synchronized(startGate) { startGate.stop() }
+        if (!teardownStarted.compareAndSet(false, true)) return
         isRunning.set(false)
         isPsiphonRunning.set(false)
+        psiphonSocksPort.set(0)
+        psiphonHttpPort.set(0)
+        psiphon_http_port.set(0)
         mystrg.put_value("is_psiphon_running","n")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -520,13 +549,14 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         // Notify the UI
         MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_STOP_SUCCESS, "")
 
-        if (isForced) {
-            stopSelf()
-            try {
-                mInterface?.close()
-            } catch (ignored: Exception) {
-            }
+        // The TUN must close on normal destruction as well as forced stop.
+        try {
+            mInterface?.close()
+        } catch (ignored: Exception) {
+        } finally {
+            mInterface = null
         }
+        if (isForced) stopSelf()
     }
 
     // =========================================================================

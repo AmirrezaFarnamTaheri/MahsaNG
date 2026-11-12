@@ -23,6 +23,7 @@ val productionHelpers = listOf(
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "CoreStopGate",
+    "PsiphonStartGate",
     "FragmentorOptions",
     "FragmentorNumericSettings",
     "EConfigType",

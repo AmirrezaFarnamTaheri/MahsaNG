@@ -27,8 +27,12 @@ class PsiphonLifecycleContractTest(unittest.TestCase):
         self.assertIn("startPsiphonTunnelAsync(attempt)", self.text)
 
     def test_tun_setup_does_not_claim_psiphon_is_connected(self):
-        setup = self.text.split("private fun establishVpnInterface()", 1)[1].split("private fun startTun2socksRouting()", 1)[0]
-        routing = self.text.split("private fun startTun2socksRouting()", 1)[1].split("private fun startTun2socks(", 1)[0]
+        setup = self.text.split("private fun establishVpnInterface()", 1)[1].split(
+            "private fun startTun2socksRouting(port: Int)", 1
+        )[0]
+        routing = self.text.split("private fun startTun2socksRouting(port: Int)", 1)[1].split(
+            "private fun startTun2socks(", 1
+        )[0]
         self.assertNotIn("isPsiphonRunning.set(true)", setup)
         self.assertIn("isPsiphonRunning.set(true)", routing)
         self.assertIn("teardownStarted.get()", routing)

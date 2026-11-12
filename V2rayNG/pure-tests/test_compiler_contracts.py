@@ -28,8 +28,8 @@ class KotlinSourceContractTests(unittest.TestCase):
 
     def test_utils_declares_each_editor_validator_once(self):
         source = (APP / "util/Utils.kt").read_text(encoding="utf-8")
-        self.assertEqual(1, len(re.findall(r"\\bfun\\s+validate_port\\s*\\(", source)))
-        self.assertEqual(1, len(re.findall(r"\\bfun\\s+fragment_param_check\\s*\\(", source)))
+        self.assertEqual(1, len(re.findall(r"\bfun\s+validate_port\s*\(", source)))
+        self.assertEqual(1, len(re.findall(r"\bfun\s+fragment_param_check\s*\(", source)))
         self.assertIn("ServerEditorInputRules.requirePort(port)", source)
         self.assertIn("ServerEditorInputRules.validPositiveRange(value)", source)
 

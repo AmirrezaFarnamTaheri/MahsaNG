@@ -52,9 +52,15 @@ The workflow now obtains the **official upstream Psiphon-Inc Android source**
 at immutable commit
 [`c2c043da1208b34d28c3fdeef72b43dcd470dacb`](https://github.com/Psiphon-Inc/psiphon-android/commit/c2c043da1208b34d28c3fdeef72b43dcd470dacb)
 (GPLv3, compatible with this repo's GPLv3 license). It builds the upstream
-`app/src/main/jni/badvpn/Android.mk` with NDK 27.2, renaming **only**
-`LOCAL_MODULE` to `tun2socks_psiphon` in the temporary CI checkout.
-No upstream C or JNI source implementation is replaced or fabricated.
+`app/src/main/jni/badvpn/Android.mk` with NDK 27.2. In the temporary CI
+checkout, the workflow renames `LOCAL_MODULE` to `tun2socks_psiphon`
+and applies the checked-in, fail-closed `pure-tests/patch_psiphon_tun2socks.py`
+change to the pinned `tun2socks.c`. The patch adds a native
+`prepareTun2Socks()` entry point and moves the termination-flag reset out
+of the native worker's entry path, where the upstream code could erase a
+concurrent stop. A process-wide worker lease prevents re-arming while a
+previous worker remains alive. The test suite checks the native patch anchors
+and the start/stop interleaving. Any upstream-source drift rejects the build.
 It verifies exported `JNI_OnLoad`, copies the four ABI outputs into the
 application build, and requires their presence in the universal APK.
 

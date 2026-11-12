@@ -5,6 +5,7 @@ import com.tencent.mmkv.MMKV
 import com.v2ray.ang.dto.ServerAffiliationInfo
 import com.v2ray.ang.dto.ServerConfig
 import com.v2ray.ang.dto.SubscriptionItem
+import java.util.UUID
 
 object MmkvManager {
     const val ID_MAIN = "MAIN"
@@ -204,6 +205,7 @@ object MmkvManager {
         }
         val aff = decodeServerAffiliationInfo(guid) ?: ServerAffiliationInfo()
         aff.testDelayMillis = testResult
+        aff.observationId = UUID.randomUUID().toString()
         serverAffStorage?.encode(guid, Gson().toJson(aff))
     }
 
@@ -211,6 +213,7 @@ object MmkvManager {
         serverAffStorage?.allKeys()?.forEach { key ->
             decodeServerAffiliationInfo(key)?.let { aff ->
                 aff.testDelayMillis = 0
+                aff.observationId = null
                 serverAffStorage?.encode(key, Gson().toJson(aff))
             }
         }
@@ -222,6 +225,7 @@ object MmkvManager {
         visibleGuids.distinct().forEach { guid ->
             runCatching { decodeServerAffiliationInfo(guid) }.getOrNull()?.let { affiliation ->
                 affiliation.testDelayMillis = 0L
+                affiliation.observationId = null
                 serverAffStorage?.encode(guid, Gson().toJson(affiliation))
             }
         }
@@ -277,7 +281,9 @@ object MmkvManager {
         return FailedServerSelection.snapshotFailures(
             visibleGuids,
             currentGuids,
-            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
+            { guid -> runCatching {
+                decodeServerAffiliationInfo(guid)?.let { FailureObservation(it.testDelayMillis, it.observationId) }
+            }.getOrNull() },
             { guid -> serverStorage?.decodeString(guid) },
         )
     }
@@ -294,7 +300,9 @@ object MmkvManager {
         val currentGuids = runCatching { decodeServerList() }.getOrNull() ?: return 0
         val failedGuids = FailedServerSelection.reconfirmFailures(
             confirmed, currentGuids,
-            { guid -> runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull() },
+            { guid -> runCatching {
+                decodeServerAffiliationInfo(guid)?.let { FailureObservation(it.testDelayMillis, it.observationId) }
+            }.getOrNull() },
             { guid -> serverStorage?.decodeString(guid) },
         )
         if (failedGuids.isEmpty()) return 0

@@ -103,6 +103,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private var tun2socksThread: Thread? = null
     private val isRunning = AtomicBoolean(false)
     private val startGate = PsiphonStartGate()
+    private val routeGate = PsiphonRouteGate()
     private val teardownStarted = AtomicBoolean(false)
     private val psiphonSocksPort = AtomicInteger(0)
 
@@ -375,10 +376,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
      * Start tun2socks to route VPN TUN traffic through Psiphon's local SOCKS proxy.
      * Called from onConnected() when the Psiphon SOCKS proxy port is known.
      */
-    private fun startTun2socksRouting() {
+    private fun startTun2socksRouting(port: Int) {
         // Ignore late native callbacks after stop/revoke/destroy.
         if (teardownStarted.get() || !startGate.isActive()) return
-        val port = psiphonSocksPort.get()
         if (port <= 0) {
             Log.e(TAG, "Psiphon SOCKS port not available yet, cannot start tun2socks")
             return
@@ -391,7 +391,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         startTun2socks(port)
         if (teardownStarted.get() || !startGate.isActive()) return
         isPsiphonRunning.set(true)
-        mystrg.put_value("is_psiphon_running", "y")
+        runCatching { mystrg.put_value("is_psiphon_running", "y") }
+            .onFailure { Log.w(TAG, "Could not persist tunnel state") }
+        updateNotification("Psiphon tunnel connected")
         Log.i(TAG, "tun2socks routing to Psiphon SOCKS port $port")
 
         // Notify the UI that we're connected
@@ -512,13 +514,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private fun stopAll(isForced: Boolean = true) {
         // Invalidate any worker still waiting for a local SOCKS port.
         synchronized(startGate) { startGate.stop() }
+        routeGate.stop()
         if (!teardownStarted.compareAndSet(false, true)) return
         isRunning.set(false)
         isPsiphonRunning.set(false)
         psiphonSocksPort.set(0)
         psiphonHttpPort.set(0)
         psiphon_http_port.set(0)
-        mystrg.put_value("is_psiphon_running","n")
+        runCatching { mystrg.put_value("is_psiphon_running", "n") }
+            .onFailure { Log.w(TAG, "Could not persist tunnel stopped state") }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
@@ -672,7 +676,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
         // Enable diagnostic notices for debugging
         config.put("EmitDiagnosticNotices", true)
-        config.put("EmitDiagnosticNetworkParameters", true)
+        config.put("EmitDiagnosticNetworkParameters", false)
         config.put("EmitBytesTransferred", true)
         config.put("EmitServerAlerts", true)
 
@@ -723,18 +727,33 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
      * through Psiphon's local SOCKS proxy.
      */
     override fun onConnected() {
-        Log.i(TAG, "Psiphon: Connected! Starting tun2socks routing...")
-        updateNotification("Psiphon tunnel connected")
-        startTun2socksRouting()
+        if (teardownStarted.get() || !startGate.isActive()) return
+        Log.i(TAG, "Psiphon connected; waiting for SOCKS listener before routing")
+        handleRouteAction(routeGate.onConnected())
+    }
+
+    private fun handleRouteAction(action: PsiphonRouteAction) {
+        when (action) {
+            PsiphonRouteAction.Wait -> Unit
+            is PsiphonRouteAction.Start -> startTun2socksRouting(action.port)
+            PsiphonRouteAction.RestartRequired -> {
+                Log.e(TAG, "Psiphon SOCKS endpoint changed while routing; stopping stale VPN")
+                Thread { stopAll() }.start()
+            }
+        }
     }
 
     override fun onExiting() {
-        Log.i(TAG, "Psiphon: Exiting")
+        if (teardownStarted.get()) return
+        Log.w(TAG, "Psiphon core exited; closing VPN routing")
+        Thread { stopAll() }.start()
     }
 
     override fun onListeningSocksProxyPort(port: Int) {
+        if (teardownStarted.get() || !startGate.isActive()) return
         Log.i(TAG, "Psiphon SOCKS proxy port: $port")
         psiphonSocksPort.set(port)
+        handleRouteAction(routeGate.onSocksPort(port))
     }
 
     override fun onListeningHttpProxyPort(port: Int) {
@@ -744,11 +763,12 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
 
     override fun onUpstreamProxyError(message: String?) {
-        Log.e(TAG, "Psiphon upstream proxy error (V2Ray): $message")
+        Log.e(TAG, "Psiphon upstream proxy reported an error")
     }
 
     override fun onDiagnosticMessage(message: String?) {
-        Log.d(TAG, "Psiphon: $message")
+        // Do not write upstream diagnostic payloads (which may contain private
+        // network endpoints or credentials) to Android's system logcat.
     }
 
     override fun onStartedWaitingForNetworkConnectivity() {

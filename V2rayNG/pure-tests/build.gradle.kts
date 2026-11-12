@@ -24,6 +24,7 @@ val productionHelpers = listOf(
     "TunnelProcessOwner",
     "CoreStopGate",
     "PsiphonStartGate",
+    "PsiphonRouteGate",
     "FragmentorOptions",
     "FragmentorNumericSettings",
     "EConfigType",

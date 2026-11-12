@@ -2,6 +2,7 @@ package com.v2ray.ang.viewmodel
 
 import android.app.Application
 import android.content.*
+import android.os.Build
 import android.util.Log
 import android.view.LayoutInflater
 import android.widget.ArrayAdapter
@@ -40,6 +41,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val testRuns = TestRunTracker()
     private var realPingScheduleJob: Job? = null
     private var nativeTestRunPending = false
+    private var broadcastRegistered = false
 
     /**
      * Called on the UI thread. Snapshot identifiers before scheduling any background work.
@@ -62,13 +64,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startListenBroadcast() {
+        if (broadcastRegistered) return
         isRunning.value = false
-        getApplication<AngApplication>().registerReceiver(mMsgReceiver, IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY))
-        MessageUtil.sendMsg2Service(getApplication(), AppConfig.MSG_REGISTER_CLIENT, "")
+        val app = getApplication<AngApplication>()
+        val filter = IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            app.registerReceiver(mMsgReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else app.registerReceiver(mMsgReceiver, filter)
+        broadcastRegistered = true
+        MessageUtil.sendMsg2Service(app, AppConfig.MSG_REGISTER_CLIENT, "")
     }
 
     override fun onCleared() {
-        getApplication<AngApplication>().unregisterReceiver(mMsgReceiver)
+        if (broadcastRegistered) {
+            getApplication<AngApplication>().unregisterReceiver(mMsgReceiver)
+            broadcastRegistered = false
+        }
         testRuns.invalidate()
         realPingScheduleJob?.cancel()
         // Do not send a global native Cancel from an obsolete ViewModel: a new

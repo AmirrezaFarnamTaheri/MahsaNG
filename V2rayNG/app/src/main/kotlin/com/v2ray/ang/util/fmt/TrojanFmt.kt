@@ -57,15 +57,20 @@ object TrojanFmt {
             )
             fingerprint = queryParam["fp"] ?: ""
             allowInsecure = if ((queryParam["allowInsecure"] ?: "") == "1") true else allowInsecure
+            val security = queryParam["security"] ?: V2rayConfig.TLS
+            val ech = EchLinkParameters.fromQuery(security, queryParam)
             config.outboundBean?.streamSettings?.populateTlsSettings(
-                queryParam["security"] ?: V2rayConfig.TLS,
+                security,
                 allowInsecure,
                 queryParam["sni"] ?: sni ?: "",
                 fingerprint,
                 queryParam["alpn"],
                 null,
                 null,
-                null
+                null,
+                echConfigList = ech.configList,
+                echServerKeys = ech.serverKeys,
+                echForceQuery = ech.forceQuery
             )
             flow = queryParam["flow"] ?: ""
         }
@@ -81,6 +86,8 @@ object TrojanFmt {
 
     fun toUri(config: ServerConfig): String {
         val outbound = config.getProxyOutbound() ?: return ""
+        // Do not serialize invalid server links for malformed or removed profiles.
+        val address = outbound.getServerAddress()?.takeIf { it.isNotBlank() } ?: return ""
         val streamSetting = outbound.streamSettings ?: V2rayConfig.OutboundBean.StreamSettingsBean()
 
         val remark = "#" + Utils.urlEncode(config.remarks)
@@ -113,6 +120,12 @@ object TrojanFmt {
             if (!TextUtils.isEmpty(tlsSetting.spiderX)) {
                 dicQuery["spx"] = Utils.urlEncode(tlsSetting.spiderX ?: "")
             }
+            dicQuery.putAll(EchLinkParameters.toQuery(
+                streamSetting.security,
+                tlsSetting.echConfigList,
+                tlsSetting.echServerKeys,
+                tlsSetting.echForceQuery
+            ) { value -> Utils.urlEncode(value) })
         }
         dicQuery["type"] =
             streamSetting.network.ifEmpty { V2rayConfig.DEFAULT_NETWORK }
@@ -172,7 +185,7 @@ object TrojanFmt {
         val url = String.format(
             "%s@%s:%s",
             outbound.getPassword(),
-            Utils.getIpv6Address(outbound.getServerAddress()),
+            Utils.getIpv6Address(address),
             outbound.getServerPort()
         )
         return url + query + remark

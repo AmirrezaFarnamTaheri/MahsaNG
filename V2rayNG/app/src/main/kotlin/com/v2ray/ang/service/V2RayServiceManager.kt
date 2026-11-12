@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.VpnService
 import android.graphics.Color
 import android.os.Build
 import android.util.Log
@@ -57,7 +58,7 @@ object V2RayServiceManager {
         set(value) {
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
-            Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()))
+            Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), "")
         }
     @Volatile
     var currentConfig: ServerConfig? = null
@@ -68,20 +69,36 @@ object V2RayServiceManager {
     private var mNotificationManager: NotificationManager? = null
 
     fun startV2Ray(context: Context) {
+        val mode = settingsStorage?.decodeString(AppConfig.PREF_MODE)
+        if (VpnModeSelection.requiresVpnPermission(mode) && VpnService.prepare(context) != null) {
+            context.toast(R.string.toast_permission_denied)
+            return
+        }
         if (settingsStorage?.decodeBool(AppConfig.PREF_PROXY_SHARING) == true) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
         } else {
             context.toast(R.string.toast_services_start)
         }
-        val intent = if (settingsStorage?.decodeString(AppConfig.PREF_MODE) ?: "VPN" == "VPN") {
-            Intent(context.applicationContext, V2RayVpnService::class.java)
+        val primary = Intent(context.applicationContext, if (VpnModeSelection.startsProxyProcess(mode)) {
+            V2RayProxyOnlyService::class.java
         } else {
-            Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
+            V2RayVpnService::class.java
+        })
+        val psiphon = if (VpnModeSelection.usesPsiphon(mode)) {
+            Intent(context.applicationContext, PsiphonVpnService::class.java)
+        } else null
+        fun launch(intent: Intent) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+            else context.startService(intent)
         }
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            launch(primary)
+            if (psiphon != null) launch(psiphon)
+        } catch (error: Exception) {
+            Log.e(ANG_PACKAGE, "Unable to start selected VPN service mode", error)
+            if (psiphon != null) runCatching { context.stopService(psiphon) }
+            runCatching { context.stopService(primary) }
+            MessageUtil.sendMsg2UI(context, AppConfig.MSG_STATE_START_FAILURE, "")
         }
     }
 
@@ -172,7 +189,9 @@ object V2RayServiceManager {
             filter.addAction(Intent.ACTION_SCREEN_ON)
             filter.addAction(Intent.ACTION_SCREEN_OFF)
             filter.addAction(Intent.ACTION_USER_PRESENT)
-            service.registerReceiver(mMsgReceive, filter)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                service.registerReceiver(mMsgReceive, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else service.registerReceiver(mMsgReceive, filter)
             receiverRegistered = true
 
             v2rayPoint.configureFileContent = result.content
@@ -181,7 +200,11 @@ object V2RayServiceManager {
             v2rayPoint.runLoop(settingsStorage?.decodeBool(AppConfig.PREF_PREFER_IPV6) ?: false)
             if (!v2rayPoint.isRunning) error("Native core failed to enter running state")
 
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
+            // Xray's SOCKS listener is ready; Psiphon VPN routing may still be connecting.
+            val state = if (VpnModeSelection.usesPsiphon(settingsStorage?.decodeString(AppConfig.PREF_MODE))) {
+                AppConfig.MSG_STATE_RUNNING
+            } else AppConfig.MSG_STATE_START_SUCCESS
+            MessageUtil.sendMsg2UI(service, state, "")
             runCatching { showNotification() }.onFailure { Log.d(ANG_PACKAGE, "Notification: $it") }
         } catch (failure: Exception) {
             Log.d(ANG_PACKAGE, "Native core start failed: $failure")
@@ -293,7 +316,7 @@ object V2RayServiceManager {
             var errstr = ""
             if (v2rayPoint.isRunning) {
                 try {
-                    time = v2rayPoint.measureDelay()
+                    time = v2rayPoint.measureDelay(AppConfig.DelayTestUrl)
                 } catch (e: Exception) {
                     Log.d(ANG_PACKAGE, "measureV2rayDelay: $e")
                     errstr = e.message?.substringAfter("\":") ?: "empty message"

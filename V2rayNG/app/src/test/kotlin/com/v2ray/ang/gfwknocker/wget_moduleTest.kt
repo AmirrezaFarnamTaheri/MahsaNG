@@ -57,7 +57,13 @@ class wget_moduleTest {
         val connection = FakeConnection(
             URL("https://example.com/start"), 302, location = "http://example.com/unsafe"
         )
-        assertNull(wget_module.fetch("https://example.com/start") { connection })
+        val requested = mutableListOf<String>()
+        assertNull(wget_module.fetch("https://example.com/start") { url ->
+            requested += url.toString()
+            connection
+        })
+        assertEquals(listOf("https://example.com/start"), requested)
+        assertTrue(!connection.instanceFollowRedirects)
         assertTrue(connection.disconnected)
     }
 

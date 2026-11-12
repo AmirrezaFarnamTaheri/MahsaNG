@@ -24,6 +24,10 @@ trap on_exit EXIT
 
 adb install -r "$apk"
 adb shell pm path "$package_id" | grep -F 'package:'
+# Deterministically exercise the denied-notification-permission launch path.
+# BACK on a permission prompt leaves it undecided and Android may re-prompt.
+adb shell pm revoke "$package_id" android.permission.POST_NOTIFICATIONS
+adb shell pm set-permission-flags "$package_id" android.permission.POST_NOTIFICATIONS user-set user-fixed
 adb logcat -c
 adb shell am start -W -n "$package_id/$activity"
 sleep 8

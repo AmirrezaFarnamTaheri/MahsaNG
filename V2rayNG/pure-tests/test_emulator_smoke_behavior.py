@@ -25,6 +25,8 @@ import sys
 args = sys.argv[1:]
 marker = pathlib.Path(os.environ["FAKE_MARKER"])
 mode = os.environ["FAKE_MODE"]
+with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as log:
+    log.write(" ".join(args) + "\\n")
 if args[:3] == ["shell", "dumpsys", "activity"]:
     if mode == "wrong":
         print("topResumedActivity=ActivityRecord{u0 com.example.other/.OtherActivity t1}")
@@ -52,7 +54,9 @@ sys.exit(0)
             fast_sleep.chmod(0o755)
             environment = os.environ.copy()
             marker = root / "permission-denied"
+            calls = root / "calls.log"
             environment.update(
+                FAKE_CALLS=str(calls),
                 FAKE_MARKER=str(marker),
                 FAKE_MODE=mode,
                 GITHUB_WORKSPACE=str(root),
@@ -65,21 +69,25 @@ sys.exit(0)
                 env=environment,
                 timeout=25,
             )
-            return result, marker.exists()
+            return result, marker.exists(), calls.read_text(encoding="utf-8")
 
     def test_success_requires_actual_main_activity_in_foreground(self):
-        result, denied = self.run_smoke("normal")
+        result, denied, calls = self.run_smoke("normal")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse(denied)
         self.assertIn("Emulator smoke passed", result.stdout)
+        self.assertIn("shell pm revoke com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS", calls)
+        self.assertIn("shell pm set-permission-flags com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS user-set user-fixed", calls)
+        self.assertLess(calls.index("shell pm set-permission-flags"), calls.index("shell am start"))
+        self.assertNotIn("shell pm grant", calls)
 
     def test_initial_android_permission_dialog_is_denied_and_main_resumes(self):
-        result, denied = self.run_smoke("permission")
+        result, denied, calls = self.run_smoke("permission")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(denied)
 
     def test_live_process_but_wrong_foreground_activity_fails(self):
-        result, denied = self.run_smoke("wrong")
+        result, denied, calls = self.run_smoke("wrong")
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(denied)
         self.assertIn("MainActivity was not resumed", result.stderr)

@@ -31,6 +31,35 @@ class TestRunTrackerTest {
         assertFalse(tracker.accepts(id, "new"))
     }
 
+    @Test fun editingOneGuidInvalidatesOnlyThatGuidInTheActiveRun() {
+        val tracker = TestRunTracker()
+        val run = tracker.begin(listOf("edited", "untouched"))
+        TestRunTracker.forgetProfile("edited")
+        assertFalse(tracker.accepts(run, "edited"))
+        assertTrue(tracker.accepts(run, "untouched"))
+    }
+
+    @Test fun everyLiveRunRejectsTheEditedGuid() {
+        val first = TestRunTracker()
+        val second = TestRunTracker()
+        val firstRun = first.begin(listOf("edited", "other"))
+        val secondRun = second.begin(listOf("edited"))
+        TestRunTracker.forgetProfile("edited")
+        assertFalse(first.accepts(firstRun, "edited"))
+        assertFalse(second.accepts(secondRun, "edited"))
+        assertTrue(first.accepts(firstRun, "other"))
+    }
+
+    @Test fun freshMeasurementsRemainPossibleAfterAnEdit() {
+        val tracker = TestRunTracker()
+        val stale = tracker.begin(listOf("edited"))
+        TestRunTracker.forgetProfile("edited")
+        val fresh = tracker.begin(listOf("edited"))
+        assertFalse(tracker.accepts(stale, "edited"))
+        assertTrue(tracker.accepts(fresh, "edited"))
+        tracker.invalidate()
+    }
+
     @Test fun cancellationRejectsAllRemainingResults() {
         val tracker = TestRunTracker()
         val id = tracker.begin(listOf("a"))

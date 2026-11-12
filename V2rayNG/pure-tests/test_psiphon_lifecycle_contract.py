@@ -34,7 +34,11 @@ class PsiphonLifecycleContractTest(unittest.TestCase):
             "private fun startTun2socks(", 1
         )[0]
         self.assertNotIn("isPsiphonRunning.set(true)", setup)
-        self.assertIn("isPsiphonRunning.set(true)", routing)
+        # JNI does not expose native packet-forwarding readiness. Do not
+        # publish connected state merely because a worker was created.
+        self.assertNotIn("isPsiphonRunning.set(true)", routing)
+        self.assertNotIn("MSG_STATE_START_SUCCESS", routing)
+        self.assertIn("connectivity unverified", routing)
         self.assertIn("teardownStarted.get()", routing)
 
 

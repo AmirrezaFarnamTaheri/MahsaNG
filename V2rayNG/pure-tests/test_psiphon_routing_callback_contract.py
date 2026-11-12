@@ -1,6 +1,7 @@
 """Psiphon routing must not claim connected before JNI routing starts."""
 from pathlib import Path
 import unittest
+import re
 
 SOURCE = (
     Path(__file__).resolve().parents[1] /
@@ -34,7 +35,16 @@ class PsiphonRoutingCallbackContractTest(unittest.TestCase):
         logs = self.text.split("override fun onDiagnosticMessage(", 1)[1].split(
             "override fun onStartedWaitingForNetworkConnectivity(", 1
         )[0]
-        self.assertNotIn("Log.d(TAG, \"Psiphon: $message\")", logs)
+        # Do not permit the native callback's unredacted payload at any log
+        # sink, including different severity levels or print functions.
+        sensitive_logs = re.compile(
+            r"(?s)\b(?:Log\.\w+|Timber\.\w+|println|print)\s*\([^)]*\bmessage\b"
+        )
+        self.assertIsNone(sensitive_logs.search(logs))
+        for unsafe in ('Log.w(TAG, message)', 'Log.e(TAG, "secret=$message")', 'println(message)'):
+            with self.subTest(unsafe=unsafe):
+                self.assertIsNotNone(sensitive_logs.search(unsafe))
+
         self.assertIn('config.put("EmitDiagnosticNetworkParameters", false)', self.text)
 
 

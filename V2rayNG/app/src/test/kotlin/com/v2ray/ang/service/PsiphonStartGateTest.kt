@@ -21,14 +21,15 @@ class PsiphonStartGateTest {
         assertFalse(gate.isActive())
     }
 
-    @Test fun restartCannotReuseOldAttemptToken() {
+    @Test fun terminalStopPreventsRestartInTheSameServiceInstance() {
         val gate = PsiphonStartGate()
         val old = gate.beginStart()!!
         gate.stop()
-        val recent = gate.beginStart()!!
-        assertNotEquals(old, recent)
+        assertNull(gate.beginStart())
         assertFalse(gate.isCurrent(old))
-        assertTrue(gate.isCurrent(recent))
+        assertFalse(gate.isActive())
+        // Android constructs a new service instance for a fresh VPN session.
+        assertNotNull(PsiphonStartGate().beginStart())
     }
 
     @Test fun concurrentlyRequestedStartsAreCoalesced() {
@@ -46,6 +47,26 @@ class PsiphonStartGateTest {
         start.countDown()
         done.await()
         assertEquals(1, count.get())
+    }
+
+    @Test fun stopAndConcurrentStartsCannotResurrectAStoppedGate() {
+        val gate = PsiphonStartGate()
+        val token = gate.beginStart()!!
+        val start = CountDownLatch(1)
+        val done = CountDownLatch(32)
+        val accepted = AtomicInteger()
+        repeat(32) {
+            Thread {
+                start.await()
+                if (gate.beginStart() != null) accepted.incrementAndGet()
+                done.countDown()
+            }.start()
+        }
+        gate.stop()
+        start.countDown()
+        done.await()
+        assertEquals(0, accepted.get())
+        assertFalse(gate.isCurrent(token))
     }
 
     @Test fun repeatedStopsKeepPendingStartInvalidated() {

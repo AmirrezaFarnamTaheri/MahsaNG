@@ -139,3 +139,11 @@ jobs:
           ram-size: 2048M
           # The runner executes each script line in a new /usr/bin/sh; keep state inside one Bash process.
           script: bash V2rayNG/pure-tests/smoke-android-emulator.sh
+
+      - name: Publish short-lived unreleased debug APKs for device QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MahsaNG-devDebug-QA-${{ github.sha }}
+          path: V2rayNG/app/build/outputs/apk/dev/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error

@@ -2,7 +2,7 @@ name: MahsaNG safety checks
 
 on:
   pull_request:
-    branches: [master, 'roadmap/**']
+    branches: [master, 'roadmap/**', 'fix/**']
   push:
     branches:
       - 'integration/**'

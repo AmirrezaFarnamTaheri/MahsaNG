@@ -27,6 +27,7 @@ import java.util.*
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mainStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
     private val serverRawStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SERVER_RAW, MMKV.MULTI_PROCESS_MODE) }
+    private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
     var serverList = MmkvManager.decodeServerList()
     var subscriptionId: String = ""
@@ -148,22 +149,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val runId = beginTestRun(snapshot.map { it.guid }, native = false)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
 
-        for (item in snapshot) {
-            val outbound = item.config.getProxyOutbound() ?: continue
-            // Do not classify UDP/QUIC or unknown custom transports as failed
-            // based on a TCP SYN. They retain the cleared UNKNOWN (0) result.
+        // Make an immutable, transport-eligible target list before any worker
+        // launches. UDP/custom profiles remain UNKNOWN, not false TCP failures.
+        val targets = snapshot.mapNotNull { item ->
+            val outbound = item.config.getProxyOutbound() ?: return@mapNotNull null
             if (!TcpProbeEligibility.supportsTcpConnect(
                     item.config.configType.name, outbound.protocol, outbound.streamSettings?.network
-                )) continue
-            val address = outbound.getServerAddress() ?: continue
-            val port = outbound.getServerPort() ?: continue
-            val guid = item.guid
+                )) return@mapNotNull null
+            val address = outbound.getServerAddress() ?: return@mapNotNull null
+            val port = outbound.getServerPort() ?: return@mapNotNull null
+            Triple(item.guid, address, port)
+        }
+        // A new run snapshots its concurrency: preferences cannot change active
+        // scheduling. At most 16 workers exist, even for thousands of targets.
+        val concurrency = BoundedProbeQueue.concurrencyFromStored(
+            settingsStorage?.decodeString(AppConfig.PREF_TCP_PROBE_CONCURRENCY)
+        )
+        val queue = BoundedProbeQueue(targets, concurrency)
+        repeat(queue.workerCount) {
             tcpingTestScope.launch {
-                val delay = SpeedtestUtil.tcping(address, port)
-                withContext(Dispatchers.Main) {
-                    if (testRuns.accepts(runId, guid) && MmkvManager.decodeServerConfig(guid) != null) {
-                        MmkvManager.encodeServerTestDelayMillis(guid, delay)
-                        updateListAction.value = getPosition(guid)
+                while (isActive) {
+                    val (guid, address, port) = queue.claim() ?: break
+                    if (!testRuns.accepts(runId, guid)) continue
+                    val delay = SpeedtestUtil.tcping(address, port)
+                    withContext(Dispatchers.Main) {
+                        if (testRuns.accepts(runId, guid) && MmkvManager.decodeServerConfig(guid) != null) {
+                            MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                            updateListAction.value = getPosition(guid)
+                        }
                     }
                 }
             }

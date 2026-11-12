@@ -12,8 +12,14 @@ class PsiphonSourceContractTests(unittest.TestCase):
         self.assertIn('const val PSIPHON_SOCKS = "0"', config)
         self.assertIn('const val PSIPHON_HTTP = "0"', config)
         source = PSIPHON.read_text(encoding="utf-8")
-        self.assertIn('mystrg.get_value("psiphon_socks_port",AppConfig.PSIPHON_SOCKS)', source)
-        self.assertIn('mystrg.get_value("psiphon_http_port",AppConfig.PSIPHON_HTTP)', source)
+        # Settings are now validated through a shared port parser; keep both
+        # persisted automatic-port defaults and native notice callbacks covered.
+        self.assertIn("PsiphonProxyPortRules.parse(", source)
+        self.assertIn('mystrg.get_value("psiphon_socks_port", AppConfig.PSIPHON_SOCKS)', source)
+        self.assertIn('mystrg.get_value("psiphon_http_port", AppConfig.PSIPHON_HTTP)', source)
+        self.assertIn("PsiphonProxyPorts(0, 0)", source)
+        self.assertIn('config.put("LocalSocksProxyPort", ports.socks)', source)
+        self.assertIn('config.put("LocalHttpProxyPort", ports.http)', source)
         self.assertIn("override fun onListeningSocksProxyPort(port: Int)", source)
         self.assertIn("override fun onListeningHttpProxyPort(port: Int)", source)
 

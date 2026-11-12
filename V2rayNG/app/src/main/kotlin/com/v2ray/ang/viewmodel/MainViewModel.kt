@@ -150,6 +150,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         for (item in snapshot) {
             val outbound = item.config.getProxyOutbound() ?: continue
+            // Do not classify UDP/QUIC or unknown custom transports as failed
+            // based on a TCP SYN. They retain the cleared UNKNOWN (0) result.
+            if (!TcpProbeEligibility.supportsTcpConnect(
+                    item.config.configType.name, outbound.protocol, outbound.streamSettings?.network
+                )) continue
             val address = outbound.getServerAddress() ?: continue
             val port = outbound.getServerPort() ?: continue
             val guid = item.guid

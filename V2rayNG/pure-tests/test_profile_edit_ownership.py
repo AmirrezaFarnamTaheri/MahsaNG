@@ -20,6 +20,20 @@ class EditedProfileTestOwnershipTest(unittest.TestCase):
             saved.index("toast(R.string.toast_success)"),
         )
 
+    def test_custom_editor_invalidates_both_in_flight_and_stored_observations(self):
+        activity = (ROOT / "ui/ServerCustomConfigActivity.kt").read_text(encoding="utf-8")
+        saved = activity.split("MmkvManager.encodeServerConfig(editGuid, config)", 1)[1]
+        self.assertIn("TestRunTracker.forgetProfile(editGuid)", saved)
+        self.assertIn("MmkvManager.clearTestDelayResults(listOf(editGuid))", saved)
+        self.assertLess(
+            saved.index("TestRunTracker.forgetProfile(editGuid)"),
+            saved.index("MmkvManager.clearTestDelayResults(listOf(editGuid))"),
+        )
+        self.assertLess(
+            saved.index("MmkvManager.clearTestDelayResults(listOf(editGuid))"),
+            saved.index("toast(R.string.toast_success)"),
+        )
+
     def test_shared_ownership_gate_does_not_reuse_old_profile_results(self):
         source = (ROOT / "util/TestRunTracker.kt").read_text(encoding="utf-8")
         self.assertIn("run.copy(guids = run.guids - guid)", source)

@@ -26,6 +26,7 @@ val productionHelpers = listOf(
     "PsiphonStartGate",
     "PsiphonRouteGate",
     "VpnModeSelection",
+    "PsiphonProxyPortRules",
     "FragmentorOptions",
     "FragmentorNumericSettings",
     "EConfigType",

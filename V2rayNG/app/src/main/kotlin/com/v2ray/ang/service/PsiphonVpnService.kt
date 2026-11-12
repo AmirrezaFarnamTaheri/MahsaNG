@@ -263,6 +263,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                 tunnel.startTunneling(getEmbeddedServerEntries())
                 // If stop occurred during native startup, do not leave a stale tunnel.
                 if (!startGate.isCurrent(attempt)) runCatching { tunnel.stop() }
+            } catch (e: LinkageError) {
+                Log.e(TAG, "Psiphon native runtime unavailable", e)
+                if (startGate.isCurrent(attempt)) stopAll()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start Psiphon tunnel: ${e.message}", e)
                 if (startGate.isCurrent(attempt)) stopAll()
@@ -415,7 +418,13 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             return
         }
 
-        startTun2socks(port)
+        try {
+            startTun2socks(port)
+        } catch (error: Exception) {
+            Log.e(TAG, "Unable to attach VPN TUN to Psiphon JNI routing", error)
+            Thread { stopAll() }.start()
+            return
+        }
         if (teardownStarted.get() || !startGate.isActive()) return
         isPsiphonRunning.set(true)
         runCatching { mystrg.put_value("is_psiphon_running", "y") }
@@ -464,8 +473,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                     1                            // enable udpgw transparent DNS
                 )
                 Log.i(TAG, "tun2socks (JNI) returned")
-            } catch (e: Exception) {
-                Log.e(TAG, "tun2socks (JNI) error: ${e.message}", e)
+            } catch (error: LinkageError) {
+                Log.e(TAG, "Psiphon JNI linkage unavailable", error)
+            } catch (error: Exception) {
+                Log.e(TAG, "Psiphon JNI routing failed", error)
+            } finally {
+                if (!teardownStarted.get()) {
+                    // The only VPN routing worker stopped; never leave a stale VPN up.
+                    Thread { stopAll() }.start()
+                }
             }
         }.apply {
             name = "PsiphonTun2Socks"
@@ -558,24 +574,25 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             }
         }
 
-        // Stop tun2socks (JNI)
-        try {
-            Log.d(TAG, "tun2socks terminate")
-            Tun2SocksJniLoader.terminateTun2Socks()
-            tun2socksThread?.join(3000)
-            tun2socksThread = null
-        } catch (e: Exception) {
-            Log.d(TAG, "tun2socks terminate error: $e")
+        // A missing JNI module throws LinkageError, not Exception: continue
+        // closing the TUN and upstream proxy even when native termination fails.
+        runCatching { Tun2SocksJniLoader.terminateTun2Socks() }
+            .onFailure { Log.w(TAG, "Psiphon JNI termination signal failed") }
+        runCatching {
+            val worker = tun2socksThread
+            if (worker != null && worker !== Thread.currentThread()) worker.join(3000)
+        }.onFailure { failure ->
+            if (failure is InterruptedException) Thread.currentThread().interrupt()
+            Log.w(TAG, "Psiphon routing worker join failed")
         }
+        tun2socksThread = null
 
-        // Stop Psiphon tunnel
-        try {
-            psiphonTunnel?.stop()
-            psiphonTunnel = null
-            Log.i(TAG, "Psiphon tunnel stopped")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping Psiphon: ${e.message}", e)
-        }
+        // Clear the handle before stopping so teardown is safe if the native
+        // callback concurrently calls onExiting().
+        val tunnel = psiphonTunnel
+        psiphonTunnel = null
+        runCatching { tunnel?.stop() }
+            .onFailure { Log.e(TAG, "Native Psiphon tunnel stop failed", it) }
 
         // Notify the UI
         MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_STOP_SUCCESS, "")
@@ -689,13 +706,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         }
 
 
-        val Psocks_port_string = mystrg.get_value("psiphon_socks_port",AppConfig.PSIPHON_SOCKS)
-        val Psocks_port = Utils.parseInt(Psocks_port_string)
-        config.put("LocalSocksProxyPort",Psocks_port)
-
-        val Phttp_port_string = mystrg.get_value("psiphon_http_port",AppConfig.PSIPHON_HTTP)
-        val Phttp_port = Utils.parseInt(Phttp_port_string)
-        config.put("LocalHttpProxyPort",Phttp_port)
+        val ports = PsiphonProxyPortRules.parse(
+            mystrg.get_value("psiphon_socks_port", AppConfig.PSIPHON_SOCKS),
+            mystrg.get_value("psiphon_http_port", AppConfig.PSIPHON_HTTP)
+        ) ?: run {
+            Log.w(TAG, "Invalid saved Psiphon proxy ports; using automatic allocation")
+            PsiphonProxyPorts(0, 0)
+        }
+        config.put("LocalSocksProxyPort", ports.socks)
+        config.put("LocalHttpProxyPort", ports.http)
 
 
         // Ensure required fields

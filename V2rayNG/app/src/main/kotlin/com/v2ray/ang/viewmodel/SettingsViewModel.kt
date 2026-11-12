@@ -28,6 +28,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         when(key) {
             AppConfig.PREF_MODE,
             AppConfig.PREF_TCP_PROBE_PRESET,
+            AppConfig.PREF_TCP_PROBE_CONCURRENCY,
             AppConfig.PREF_VPN_DNS,
             AppConfig.PREF_REMOTE_DNS,
             AppConfig.PREF_DOMESTIC_DNS,

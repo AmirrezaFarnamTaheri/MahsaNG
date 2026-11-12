@@ -497,6 +497,11 @@
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
 
+    <string name="title_tcp_probe_concurrency">Parallel TCP connect tests (not proxy traffic)</string>
+    <string name="tcp_probe_concurrency_4">4 simultaneous TCP tests</string>
+    <string name="tcp_probe_concurrency_8">8 simultaneous TCP tests (default)</string>
+    <string name="tcp_probe_concurrency_12">12 simultaneous TCP tests</string>
+    <string name="tcp_probe_concurrency_16">16 simultaneous TCP tests (maximum)</string>
     <string name="title_tcp_probe_preset">TCP reachability test (not proxy verification)</string>
     <string name="tcp_probe_quick">Quick: 1 attempt, 1.5 s connect timeout</string>
     <string name="tcp_probe_balanced">Balanced: up to 2 attempts, 3 s each; stop on success</string>

@@ -29,6 +29,7 @@ import com.v2ray.ang.dto.V2rayConfig.Companion.TLS
 import com.v2ray.ang.extension.removeWhiteSpace
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.TestRunTracker
 import com.v2ray.ang.util.MmkvManager.ID_MAIN
 import com.v2ray.ang.util.MmkvManager.KEY_SELECTED_SERVER
 import com.v2ray.ang.util.Utils
@@ -272,7 +273,7 @@ class ServerActivity : BaseActivity() {
                     container_sni?.visibility = View.VISIBLE
                     container_fingerprint?.visibility = View.VISIBLE
                     container_alpn?.visibility = View.VISIBLE
-                    container_ech?.visibility = View.VISIBLE
+                    container_ech?.visibility = if (streamSecuritys[position] == TLS) View.VISIBLE else View.GONE
                     if (streamSecuritys[position] == TLS) {
                         container_allow_insecure?.visibility = View.VISIBLE
                         container_public_key?.visibility = View.GONE
@@ -610,11 +611,10 @@ class ServerActivity : BaseActivity() {
 
         val config = MmkvManager.decodeServerConfig(editGuid) ?: ServerConfig.create(createConfigType)
 
-        if (config.configType != EConfigType.HYSTERIA2) {
-            if ( (port <= 0) || (port >= 65536) ) {
-                toast(R.string.server_lab_port)
-                return false
-            }
+        if (port !in 1..65535) {
+            // Even with optional hopping, the primary transport port must be valid.
+            toast(R.string.server_lab_port)
+            return false
         }
 
         port = Utils.validate_port(port)
@@ -755,6 +755,12 @@ class ServerActivity : BaseActivity() {
         }
 
         MmkvManager.encodeServerConfig(editGuid, config)
+        // The endpoint changed under the same GUID; discard in-flight results.
+        if (editGuid.isNotBlank()) {
+            TestRunTracker.forgetProfile(editGuid)
+            // A stored pre-edit negative delay is also stale evidence.
+            MmkvManager.clearTestDelayResults(listOf(editGuid))
+        }
         toast(R.string.toast_success)
         finish()
         return true
@@ -864,7 +870,7 @@ class ServerActivity : BaseActivity() {
         val echForceQuery = et_echForceQuery?.text?.toString()
 
         val allowInsecure = if (allowInsecureField == null || allowinsecures[allowInsecureField].isBlank()) {
-            !(settingsStorage?.decodeBool(PREF_ALLOW_INSECURE) ?: false)
+            settingsStorage?.decodeBool(PREF_ALLOW_INSECURE) ?: false
         } else {
             allowinsecures[allowInsecureField].toBoolean()
         }

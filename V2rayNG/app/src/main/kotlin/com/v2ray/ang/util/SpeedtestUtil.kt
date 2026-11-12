@@ -16,7 +16,7 @@ import kotlin.coroutines.coroutineContext
 
 object SpeedtestUtil {
 
-    private val tcpTestingSockets = ArrayList<Socket?>()
+    private val tcpTestingSockets = ArrayList<Socket>()
 
     suspend fun tcping(url: String, port: Int): Long {
         var time = -1L
@@ -34,7 +34,7 @@ object SpeedtestUtil {
 
     fun realPing(config: String): Long {
         return try {
-            Libv2ray.measureOutboundDelay(config)
+            Libv2ray.measureOutboundDelay(config, AppConfig.DelayTestUrl)
         } catch (e: Exception) {
             Log.d(AppConfig.ANG_PACKAGE, "realPing: $e")
             -1L
@@ -61,18 +61,18 @@ object SpeedtestUtil {
 
     fun socketConnectTime(url: String, port: Int): Long {
         try {
-            val socket = Socket()
-            synchronized(this) {
-                tcpTestingSockets.add(socket)
-            }
-            val start = System.currentTimeMillis()
-            socket.connect(InetSocketAddress(url, port),3000)
-            val time = System.currentTimeMillis() - start
-            synchronized(this) {
-                tcpTestingSockets.remove(socket)
-            }
-            socket.close()
-            return time
+            return SocketConnectTimer.measure(
+                host = url,
+                port = port,
+                timeoutMs = 3000,
+                socket = Socket(),
+                onRegister = { socket ->
+                    synchronized(this) { tcpTestingSockets.add(socket) }
+                },
+                onUnregister = { socket ->
+                    synchronized(this) { tcpTestingSockets.remove(socket) }
+                },
+            )
         } catch (e: UnknownHostException) {
             e.printStackTrace()
         } catch (e: IOException) {
@@ -80,16 +80,15 @@ object SpeedtestUtil {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return -1
+        return -1L
     }
 
     fun closeAllTcpSockets() {
-        synchronized(this) {
-            tcpTestingSockets.forEach {
-                it?.close()
-            }
-            tcpTestingSockets.clear()
+        // Never hold the registry monitor while closing a socket that may be in connect().
+        val sockets = synchronized(this) {
+            tcpTestingSockets.toList().also { tcpTestingSockets.clear() }
         }
+        sockets.forEach { socket -> runCatching { socket.close() } }
     }
 
     fun testConnection(context: Context, port: Int): String {

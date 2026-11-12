@@ -18,9 +18,7 @@ import com.v2ray.ang.dto.ERoutingMode
 import com.v2ray.ang.util.MmkvManager
 import com.v2ray.ang.util.MyContextWrapper
 import com.v2ray.ang.util.Utils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.io.File
 import java.lang.ref.SoftReference
 
@@ -37,10 +35,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
     private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
     private lateinit var mInterface: ParcelFileDescriptor
-    private var isRunning = false
 
-    //val fd: Int get() = mInterface.fd
-    private lateinit var process: Process
+    private val tunProcesses = TunnelProcessOwner<Process>()
+    private val fdScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**destroy
      * Unfortunately registerDefaultNetworkCallback is going to return our VPN interface: https://android.googlesource.com/platform/frameworks/base/+/dda156ab0c5d66ad82bdcf76cda07cbc0a9c8a2e
@@ -97,6 +94,8 @@ class V2RayVpnService : VpnService(), ServiceControl {
 //    }
 
     override fun onDestroy() {
+        tunProcesses.stop()?.destroy()
+        fdScope.cancel()
         super.onDestroy()
         V2RayServiceManager.cancelNotification()
     }
@@ -211,8 +210,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
         // Create a new interface using the builder and save the parameters.
         try {
             mInterface = builder.establish()!!
-            isRunning = true
-            runTun2socks()
+            val (generation, previousChild) = tunProcesses.begin()
+            previousChild?.destroy()
+            runTun2socks(generation)
         } catch (e: Exception) {
             // non-nullable lateinit var
             e.printStackTrace()
@@ -220,7 +220,8 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
     }
 
-    private fun runTun2socks() {
+    private fun runTun2socks(generation: Long) {
+        if (!tunProcesses.isCurrent(generation)) return
         val socksPort = Utils.parseInt(settingsStorage?.decodeString(AppConfig.PREF_SOCKS_PORT), AppConfig.PORT_SOCKS.toInt())
         val cmd = arrayListOf(File(applicationContext.applicationInfo.nativeLibraryDir, TUN2SOCKS).absolutePath,
                 "--netif-ipaddr", PRIVATE_VLAN4_ROUTER,
@@ -243,48 +244,63 @@ class V2RayVpnService : VpnService(), ServiceControl {
         Log.d(packageName, cmd.toString())
 
         try {
-            val proBuilder = ProcessBuilder(cmd)
-            proBuilder.redirectErrorStream(true)
-            process = proBuilder
-                    .directory(applicationContext.filesDir)
-                    .start()
-            Thread(Runnable {
-                Log.d(packageName,"$TUN2SOCKS check")
-                process.waitFor()
-                Log.d(packageName,"$TUN2SOCKS exited")
-                if (isRunning) {
-                    Log.d(packageName,"$TUN2SOCKS restart")
-                    runTun2socks()
-                }
-            }).start()
-            Log.d(packageName, process.toString())
+            val child = ProcessBuilder(cmd)
+                .redirectErrorStream(true)
+                .directory(applicationContext.filesDir)
+                .start()
 
-            sendFd()
+            // Stop may win while ProcessBuilder.start() is in progress.
+            if (!tunProcesses.adopt(generation, child)) {
+                child.destroy()
+                return
+            }
+
+            Thread({
+                val exitCode = runCatching { child.waitFor() }.getOrNull()
+                if (exitCode != null) {
+                    if (tunProcesses.departed(generation, child)) {
+                        Log.d(packageName, "$TUN2SOCKS exited ($exitCode), restarting owned session")
+                        runTun2socks(generation)
+                    } else if (tunProcesses.isCurrent(generation)) {
+                        // This was the owned child but the bounded restart budget
+                        // is exhausted. Do not leave an apparently running VPN
+                        // with no tun2socks bridge.
+                        Log.e(packageName, "$TUN2SOCKS restart budget exhausted")
+                        stopV2Ray()
+                    }
+                }
+            }, "tun2socks-watch").start()
+
+            sendFd(generation)
         } catch (e: Exception) {
-            Log.d(packageName, e.toString())
+            Log.e(packageName, "tun2socks start failed: $e")
+            // A failed current-generation restart must not leave a live VPN without a bridge.
+            if (tunProcesses.isCurrent(generation)) stopV2Ray()
         }
     }
 
-    private fun sendFd() {
+    private fun sendFd(generation: Long) {
+        if (!tunProcesses.isCurrent(generation)) return
         val fd = mInterface.fileDescriptor
         val path = File(applicationContext.filesDir, "sock_path").absolutePath
-        Log.d(packageName, path)
 
-        GlobalScope.launch(Dispatchers.IO) {
-            var tries = 0
-            while (true) try {
-                Thread.sleep(50L shl tries)
-                Log.d(packageName, "sendFd tries: $tries")
-                LocalSocket().use { localSocket ->
-                    localSocket.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
-                    localSocket.setFileDescriptorsForSend(arrayOf(fd))
-                    localSocket.outputStream.write(42)
+        fdScope.launch {
+            for (tries in 0..5) {
+                if (!isActive || !tunProcesses.isCurrent(generation)) return@launch
+                delay(50L shl tries)
+                if (!isActive || !tunProcesses.isCurrent(generation)) return@launch
+                try {
+                    LocalSocket().use { socket ->
+                        socket.connect(
+                            LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM)
+                        )
+                        socket.setFileDescriptorsForSend(arrayOf(fd))
+                        socket.outputStream.write(42)
+                    }
+                    return@launch
+                } catch (e: Exception) {
+                    Log.d(packageName, "sendFd retry $tries failed: $e")
                 }
-                break
-            } catch (e: Exception) {
-                Log.d(packageName, e.toString())
-                if (tries > 5) break
-                tries += 1
             }
         }
     }
@@ -300,7 +316,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 //        val emptyInfo = VpnNetworkInfo()
 //        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
 //        saveVpnNetworkInfo(configName, info)
-        isRunning = false;
+        val stoppedChild = tunProcesses.stop()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 connectivity.unregisterNetworkCallback(defaultNetworkCallback)
@@ -311,7 +327,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
         try {
             Log.d(packageName, "tun2socks destroy")
-            process.destroy()
+            stoppedChild?.destroy()
         } catch (e: Exception) {
             Log.d(packageName, e.toString())
         }

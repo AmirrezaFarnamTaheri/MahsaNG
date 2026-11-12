@@ -1,10 +1,9 @@
 package com.v2ray.ang.ui
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
+import android.system.Os
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
@@ -15,7 +14,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.tbruyelle.rxpermissions.RxPermissions
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
@@ -24,11 +22,13 @@ import com.v2ray.ang.databinding.ItemRecyclerUserAssetBinding
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.SafeAssetFilename
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -76,31 +76,16 @@ class UserAssetActivity : BaseActivity() {
     }
 
     private fun showFileChooser() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
+        // The document provider grants access to the selected URI.
+        // This also permits selecting non-image geo assets on Android 13+.
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "*/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
         }
-        RxPermissions(this)
-            .request(permission)
-            .subscribe {
-            if (it) {
-                val intent = Intent(Intent.ACTION_GET_CONTENT)
-                intent.type = "*/*"
-                intent.addCategory(Intent.CATEGORY_OPENABLE)
-
-                try {
-                    chooseFile.launch(
-                        Intent.createChooser(
-                            intent,
-                            getString(R.string.title_file_chooser)
-                        )
-                    )
-                } catch (ex: android.content.ActivityNotFoundException) {
-                    toast(R.string.toast_require_file_manager)
-                }
-            } else
-                toast(R.string.toast_permission_denied)
+        try {
+            chooseFile.launch(Intent.createChooser(intent, getString(R.string.title_file_chooser)))
+        } catch (ex: android.content.ActivityNotFoundException) {
+            toast(R.string.toast_require_file_manager)
         }
     }
 
@@ -117,14 +102,31 @@ class UserAssetActivity : BaseActivity() {
         }
 
     private fun copyFile(uri: Uri): String {
-        val targetFile = File(extDir, getCursorName(uri) ?: uri.toString())
-        contentResolver.openInputStream(uri).use { inputStream ->
-            targetFile.outputStream().use { fileOut ->
-                inputStream?.copyTo(fileOut)
-                toast(R.string.toast_success)
-                binding.recyclerView.adapter?.notifyDataSetChanged()
-            }
+        val fileName = SafeAssetFilename.validate(getCursorName(uri))
+            ?: throw IOException("Document provider returned an invalid filename")
+        val root = extDir.canonicalFile
+        if (!root.isDirectory && !root.mkdirs()) {
+            throw IOException("Cannot prepare asset directory")
         }
+        val targetFile = File(root, fileName).canonicalFile
+        if (targetFile.parentFile != root) {
+            throw SecurityException("Document filename escapes asset directory")
+        }
+
+        // A failed stream or partial copy must never replace the existing asset.
+        val staged = File.createTempFile(".asset-import-", ".tmp", root)
+        try {
+            val copiedBytes = contentResolver.openInputStream(uri)?.use { input ->
+                staged.outputStream().use { output -> input.copyTo(output) }
+            } ?: throw IOException("Unable to open selected document")
+            if (copiedBytes <= 0L) throw IOException("Selected document is empty")
+            // Same-directory rename atomically publishes the validated data.
+            Os.rename(staged.absolutePath, targetFile.absolutePath)
+        } finally {
+            staged.delete()
+        }
+        toast(R.string.toast_success)
+        binding.recyclerView.adapter?.notifyDataSetChanged()
         return targetFile.path
     }
 

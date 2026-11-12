@@ -12,6 +12,7 @@ kotlin {
 
 val productionHelpers = listOf(
     "FailedServerSelection",
+    "wget_module",
     "SafeAssetFilename",
     "PortAndFragmentInput",
     "ServerEditorInputRules",

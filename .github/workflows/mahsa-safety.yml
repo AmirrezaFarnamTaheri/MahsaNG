@@ -137,14 +137,5 @@ jobs:
           arch: x86_64
           profile: pixel_6
           ram-size: 2048M
-          script: |
-            set -euo pipefail
-            APK="$(find V2rayNG/app/build/outputs/apk/dev/debug -maxdepth 1 -type f -name '*_x86_64.apk' -print -quit)"
-            test -n "$APK"
-            adb install -r "$APK"
-            adb shell pm list packages | grep -F 'package:com.MahsaNG.EMS.dev'
-            adb logcat -c
-            adb shell am start -W -n com.MahsaNG.EMS.dev/com.v2ray.ang.ui.MainActivity
-            sleep 8
-            test -n "$(adb shell pidof com.MahsaNG.EMS.dev | tr -d '\r')"
-            adb shell dumpsys package com.MahsaNG.EMS.dev | grep -F 'PsiphonVpnService'
+          # The runner executes each script line in a new /usr/bin/sh; keep state inside one Bash process.
+          script: bash V2rayNG/pure-tests/smoke-android-emulator.sh

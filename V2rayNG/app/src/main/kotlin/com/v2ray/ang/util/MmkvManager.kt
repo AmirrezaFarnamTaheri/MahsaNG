@@ -245,6 +245,22 @@ object MmkvManager {
         return 1
     }
 
+    /**
+     * Create or reuse a local-only group for the bundled GFW configuration.
+     * Its URL is blank and auto-update is disabled: it is not a remote feed.
+     * Never overwrite a real subscription that happens to have the same name.
+     */
+    @Synchronized
+    fun import_Mahsa_Subscription(remark: String): String {
+        val label = remark.trim().takeIf { it.isNotEmpty() } ?: return ""
+        val existing = runCatching { decodeSubscriptions() }.getOrNull() ?: return ""
+        LocalSubscriptionSelection.existingLocalId(label, existing)?.let { return it }
+        val storage = subStorage ?: return ""
+        val id = Utils.getUuid()
+        val local = SubscriptionItem(remarks = label, url = "", enabled = false)
+        return if (storage.encode(id, Gson().toJson(local))) id else ""
+    }
+
     fun decodeSubscriptions(): List<Pair<String, SubscriptionItem>> {
         val subscriptions = mutableListOf<Pair<String, SubscriptionItem>>()
         subStorage?.allKeys()?.forEach { key ->

@@ -20,6 +20,7 @@ val productionHelpers = listOf(
     "ServerEditorInputRules",
     "TestRunTracker",
     "SocketConnectTimer",
+    "TcpProbePreset",
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "CoreStopGate",

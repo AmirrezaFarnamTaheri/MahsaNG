@@ -162,6 +162,7 @@ jobs:
           test -s "$APK"
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
             unzip -Z1 "$APK" | grep -Fx "lib/$abi/libtun2socks_psiphon.so"
+            unzip -Z1 "$APK" | grep -Fx "lib/$abi/libpsiphon.so"
           done
 
       - name: Run full Android module unit tests, including profile model contracts

@@ -46,7 +46,7 @@ public class GFW_youtube_config_Activity extends AppCompatActivity {
                 String mahsa_subid = MmkvManager.INSTANCE.import_Mahsa_Subscription("GFW-knocker");
                 int imported = mahsa_subid.isEmpty()
                         ? 0
-                        : AngConfigManager.INSTANCE.importBatchConfig(server, mahsa_subid, false);
+                        : AngConfigManager.INSTANCE.importBatchConfig(server, mahsa_subid, true);
                 Toast.makeText(
                         GFW_youtube_config_Activity.this,
                         imported > 0 ? R.string.import_subscription_success : R.string.import_subscription_failure,

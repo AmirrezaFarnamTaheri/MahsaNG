@@ -22,10 +22,12 @@ def _inventory(path):
         binaries = {}
         for name in names:
             pieces = name.split('/')
-            if len(pieces) == 3 and pieces[0] in ('jni', 'libs') and name.endswith('.so'):
+            if len(pieces) == 3 and pieces[0] == 'jni' and name.endswith('.so'):
                 binaries[pieces[1] + '/' + pieces[2]] = name
         return classnames, binaries
 
+
+SUPPORTED_ABIS = {'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'}
 
 REQUIRED_PSI_CLASSES = {
     'psi/Psi.class',
@@ -46,11 +48,12 @@ def examine(xray, psiphon, local_tunnel_source=True):
     local_conflict = local_tunnel_source and 'ca/psiphon/PsiphonTunnel.class' in p_classes
     missing_psi = sorted(REQUIRED_PSI_CLASSES - p_classes)
     contains_psi = not missing_psi
-    missing_abis = sorted(x_abis - p_abis)
-    missing_native = sorted(f'{abi}/libpsiphon.so' for abi in x_abis
+    missing_xray_abis = sorted(SUPPORTED_ABIS - x_abis)
+    missing_abis = sorted(SUPPORTED_ABIS - p_abis)
+    missing_native = sorted(f'{abi}/libpsiphon.so' for abi in SUPPORTED_ABIS
                             if f'{abi}/libpsiphon.so' not in p_natives)
     return {
-        'safe_to_combine': not (duplicates or collisions or local_conflict or not contains_psi or missing_abis or missing_native),
+        'safe_to_combine': not (duplicates or collisions or local_conflict or not contains_psi or missing_xray_abis or missing_abis or missing_native),
         'contains_required_psi_api': contains_psi,
         'missing_psi_classes': missing_psi,
         'missing_psiphon_native_libraries': missing_native,
@@ -60,6 +63,7 @@ def examine(xray, psiphon, local_tunnel_source=True):
         'xray_native_abis': sorted(x_abis),
         'psiphon_native_abis': sorted(p_abis),
         'missing_psiphon_abis': missing_abis,
+        'missing_xray_abis': missing_xray_abis,
         'xray_class_count': len(x_classes),
         'psiphon_class_count': len(p_classes),
     }

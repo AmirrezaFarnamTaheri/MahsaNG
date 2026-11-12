@@ -94,4 +94,42 @@ class wget_moduleTest {
         })
         assertEquals(4, opened)
     }
+    @Test fun stopsRedirectChainWhenTotalBudgetExpires() {
+        var now = 0L
+        var opened = 0
+        val result = wget_module.fetch(
+            "https://example.com/start",
+            nowNanos = { now },
+            open = { url ->
+                opened++
+                now += 21_000_000_000L
+                FakeConnection(url, 302, location = "/next")
+            }
+        )
+        assertNull(result)
+        assertEquals(1, opened)
+    }
+
+    @Test fun rejectsTricklingBodyAfterTotalFetchDeadline() {
+        var now = 0L
+        var disconnected = false
+        val slow = object : HttpURLConnection(URL("https://example.com/slow")) {
+            override fun getResponseCode() = 200
+            override fun getInputStream() =
+                object : ByteArrayInputStream("hello".toByteArray(Charsets.UTF_8)) {
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        now += 21_000_000_000L
+                        return super.read(b, off, len)
+                    }
+                }
+            override fun connect() = Unit
+            override fun disconnect() { disconnected = true }
+            override fun usingProxy() = false
+        }
+        assertNull(wget_module.fetch(
+            "https://example.com/slow", nowNanos = { now }, open = { slow }
+        ))
+        assertTrue(disconnected)
+    }
+
 }

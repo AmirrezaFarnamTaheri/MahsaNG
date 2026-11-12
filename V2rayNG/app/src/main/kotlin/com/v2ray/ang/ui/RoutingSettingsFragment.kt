@@ -87,25 +87,34 @@ class RoutingSettingsFragment : Fragment() {
         activity?.toast(R.string.toast_success)
     }
 
-    private var scanReplaceRequested = true
-    private val cameraPermission = registerForActivityResult(
+    // Separate launchers retain their distinct registry keys across Fragment
+    // recreation, including while the runtime permission request is pending.
+    private val replaceCameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            val intent = Intent(requireContext(), ScannerActivity::class.java)
-            if (scanReplaceRequested) {
-                scanQRCodeForReplace.launch(intent)
-            } else {
-                scanQRCodeForAppend.launch(intent)
-            }
+            scanQRCodeForReplace.launch(Intent(requireContext(), ScannerActivity::class.java))
+        } else {
+            activity?.toast(R.string.toast_permission_denied)
+        }
+    }
+
+    private val appendCameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scanQRCodeForAppend.launch(Intent(requireContext(), ScannerActivity::class.java))
         } else {
             activity?.toast(R.string.toast_permission_denied)
         }
     }
 
     fun scanQRcode(forReplace: Boolean): Boolean {
-        scanReplaceRequested = forReplace
-        cameraPermission.launch(Manifest.permission.CAMERA)
+        if (forReplace) {
+            replaceCameraPermission.launch(Manifest.permission.CAMERA)
+        } else {
+            appendCameraPermission.launch(Manifest.permission.CAMERA)
+        }
         return true
     }
 

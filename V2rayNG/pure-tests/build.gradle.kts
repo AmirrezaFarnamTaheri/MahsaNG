@@ -31,6 +31,9 @@ val productionHelpers = listOf(
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
+    "PsiphonProxyPortRules",
+    "MuxModeRestoration",
+    "EchLinkParameters",
 )
 
 sourceSets {

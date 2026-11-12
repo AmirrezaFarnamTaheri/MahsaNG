@@ -29,6 +29,7 @@ import com.v2ray.ang.dto.V2rayConfig.Companion.TLS
 import com.v2ray.ang.extension.removeWhiteSpace
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.MuxModeRestoration
 import com.v2ray.ang.util.MmkvManager.ID_MAIN
 import com.v2ray.ang.util.MmkvManager.KEY_SELECTED_SERVER
 import com.v2ray.ang.util.Utils
@@ -473,7 +474,8 @@ class ServerActivity : BaseActivity() {
             }
 
 
-            val g1 = Utils.arrayFind(mux_array, config.outboundBean?.mux?.status.orEmpty())
+            val mux = config.outboundBean?.mux
+            val g1 = Utils.arrayFind(mux_array, MuxModeRestoration.restore(mux?.status, mux?.enabled))
             if(g1>=0) {
                 sp_mux_array?.setSelection(g1)
                 if(g1==2){

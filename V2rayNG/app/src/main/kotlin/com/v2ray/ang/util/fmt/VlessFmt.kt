@@ -52,15 +52,20 @@ object VlessFmt {
             queryParam["authority"]
         )
         allowInsecure = if ((queryParam["allowInsecure"] ?: "") == "1") true else allowInsecure
+        val security = queryParam["security"] ?: ""
+        val ech = EchLinkParameters.fromQuery(security, queryParam)
         streamSetting.populateTlsSettings(
-            queryParam["security"] ?: "",
+            security,
             allowInsecure,
             queryParam["sni"] ?: sni,
             queryParam["fp"] ?: "",
             queryParam["alpn"],
             queryParam["pbk"] ?: "",
             queryParam["sid"] ?: "",
-            queryParam["spx"] ?: ""
+            queryParam["spx"] ?: "",
+            echConfigList = ech.configList,
+            echServerKeys = ech.serverKeys,
+            echForceQuery = ech.forceQuery
         )
 
         return config
@@ -106,6 +111,12 @@ object VlessFmt {
             if (!TextUtils.isEmpty(tlsSetting.spiderX)) {
                 dicQuery["spx"] = Utils.urlEncode(tlsSetting.spiderX ?: "")
             }
+            dicQuery.putAll(EchLinkParameters.toQuery(
+                streamSetting.security,
+                tlsSetting.echConfigList,
+                tlsSetting.echServerKeys,
+                tlsSetting.echForceQuery
+            ) { value -> Utils.urlEncode(value) })
         }
         dicQuery["type"] =
             streamSetting.network.ifEmpty { V2rayConfig.DEFAULT_NETWORK }

@@ -37,6 +37,7 @@ import rx.android.schedulers.AndroidSchedulers
 import java.util.concurrent.TimeUnit
 import com.v2ray.ang.helper.SimpleItemTouchHelperCallback
 import com.v2ray.ang.service.V2RayServiceManager
+import com.v2ray.ang.service.VpnModeSelection
 import com.v2ray.ang.util.*
 import com.v2ray.ang.viewmodel.MainViewModel
 import kotlinx.coroutines.*
@@ -92,7 +93,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         binding.fab.setOnClickListener {
             if (mainViewModel.isRunning.value == true) {
                 Utils.stopVService(this)
-            } else if (settingsStorage?.decodeString(AppConfig.PREF_MODE) ?: "VPN" == "VPN") {
+            } else if (VpnModeSelection.requiresVpnPermission(settingsStorage?.decodeString(AppConfig.PREF_MODE))) {
                 val intent = VpnService.prepare(this)
                 if (intent == null) {
                     startV2Ray()

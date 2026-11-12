@@ -4,6 +4,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.*
@@ -96,7 +98,18 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
 
     private val mystrg by lazy { my_preference_storage() }
-
+    private val usesUpstreamProxy by lazy {
+        VpnModeSelection.usesPsiphon(settingsStorage?.decodeString(AppConfig.PREF_MODE)) ||
+            mystrg.get_value("sw_psiphon_after", "") == "true"
+    }
+    private val stopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == AppConfig.BROADCAST_ACTION_SERVICE &&
+                intent.getIntExtra("key", 0) == AppConfig.MSG_STATE_STOP
+            ) Thread { stopAll() }.start()
+        }
+    }
+    private var stopReceiverRegistered = false
 
     private var psiphonTunnel: PsiphonTunnel? = null
     private var mInterface: ParcelFileDescriptor? = null
@@ -147,6 +160,11 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         super.onCreate()
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
+        val filter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stopReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else registerReceiver(stopReceiver, filter)
+        stopReceiverRegistered = true
     }
 
     override fun onRevoke() {
@@ -154,6 +172,10 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
 
     override fun onDestroy() {
+        if (stopReceiverRegistered) {
+            runCatching { unregisterReceiver(stopReceiver) }
+            stopReceiverRegistered = false
+        }
         // VpnService may be destroyed without ACTION_STOP or onRevoke.
         stopAll(isForced = false)
         super.onDestroy()
@@ -166,6 +188,11 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         }
         if (teardownStarted.get()) {
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (VpnService.prepare(this) != null) {
+            Log.w(TAG, "VPN authorization unavailable; refusing to start")
+            stopAll()
             return START_NOT_STICKY
         }
         // Start foreground promptly on API 26+ before asynchronous startup.
@@ -187,7 +214,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         Thread {
             try {
 
-                if ( mystrg.get_value("sw_psiphon_after","")=="true") {
+                if ( usesUpstreamProxy) {
                     // Wait for V2Ray's SOCKS proxy to become reachable
                     val v2raySocksPort = Utils.parseInt(
                         settingsStorage?.decodeString(AppConfig.PREF_SOCKS_PORT),
@@ -316,7 +343,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         builder.setSession("Psiphon Tunnel")
 
         // Exclude MahsaNG app to prevent VPN routing loops
-        if ( mystrg.get_value("sw_psiphon_after","")=="true") {
+        if ( usesUpstreamProxy) {
             if (settingsStorage?.decodeBool(AppConfig.PREF_PER_APP_PROXY) == true) {
                 val bypassApps = settingsStorage?.decodeBool(AppConfig.PREF_BYPASS_APPS) ?: false
                 if (bypassApps) {
@@ -560,6 +587,11 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         } finally {
             mInterface = null
         }
+        // Closing Psiphon must not leave a live unprotected upstream SOCKS process.
+        if (usesUpstreamProxy) {
+            runCatching { stopService(Intent(this, V2RayProxyOnlyService::class.java)) }
+                .onFailure { Log.w(TAG, "Unable to stop upstream proxy process") }
+        }
         if (isForced) stopSelf()
     }
 
@@ -595,7 +627,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
 
 
-        if ( mystrg.get_value("sw_psiphon_after","")=="true") {
+        if ( usesUpstreamProxy) {
             // Set upstream proxy to V2Ray's SOCKS5 port
             val v2raySocksPort = Utils.parseInt(
                 settingsStorage?.decodeString(AppConfig.PREF_SOCKS_PORT),

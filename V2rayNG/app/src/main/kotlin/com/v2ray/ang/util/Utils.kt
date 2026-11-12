@@ -79,14 +79,6 @@ object Utils {
         }
     }
 
-    /** An invalid port is a validation failure, never silently changed. */
-    fun validate_port(port: Int): Int = PortAndFragmentInput.requirePort(port)
-
-    /** Accept only a bounded integer or a nondecreasing numeric range. */
-    fun fragment_param_check(value: String?): Boolean =
-        PortAndFragmentInput.validFragmentRange(value)
-
-
     /** Reject invalid transport ports; never silently wrap them into a usable port. */
     fun validate_port(port: Int): Int = ServerEditorInputRules.requirePort(port)
 

@@ -37,8 +37,12 @@ class NativeCompatibilityTests(unittest.TestCase):
             xray, psi = Path(temp) / 'xray.aar', Path(temp) / 'psi.aar'
             write_aar(xray, ['libv2ray/Libv2ray.class'],
                       {'jni/arm64-v8a/libxray.so': b'xray'})
-            write_aar(psi, ['psi/Psi.class'],
-                      {'jni/arm64-v8a/libpsiphon.so': b'psi'})
+            write_aar(psi, [
+                'psi/Psi.class', 'psi/PsiphonProvider.class',
+                'psi/PsiphonProviderFeedbackHandler.class',
+                'psi/PsiphonProviderNetwork.class',
+                'psi/PsiphonProviderNoticeHandler.class',
+            ], {'jni/arm64-v8a/libpsiphon.so': b'psi'})
             result = examine(xray, psi, local_tunnel_source=False)
             self.assertTrue(result['safe_to_combine'])
             self.assertFalse(result['duplicate_classes'])
@@ -53,6 +57,28 @@ class NativeCompatibilityTests(unittest.TestCase):
             self.assertFalse(result['safe_to_combine'])
             self.assertFalse(result['contains_required_psi_api'])
 
+    def test_missing_named_psiphon_native_library_is_a_blocker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            xray, psi = Path(temp) / 'xray.aar', Path(temp) / 'psi.aar'
+            write_aar(xray, ['libv2ray/Libv2ray.class'],
+                      {'jni/arm64-v8a/libgojni.so': b'xray'})
+            write_aar(psi, ['psi/Psi.class'],
+                      {'jni/arm64-v8a/libunrelated.so': b'unknown'})
+            result = examine(xray, psi, local_tunnel_source=False)
+            self.assertIn('arm64-v8a/libpsiphon.so', result['missing_psiphon_native_libraries'])
+            self.assertFalse(result['safe_to_combine'])
+
+    def test_missing_provider_interface_is_a_blocker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            xray, psi = Path(temp) / 'xray.aar', Path(temp) / 'psi.aar'
+            write_aar(xray, ['libv2ray/Libv2ray.class'],
+                      {'jni/arm64-v8a/libgojni.so': b'xray'})
+            write_aar(psi, ['psi/Psi.class'],
+                      {'jni/arm64-v8a/libpsiphon.so': b'psi'})
+            result = examine(xray, psi, local_tunnel_source=False)
+            self.assertIn('psi/PsiphonProvider.class', result['missing_psi_classes'])
+            self.assertFalse(result['safe_to_combine'])
+
     def test_missing_abi_in_one_library_is_reported(self):
         with tempfile.TemporaryDirectory() as temp:
             xray, psi = Path(temp) / 'xray.aar', Path(temp) / 'psi.aar'
@@ -60,7 +86,11 @@ class NativeCompatibilityTests(unittest.TestCase):
                 'jni/arm64-v8a/libxray.so': b'xray',
                 'jni/x86_64/libxray.so': b'xray',
             })
-            write_aar(psi, ['psi/Psi.class'], {'jni/arm64-v8a/libpsiphon.so': b'psi'})
+            write_aar(psi, ['psi/Psi.class', 'psi/PsiphonProvider.class',
+                            'psi/PsiphonProviderFeedbackHandler.class',
+                            'psi/PsiphonProviderNetwork.class',
+                            'psi/PsiphonProviderNoticeHandler.class'],
+                      {'jni/arm64-v8a/libpsiphon.so': b'psi'})
             result = examine(xray, psi, local_tunnel_source=False)
             self.assertEqual(['x86_64'], result['missing_psiphon_abis'])
             self.assertFalse(result['safe_to_combine'])

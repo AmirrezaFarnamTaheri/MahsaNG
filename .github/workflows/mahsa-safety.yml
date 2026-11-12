@@ -94,18 +94,22 @@ jobs:
           echo '=== Pinned native core Java public API (for binding compatibility) ==='
           javap -classpath "$RUNNER_TEMP/mahsa-core-classes.jar" -public libv2ray.Libv2ray libv2ray.V2RayPoint libv2ray.V2RayVPNServiceSupportsSet
 
-      - name: Audit published Psiphon AAR versus pinned Xray bindings (no JNI collision overrides)
+      - name: Verify and stage namespace-isolated Psiphon AAR (pinned SHA-256)
         run: |
           set -euo pipefail
-          PSIPHON_AAR="$RUNNER_TEMP/psiphontunnel-2.0.41.aar"
+          PSIPHON_AAR="$GITHUB_WORKSPACE/V2rayNG/app/libs/libpsiphon.aar"
           curl --fail --show-error --silent --location --retry 3 --max-time 180 \
-            "https://raw.githubusercontent.com/Psiphon-Labs/psiphon-tunnel-core-Android-library/master/ca/psiphon/psiphontunnel/2.0.41/psiphontunnel-2.0.41.aar" \
+            "https://github.com/mahsanet/aar/releases/download/psiphon-nkr-2026-06-21/libpsiphon.aar" \
             -o "$PSIPHON_AAR"
-          printf '%s  %s\n' '46c32e2ec3919fb1a5d61e61a00462e00dd16e6e' "$PSIPHON_AAR" | sha1sum --check
+          printf '%s  %s\n' 'a8eddfa98b2321793035211cfc27da0f2966f69653682aa46dbc74bfcf331086' "$PSIPHON_AAR" | sha256sum --check
           python3 V2rayNG/pure-tests/audit_native_aar_compatibility.py \
             --xray V2rayNG/app/libs/libv2ray.aar \
             --psiphon "$PSIPHON_AAR" \
             --local-tunnel-source V2rayNG/app/src/main/java/ca/psiphon/PsiphonTunnel.java
+          unzip -p "$PSIPHON_AAR" classes.jar > "$RUNNER_TEMP/psiphon-classes.jar"
+          javap -classpath "$RUNNER_TEMP/psiphon-classes.jar" -public \
+            psi.Psi psi.PsiphonProvider psi.PsiphonProviderFeedbackHandler \
+            psi.PsiphonProviderNetwork psi.PsiphonProviderNoticeHandler
 
       - name: Check unsupported MASQUE/WARP screens remain archived
         run: bash V2rayNG/docs/unimplemented-ui/check-no-unimplemented-activities.sh

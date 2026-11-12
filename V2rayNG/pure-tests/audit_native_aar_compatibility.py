@@ -27,6 +27,15 @@ def _inventory(path):
         return classnames, binaries
 
 
+REQUIRED_PSI_CLASSES = {
+    'psi/Psi.class',
+    'psi/PsiphonProvider.class',
+    'psi/PsiphonProviderFeedbackHandler.class',
+    'psi/PsiphonProviderNetwork.class',
+    'psi/PsiphonProviderNoticeHandler.class',
+}
+
+
 def examine(xray, psiphon, local_tunnel_source=True):
     x_classes, x_natives = _inventory(xray)
     p_classes, p_natives = _inventory(psiphon)
@@ -35,11 +44,16 @@ def examine(xray, psiphon, local_tunnel_source=True):
     duplicates = sorted(x_classes & p_classes)
     collisions = sorted(set(x_natives) & set(p_natives))
     local_conflict = local_tunnel_source and 'ca/psiphon/PsiphonTunnel.class' in p_classes
-    contains_psi = 'psi/Psi.class' in p_classes
+    missing_psi = sorted(REQUIRED_PSI_CLASSES - p_classes)
+    contains_psi = not missing_psi
     missing_abis = sorted(x_abis - p_abis)
+    missing_native = sorted(f'{abi}/libpsiphon.so' for abi in x_abis
+                            if f'{abi}/libpsiphon.so' not in p_natives)
     return {
-        'safe_to_combine': not (duplicates or collisions or local_conflict or not contains_psi or missing_abis),
+        'safe_to_combine': not (duplicates or collisions or local_conflict or not contains_psi or missing_abis or missing_native),
         'contains_required_psi_api': contains_psi,
+        'missing_psi_classes': missing_psi,
+        'missing_psiphon_native_libraries': missing_native,
         'duplicate_local_psiphon_tunnel': bool(local_conflict),
         'duplicate_classes': duplicates,
         'native_collisions': collisions,

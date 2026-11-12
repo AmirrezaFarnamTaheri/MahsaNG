@@ -77,6 +77,13 @@
             android:entryValues="@array/tcp_probe_preset_values"
             android:summary="%s"
             android:title="@string/title_tcp_probe_preset" />
+        <ListPreference
+            android:key="pref_tcp_probe_concurrency"
+            android:defaultValue="8"
+            android:entries="@array/tcp_probe_concurrency_entries"
+            android:entryValues="@array/tcp_probe_concurrency_values"
+            android:summary="%s"
+            android:title="@string/title_tcp_probe_concurrency" />
 
         <CheckBoxPreference
             android:key="pref_prefer_ipv6"

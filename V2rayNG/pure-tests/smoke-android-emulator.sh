@@ -34,6 +34,28 @@ if [[ -z "$pid" ]]; then
   exit 1
 fi
 
+# A live process is insufficient: system permission prompts can cover MainActivity.
+# Deny a bounded number of permission dialogs without granting private permissions.
+main_foreground=false
+for attempt in 1 2 3; do
+  resumed="$(adb shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | head -n 1 || true)"
+  if [[ "$resumed" == *"$package_id/$activity"* ]]; then
+    main_foreground=true
+    break
+  fi
+  if [[ "$resumed" == *"permissioncontroller"* ]]; then
+    adb shell input keyevent KEYCODE_BACK
+    sleep 2
+    continue
+  fi
+  echo "Unexpected foreground activity: $resumed" >&2
+  break
+done
+if [[ "$main_foreground" != true ]]; then
+  echo "MainActivity was not resumed after launch" >&2
+  exit 1
+fi
+
 # Check the *installed* manifest, not merely the source file.
 adb shell dumpsys package "$package_id" | grep -F 'PsiphonVpnService'
 echo "Emulator smoke passed: $package_id running with PID $pid"

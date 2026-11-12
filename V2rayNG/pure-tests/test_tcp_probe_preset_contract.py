@@ -26,6 +26,14 @@ class TcpProbePresetIntegrationTest(unittest.TestCase):
         self.assertIn("TcpProbePreset.fromStored(", speed)
         self.assertIn("timeoutMs = timeoutMs,", speed)
 
+    def test_udp_and_custom_profiles_are_skipped_before_tcp_connect(self):
+        main = (KOTLIN / "viewmodel/MainViewModel.kt").read_text(encoding="utf-8")
+        code = main.split("fun testAllTcping() {", 1)[1].split("fun testAllRealPing()", 1)[0]
+        self.assertIn("TcpProbeEligibility.supportsTcpConnect(", code)
+        self.assertLess(code.index("TcpProbeEligibility.supportsTcpConnect("),
+                        code.index("SpeedtestUtil.tcping("))
+        self.assertIn("MmkvManager.clearTestDelayResults(visibleGuids)", main)
+
     def test_native_http_and_proxy_methods_are_not_relabelled_as_tcp(self):
         speed = (KOTLIN / "util/SpeedtestUtil.kt").read_text(encoding="utf-8")
         native = speed.split("fun realPing(config: String)", 1)[1].split(

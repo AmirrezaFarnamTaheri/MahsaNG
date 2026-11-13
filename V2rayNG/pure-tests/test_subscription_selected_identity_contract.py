@@ -25,6 +25,8 @@ class SelectedSubscriptionIdentityContractTest(unittest.TestCase):
     def test_chain_dependency_is_resolved_transitively_and_fails_closed(self):
         helper = IDENTITY.read_text(encoding="utf-8")
         self.assertIn("profile.getProxyOutbound()", helper)
+        self.assertIn("val fallback = profile.fullConfig?.outbounds?.firstOrNull()", helper)
+        self.assertIn("if (fallback !== primary) return@runCatching null", helper)
         self.assertIn("proxySettings", helper)
         self.assertIn('get("tag")', helper)
         self.assertIn("sockopt?.dialerProxy", helper)

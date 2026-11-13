@@ -19,6 +19,15 @@ import com.v2ray.ang.dto.V2rayConfig
 internal object SubscriptionOutboundIdentity {
     fun serialize(profile: ServerConfig, gson: Gson): String? = runCatching {
         val primary = profile.getProxyOutbound() ?: return@runCatching null
+        if (profile.configType == EConfigType.CUSTOM) {
+            // Xray uses the first outbound when no routing rule matches.
+            // getProxyOutbound() instead finds the first recognized proxy type.
+            // If these differ, the fallback may silently change accounts;
+            // do not carry the old selection without a complete identity.
+            val fallback = profile.fullConfig?.outbounds?.firstOrNull()
+                ?: return@runCatching null
+            if (fallback !== primary) return@runCatching null
+        }
         val directIdentity = gson.toJson(primary)
         val directReferences = references(primary, gson) ?: return@runCatching null
         // CUSTOM routing can select outbounds beyond the primary or its chain.

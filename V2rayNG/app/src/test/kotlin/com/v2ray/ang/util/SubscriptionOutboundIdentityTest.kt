@@ -230,4 +230,24 @@ class SubscriptionOutboundIdentityTest {
         assertTrue(sameIdentity(
             custom(proxy(), emptyList(), rules), custom(proxy(), emptyList(), rules)))
     }
+
+    @Test fun customWithDifferentFallbackOutboundFailsClosed() {
+        // Xray's default path uses the first outbound, not the first proxy.
+        val original = custom(proxy(), emptyList())
+        val matchingProxyWithChangedFallback = custom(proxy(), emptyList())
+        val direct = V2rayConfig.OutboundBean(tag = "direct", protocol = "freedom")
+        original.fullConfig!!.outbounds.add(0, direct)
+        matchingProxyWithChangedFallback.fullConfig!!.outbounds.add(0,
+            direct.copy(sendThrough = "192.0.2.10"))
+        assertEquals(
+            outboundEncoder.toJson(original.getProxyOutbound()),
+            outboundEncoder.toJson(matchingProxyWithChangedFallback.getProxyOutbound()),
+        )
+        assertNull(SubscriptionOutboundIdentity.serialize(original, outboundEncoder))
+        assertFalse(sameIdentity(original, matchingProxyWithChangedFallback))
+        assertNull(SubscriptionReplacementPlan.matchSelected(
+            "old", setOf("old"), original,
+            mapOf("new" to matchingProxyWithChangedFallback), ::sameIdentity,
+        ))
+    }
 }

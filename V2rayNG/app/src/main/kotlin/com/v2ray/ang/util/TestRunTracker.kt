@@ -25,6 +25,16 @@ internal class TestRunTracker {
         return run.id == runId && guid in run.guids
     }
 
+    /**
+     * Serialize the final run check and persistent write with forgetGuid.
+     * Editors call forgetProfile before their final clear of stale results.
+     */
+    @Synchronized
+    fun publishIfCurrent(runId: String, guid: String, publish: () -> Boolean): Boolean {
+        if (!accepts(runId, guid)) return false
+        return publish()
+    }
+
     @Synchronized
     fun forgetGuid(guid: String) {
         if (guid.isBlank()) return

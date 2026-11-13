@@ -173,10 +173,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (!testRuns.accepts(runId, guid)) continue
                     val delay = SpeedtestUtil.tcping(address, port)
                     withContext(Dispatchers.Main) {
-                        if (testRuns.accepts(runId, guid) && MmkvManager.decodeServerConfig(guid) != null) {
-                            MmkvManager.encodeServerTestDelayMillis(guid, delay)
-                            updateListAction.value = getPosition(guid)
+                        // Share forgetGuid's lock through the final persistent write.
+                        val published = testRuns.publishIfCurrent(runId, guid) {
+                            if (MmkvManager.decodeServerConfig(guid) == null) false
+                            else {
+                                MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                                true
+                            }
                         }
+                        if (published) updateListAction.value = getPosition(guid)
                     }
                 }
             }
@@ -291,12 +296,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> {
                     val result = intent.getSerializableExtra("content") as? ConfigTestResult ?: return
-                    if (testRuns.accepts(result.runId, result.guid) &&
-                        MmkvManager.decodeServerConfig(result.guid) != null
-                    ) {
-                        MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
-                        updateListAction.value = getPosition(result.guid)
+                    val published = testRuns.publishIfCurrent(result.runId, result.guid) {
+                        if (MmkvManager.decodeServerConfig(result.guid) == null) false
+                        else {
+                            MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
+                            true
+                        }
                     }
+                    if (published) updateListAction.value = getPosition(result.guid)
                 }
             }
         }

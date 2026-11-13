@@ -4,6 +4,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TestRunTrackerTest {
     @Test fun startingNewRunRejectsLatePreviousCallbacks() {
@@ -58,6 +61,53 @@ class TestRunTrackerTest {
         assertFalse(tracker.accepts(stale, "edited"))
         assertTrue(tracker.accepts(fresh, "edited"))
         tracker.invalidate()
+    }
+
+    @Test fun guardedPublishRejectsStaleAndForgottenProfileWrites() {
+        val tracker = TestRunTracker()
+        val run = tracker.begin(listOf("edited"))
+        var writes = 0
+        assertTrue(tracker.publishIfCurrent(run, "edited") { writes++; true })
+        tracker.forgetGuid("edited")
+        assertFalse(tracker.publishIfCurrent(run, "edited") { writes++; true })
+        assertEquals(1, writes)
+    }
+
+    @Test fun forgetWaitsForTheFinalWriteToFinish() {
+        val tracker = TestRunTracker()
+        val run = tracker.begin(listOf("edited"))
+        val enteredWrite = CountDownLatch(1)
+        val finishWrite = CountDownLatch(1)
+        val forgetStarted = CountDownLatch(1)
+        val forgot = CountDownLatch(1)
+        val published = AtomicBoolean(false)
+        val worker = Thread {
+            published.set(tracker.publishIfCurrent(run, "edited") {
+                enteredWrite.countDown()
+                check(finishWrite.await(5, TimeUnit.SECONDS))
+                true
+            })
+        }
+        worker.start()
+        assertTrue(enteredWrite.await(5, TimeUnit.SECONDS))
+        val editor = Thread {
+            forgetStarted.countDown()
+            tracker.forgetGuid("edited")
+            forgot.countDown()
+        }
+        editor.start()
+        assertTrue(forgetStarted.await(5, TimeUnit.SECONDS))
+        try {
+            assertFalse("The edit must not overtake the guarded write",
+                forgot.await(80, TimeUnit.MILLISECONDS))
+        } finally {
+            finishWrite.countDown()
+            worker.join(5000)
+            editor.join(5000)
+        }
+        assertTrue(published.get())
+        assertEquals(0L, forgot.count)
+        assertFalse(tracker.accepts(run, "edited"))
     }
 
     @Test fun cancellationRejectsAllRemainingResults() {

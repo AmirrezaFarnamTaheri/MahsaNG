@@ -17,6 +17,8 @@ class TcpBoundedBatchContract(unittest.TestCase):
         self.assertIn("queue.claim()", method)
         self.assertIn("testRuns.accepts(runId,", method)
         self.assertIn("MmkvManager.encodeServerTestDelayMillis(", method)
+        self.assertIn("testRuns.publishIfCurrent(runId, guid)", method)
+        self.assertIn("testRuns.publishIfCurrent(result.runId, result.guid)", source)
         self.assertNotIn("for (item in snapshot) {\n", method)
 
     def test_concurrency_is_a_saved_tcp_only_setting(self):

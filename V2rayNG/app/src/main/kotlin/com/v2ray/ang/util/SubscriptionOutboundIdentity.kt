@@ -1,6 +1,7 @@
 package com.v2ray.ang.util
 
 import com.google.gson.Gson
+import com.v2ray.ang.dto.EConfigType
 import com.v2ray.ang.dto.ServerConfig
 import com.v2ray.ang.dto.V2rayConfig
 
@@ -20,11 +21,27 @@ internal object SubscriptionOutboundIdentity {
         val primary = profile.getProxyOutbound() ?: return@runCatching null
         val directIdentity = gson.toJson(primary)
         val directReferences = references(primary, gson) ?: return@runCatching null
-        if (directReferences.isEmpty()) return@runCatching directIdentity
+        // CUSTOM routing can select outbounds beyond the primary or its chain.
+        val routing = if (profile.configType == EConfigType.CUSTOM) {
+            profile.fullConfig?.routing ?: return@runCatching null
+        } else null
+        val routedTags = mutableSetOf<String>()
+        if (routing != null) {
+            for (rule in routing.rules) {
+                // A balancer's runtime choice cannot be safely resolved here.
+                if (!rule.balancerTag.isNullOrBlank() || rule.outboundTag.isBlank()) {
+                    return@runCatching null
+                }
+                routedTags.add(rule.outboundTag)
+            }
+        }
+        if (directReferences.isEmpty() && routedTags.isEmpty()) return@runCatching directIdentity
 
-        // A chained outbound without its full graph cannot be safely compared.
+        // Unresolvable or ambiguous routing/chain targets must fail closed.
         val candidates = profile.fullConfig?.outbounds ?: return@runCatching null
         val byTag = candidates.groupBy { it.tag }
+        if (routedTags.any { byTag[it]?.size != 1 }) return@runCatching null
+        val allReferences = (directReferences + routedTags.filter { it != primary.tag }).distinct()
         val resolved = mutableMapOf<String, V2rayConfig.OutboundBean>()
         val visiting = mutableSetOf(primary.tag)
 
@@ -41,12 +58,15 @@ internal object SubscriptionOutboundIdentity {
             return true
         }
 
-        if (!directReferences.all(::visit)) return@runCatching null
+        if (!allReferences.all(::visit)) return@runCatching null
         // Sorting by tag makes identity independent of unrelated outbound order.
-        gson.toJson(linkedMapOf<String, Any>(
+        val identity = linkedMapOf<String, Any>(
             "primary" to primary,
             "referencedOutbounds" to resolved.toSortedMap(),
-        ))
+        )
+        // Include routing conditions so changing destinations cannot silently retarget.
+        if (routedTags.isNotEmpty() && routing != null) identity["routing"] = routing
+        gson.toJson(identity)
     }.getOrNull()
 
     private fun references(outbound: V2rayConfig.OutboundBean, gson: Gson): List<String>? {

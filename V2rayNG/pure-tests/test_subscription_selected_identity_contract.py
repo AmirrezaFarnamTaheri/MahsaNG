@@ -31,6 +31,10 @@ class SelectedSubscriptionIdentityContractTest(unittest.TestCase):
         self.assertIn("byTag[tag]?.singleOrNull()", helper)
         self.assertIn("refs.all(::visit)", helper)
         self.assertIn("resolved.toSortedMap()", helper)
+        self.assertIn("routing.rules", helper)
+        self.assertIn("routedTags", helper)
+        self.assertIn("byTag[it]?.size != 1", helper)
+        self.assertIn('identity["routing"] = routing', helper)
         self.assertIn("return@runCatching null", helper)
 
     def test_missing_outbound_identity_cannot_match(self):

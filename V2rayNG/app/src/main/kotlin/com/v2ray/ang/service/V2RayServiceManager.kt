@@ -331,7 +331,7 @@ object V2RayServiceManager {
         val service = serviceControl?.get()?.getService() ?: return
         val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
             ?.takeIf { it.isNotBlank() }
-        if (guid == null || !v2rayPoint.isRunning) {
+        if (guid == null || !v2rayPoint.isRunning || coreStopGate.isStopping()) {
             // A rejected request must terminate the UI's "testing" state.
             MessageUtil.sendMsg2UI(
                 service,

@@ -8,6 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Android-module regression: exercise real outbound DTOs and Gson, not handwritten JSON. */
@@ -114,6 +115,7 @@ class SubscriptionOutboundIdentityTest {
     private fun custom(
         proxy: V2rayConfig.OutboundBean,
         additionalOutbounds: List<V2rayConfig.OutboundBean>,
+        rules: List<V2rayConfig.RoutingBean.RulesBean> = emptyList(),
     ): ServerConfig {
         val config = ServerConfig.create(EConfigType.CUSTOM)
         config.fullConfig = V2rayConfig(
@@ -122,7 +124,7 @@ class SubscriptionOutboundIdentityTest {
             inbounds = arrayListOf(),
             outbounds = ArrayList(listOf(proxy) + additionalOutbounds),
             dns = V2rayConfig.DnsBean(),
-            routing = V2rayConfig.RoutingBean(domainStrategy = "AsIs", rules = arrayListOf()),
+            routing = V2rayConfig.RoutingBean(domainStrategy = "AsIs", rules = ArrayList(rules)),
         )
         return config
     }
@@ -185,5 +187,47 @@ class SubscriptionOutboundIdentityTest {
         assertEquals("new", SubscriptionReplacementPlan.matchSelected(
             "old", setOf("old"), before, mapOf("new" to after), ::sameIdentity,
         ))
+    }
+
+    @Test fun routedOutboundCredentialsCannotRetargetSelection() {
+        val rules = listOf(V2rayConfig.RoutingBean.RulesBean(outboundTag = "routed"))
+        val selected = custom(proxy(), listOf(bridge("original", tag = "routed")), rules)
+        val changed = custom(proxy(), listOf(bridge("other-account", tag = "routed")), rules)
+        val unchanged = custom(proxy(), listOf(bridge("original", tag = "routed")), rules)
+        assertEquals(outboundEncoder.toJson(selected.getProxyOutbound()),
+            outboundEncoder.toJson(changed.getProxyOutbound()))
+        assertFalse(sameIdentity(selected, changed))
+        assertEquals("same", SubscriptionReplacementPlan.matchSelected(
+            "old", setOf("old"), selected,
+            linkedMapOf("wrong" to changed, "same" to unchanged), ::sameIdentity,
+        ))
+    }
+
+    @Test fun routedOutboundChainCredentialsAreResolvedTransitively() {
+        val rules = listOf(V2rayConfig.RoutingBean.RulesBean(outboundTag = "routed"))
+        val before = custom(proxy(), listOf(
+            bridge("middle", tag = "routed", dialerTag = "egress"),
+            bridge("original", tag = "egress")), rules)
+        val after = custom(proxy(), listOf(
+            bridge("middle", tag = "routed", dialerTag = "egress"),
+            bridge("changed", tag = "egress")), rules)
+        assertFalse(sameIdentity(before, after))
+    }
+
+    @Test fun unresolvedRoutingAndDynamicBalancersFailClosed() {
+        val missing = custom(proxy(), listOf(bridge("password")),
+            listOf(V2rayConfig.RoutingBean.RulesBean(outboundTag = "not-present")))
+        val dynamic = custom(proxy(), listOf(bridge("password")),
+            listOf(V2rayConfig.RoutingBean.RulesBean(balancerTag = "dynamic")))
+        for (profile in listOf(missing, dynamic)) {
+            assertNull(SubscriptionOutboundIdentity.serialize(profile, outboundEncoder))
+            assertFalse(sameIdentity(profile, profile))
+        }
+    }
+
+    @Test fun routingToPrimaryIsNotAnOutboundChainCycle() {
+        val rules = listOf(V2rayConfig.RoutingBean.RulesBean(outboundTag = "proxy"))
+        assertTrue(sameIdentity(
+            custom(proxy(), emptyList(), rules), custom(proxy(), emptyList(), rules)))
     }
 }

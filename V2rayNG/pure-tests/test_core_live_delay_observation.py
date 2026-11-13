@@ -33,9 +33,9 @@ class LiveCoreDelayObservationContract(unittest.TestCase):
         self.assertIn("liveDelayJob?.cancel()", self.top)
 
     def test_rejected_delay_requests_terminate_the_testing_state(self):
-        self.assertIn("if (guid == null || !v2rayPoint.isRunning)", self.measure)
+        self.assertIn("if (guid == null || !v2rayPoint.isRunning || coreStopGate.isStopping())", self.measure)
         rejection = self.measure.split(
-            "if (guid == null || !v2rayPoint.isRunning)", 1
+            "if (guid == null || !v2rayPoint.isRunning || coreStopGate.isStopping())", 1
         )[1].split("val runId = liveDelayTracker.begin", 1)[0]
         self.assertIn("AppConfig.MSG_MEASURE_DELAY_SUCCESS", rejection)
         self.assertIn("service.getString(R.string.connection_test_error", rejection)

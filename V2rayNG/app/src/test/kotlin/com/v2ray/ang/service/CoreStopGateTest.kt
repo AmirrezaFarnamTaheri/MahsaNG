@@ -16,6 +16,17 @@ class CoreStopGateTest {
         assertTrue(gate.requestStart())
     }
 
+    @Test fun stoppingStateRemainsVisibleUntilAsyncStopCompletes() {
+        val gate = CoreStopGate()
+        assertFalse(gate.isStopping())
+        val token = gate.beginStop()!!
+        assertTrue(gate.isStopping())
+        assertEquals(null, gate.beginStop())
+        assertTrue(gate.isStopping())
+        gate.completeStop(token, success = true)
+        assertFalse(gate.isStopping())
+    }
+
     @Test fun duplicateNativeStopPreservesDeferredRestartWithoutSchedulingSecondStop() {
         val gate = CoreStopGate()
         val token = gate.beginStop()!!

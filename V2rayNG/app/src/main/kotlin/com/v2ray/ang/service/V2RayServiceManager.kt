@@ -23,6 +23,7 @@ import com.v2ray.ang.extension.toast
 import com.v2ray.ang.ui.MainActivity
 import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.TestRunTracker
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.util.V2rayConfigUtil
 import go.Seq
@@ -47,6 +48,18 @@ object V2RayServiceManager {
     private val coreStopGate = CoreStopGate()
     // Native cleanup must finish even after an Android Service has been stopped.
     private val nativeCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Live delay JNI is blocking: invalidating the owner drops old results even
+    // if the native call cannot be physically interrupted.
+    private val liveDelayScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val liveDelayTracker = TestRunTracker()
+    private var liveDelayJob: Job? = null
+
+    // Called only while holding V2RayServiceManager's monitor (start/stop/measure).
+    private fun invalidateLiveDelay() {
+        liveDelayTracker.invalidate()
+        liveDelayJob?.cancel()
+        liveDelayJob = null
+    }
 
     val v2rayPoint: V2RayPoint = Libv2ray.newV2RayPoint(V2RayCallback(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
     private val mMsgReceive = ReceiveMessageHandler()
@@ -156,6 +169,7 @@ object V2RayServiceManager {
             ?.takeIf { it.isNotBlank() } ?: return
         val config = MmkvManager.decodeServerConfig(guid) ?: return
         if (v2rayPoint.isRunning) return
+        invalidateLiveDelay()
         val result = V2rayConfigUtil.getV2rayConfig(service, guid)
         if (!result.status) {
             MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
@@ -221,6 +235,7 @@ object V2RayServiceManager {
 
     @Synchronized
     fun stopV2rayPoint() {
+        invalidateLiveDelay()
         // Idempotent while an earlier stopLoop remains in flight.
         val stopToken = coreStopGate.beginStop() ?: return
         val service = serviceControl?.get()?.getService()
@@ -309,26 +324,43 @@ object V2RayServiceManager {
         }
     }
 
+    @Synchronized
     private fun measureV2rayDelay() {
-        GlobalScope.launch(Dispatchers.IO) {
-            val service = serviceControl?.get()?.getService() ?: return@launch
+        // Only the most recent request for this selected profile can publish.
+        invalidateLiveDelay()
+        val service = serviceControl?.get()?.getService() ?: return
+        val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
+            ?.takeIf { it.isNotBlank() } ?: return
+        if (!v2rayPoint.isRunning) return
+
+        val runId = liveDelayTracker.begin(listOf(guid))
+        liveDelayJob = liveDelayScope.launch {
             var time = -1L
             var errstr = ""
-            if (v2rayPoint.isRunning) {
-                try {
-                    time = v2rayPoint.measureDelay(AppConfig.DelayTestUrl)
-                } catch (e: Exception) {
-                    Log.d(ANG_PACKAGE, "measureV2rayDelay: $e")
-                    errstr = e.message?.substringAfter("\":") ?: "empty message"
-                }
-            }
-            val result = if (time == -1L) {
-                service.getString(R.string.connection_test_error, errstr)
-            } else {
-                service.getString(R.string.connection_test_available, time)
+            try {
+                time = v2rayPoint.measureDelay(AppConfig.DelayTestUrl)
+            } catch (cancelled: CancellationException) {
+                return@launch
+            } catch (e: Exception) {
+                Log.d(ANG_PACKAGE, "measureV2rayDelay: $e")
+                errstr = e.message?.substringAfter("\":") ?: "empty message"
             }
 
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, result)
+            // Serialize this short publish gate with core start/stop so an
+            // obsolete JNI completion cannot emit a success after disconnect.
+            synchronized(V2RayServiceManager) {
+                if (!isActive || !v2rayPoint.isRunning ||
+                    serviceControl?.get()?.getService() !== service ||
+                    mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER) != guid ||
+                    !liveDelayTracker.accepts(runId, guid)
+                ) return@synchronized
+                val result = if (time == -1L) {
+                    service.getString(R.string.connection_test_error, errstr)
+                } else {
+                    service.getString(R.string.connection_test_available, time)
+                }
+                MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, result)
+            }
         }
     }
 

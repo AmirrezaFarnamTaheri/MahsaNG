@@ -52,6 +52,31 @@ class SubscriptionReplacementPlanTest {
         assertEquals("new2", selected)
     }
 
+    @Test fun matchingHostAndPortWithDifferentCredentialsMustNotRetargetSelection() {
+        val selected = """{"address":"example.org","port":443,"user":"original","tls":"example.org"}"""
+        val anotherAccount = """{"address":"example.org","port":443,"user":"other","tls":"example.org"}"""
+        val changedTransport = """{"address":"example.org","port":443,"user":"original","tls":"different.example"}"""
+        val replacement = selected
+        val result = SubscriptionReplacementPlan.matchSelected(
+            selectedGuid = "old",
+            removedGuids = setOf("old"),
+            selectedConfig = selected,
+            newConfigs = linkedMapOf(
+                "wrong-account" to anotherAccount,
+                "wrong-transport" to changedTransport,
+                "same-account" to replacement,
+            ),
+            sameEndpoint = SubscriptionReplacementPlan::matchesOutbound,
+        )
+        assertEquals("same-account", result)
+        assertEquals(null, SubscriptionReplacementPlan.matchSelected(
+            "old", setOf("old"), selected, mapOf("wrong-account" to anotherAccount),
+            SubscriptionReplacementPlan::matchesOutbound,
+        ))
+        assertEquals(false, SubscriptionReplacementPlan.matchesOutbound(null, null))
+        assertEquals(false, SubscriptionReplacementPlan.matchesOutbound("", ""))
+    }
+
     @Test fun selectedProfileOutsideReplacedSubscriptionStaysSelected() {
         val selected = SubscriptionReplacementPlan.matchSelected(
             selectedGuid = "other",

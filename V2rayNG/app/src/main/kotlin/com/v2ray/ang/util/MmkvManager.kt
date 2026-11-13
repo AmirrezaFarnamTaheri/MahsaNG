@@ -119,13 +119,17 @@ object MmkvManager {
 
             val selectedGuid = main.decodeString(KEY_SELECTED_SERVER)?.takeIf { it.isNotBlank() }
             val selectedConfig = selectedGuid?.let { runCatching { decodeServerConfig(it) }.getOrNull() }
+            val outboundEncoder = Gson()
             val selectedAfter = SubscriptionReplacementPlan.matchSelected(
                 selectedGuid, oldGuids, selectedConfig, stagedProfiles
             ) { before, after ->
-                before.getProxyOutbound()?.getServerAddress() ==
-                    after.getProxyOutbound()?.getServerAddress() &&
-                    before.getProxyOutbound()?.getServerPort() ==
-                    after.getProxyOutbound()?.getServerPort()
+                // Matching host:port alone can silently select another account.
+                // Compare the complete outbound, including credentials, protocol,
+                // TLS/transport and chain settings, before carrying the selection.
+                SubscriptionReplacementPlan.matchesOutbound(
+                    before.getProxyOutbound()?.let { outboundEncoder.toJson(it) },
+                    after.getProxyOutbound()?.let { outboundEncoder.toJson(it) },
+                )
             } ?: if (selectedGuid == null) stagedProfiles.keys.firstOrNull() else null
 
             val written = mutableListOf<String>()

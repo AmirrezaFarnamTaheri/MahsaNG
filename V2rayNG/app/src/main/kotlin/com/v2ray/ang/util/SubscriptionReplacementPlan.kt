@@ -18,7 +18,16 @@ internal object SubscriptionReplacementPlan {
         return staged + existing.filterNot { it in replaced }
     }
 
-    /** Keep other subscriptions selected; follow a matching endpoint within the replacement. */
+    /**
+     * Only reuse a selected profile when the complete outbound identity matches.
+     * Callers serialize the entire outbound (protocol, credentials, stream/TLS,
+     * transport and chained settings), never just a shared host and port.
+     * An undecodable identity fails closed rather than selecting another account.
+     */
+    fun matchesOutbound(previous: String?, candidate: String?): Boolean =
+        !previous.isNullOrBlank() && previous == candidate
+
+    /** Keep other subscriptions selected; follow a matching full outbound identity. */
     fun <T> matchSelected(
         selectedGuid: String?,
         removedGuids: Set<String>,

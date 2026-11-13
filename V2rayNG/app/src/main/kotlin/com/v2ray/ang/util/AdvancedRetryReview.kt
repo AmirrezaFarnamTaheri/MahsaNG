@@ -9,6 +9,7 @@ internal enum class RetryReviewRule {
     LAST_THREE_FAILED_ATTEMPTS,
 }
 internal enum class RetryRunPhase { RUNNING, PAUSED, STOPPED, FINISHED }
+internal enum class RetryProbeMethod { TCP_CONNECT, PROXY_HTTP }
 
 /** Conservative, finite limits for the optional advanced diagnostic preview. */
 internal data class AdvancedRetrySettings(
@@ -43,6 +44,7 @@ internal class AdvancedRetryReview(
     val runId: String,
     profileRevisions: Map<String, String>,
     val settings: AdvancedRetrySettings,
+    val method: RetryProbeMethod = RetryProbeMethod.TCP_CONNECT,
 ) {
     private val revisions = profileRevisions.toMap()
     private val observations = mutableMapOf<String, MutableMap<Int, MutableMap<Int, RetryObservation>>>()
@@ -52,6 +54,7 @@ internal class AdvancedRetryReview(
     init {
         require(runId.isNotBlank())
         require(revisions.keys.none { it.isBlank() })
+        require(revisions.values.none { it.isBlank() })
     }
 
     @Synchronized
@@ -95,9 +98,10 @@ internal class AdvancedRetryReview(
         pass: Int,
         attempt: Int,
         result: RetryObservation,
+        observedMethod: RetryProbeMethod = method,
     ): Boolean {
         if (phase != RetryRunPhase.RUNNING && phase != RetryRunPhase.PAUSED) return false
-        if (eventRunId != runId || revisions[guid] != testedRevision) return false
+        if (eventRunId != runId || revisions[guid] != testedRevision || observedMethod != method) return false
         if (pass !in 1..settings.passes || attempt !in 1..settings.attemptsPerPass) return false
         val previous = observations[guid]?.get(pass)
         if (previous?.containsKey(attempt) == true) return false

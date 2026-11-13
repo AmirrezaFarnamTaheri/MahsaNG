@@ -28,6 +28,20 @@ class AdvancedRetryReviewTest {
         assertFalse(ledger.record("run", "a", "rev-1", 1, 1, RetryObservation.FAIL))
     }
 
+    @Test fun methodMismatchesAndBlankRevisionsFailClosed() {
+        assertThrows(IllegalArgumentException::class.java) {
+            AdvancedRetryReview("bad", mapOf("a" to ""), AdvancedRetrySettings(1, 1, 1))
+        }
+        val ledger = AdvancedRetryReview(
+            "run", mapOf("a" to "rev"), AdvancedRetrySettings(1, 1, 1),
+            method = RetryProbeMethod.PROXY_HTTP,
+        )
+        assertFalse(ledger.record("run", "a", "rev", 1, 1, RetryObservation.FAIL,
+            observedMethod = RetryProbeMethod.TCP_CONNECT))
+        assertTrue(ledger.record("run", "a", "rev", 1, 1, RetryObservation.SUCCESS,
+            observedMethod = RetryProbeMethod.PROXY_HTTP))
+    }
+
     @Test fun pauseBlocksSchedulingButAcceptsAnAlreadyStartedAttempt() {
         val ledger = AdvancedRetryReview("run", mapOf("a" to "rev"), AdvancedRetrySettings(2, 3, 1))
         assertTrue(ledger.pause())

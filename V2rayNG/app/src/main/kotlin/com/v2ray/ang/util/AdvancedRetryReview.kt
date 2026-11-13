@@ -141,7 +141,11 @@ internal class AdvancedRetryReview(
                     if (passOutcomes.lastOrNull() == RetryPassOutcome.UNKNOWN) false
                     else {
                         val recent = (1..settings.passes).flatMap { pass ->
-                            observations[guid]?.get(pass)?.toSortedMap()?.values.orEmpty()
+                            val attempts = observations[guid]?.get(pass)?.toSortedMap()?.values.orEmpty()
+                            // Incomplete passes have unknown evidence that interrupts a failure streak.
+                            if (attempts.size == settings.attemptsPerPass ||
+                                RetryObservation.SUCCESS in attempts
+                            ) attempts else listOf(RetryObservation.UNKNOWN)
                         }
                         recent.size >= 3 && recent.takeLast(3).all { it == RetryObservation.FAIL }
                     }

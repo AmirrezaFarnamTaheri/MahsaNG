@@ -104,6 +104,35 @@ class AdvancedRetryReviewTest {
             RetryReviewRule.LAST_THREE_FAILED_ATTEMPTS, mapOf("a" to "rev")).isEmpty())
     }
 
+
+    @Test fun skippedOrPartialPassBreaksCrossPassFailureStreak() {
+        val settings = AdvancedRetrySettings(2, 3, 1)
+        for (middle in listOf<RetryObservation?>(null, RetryObservation.FAIL, RetryObservation.UNKNOWN)) {
+            val run = AdvancedRetryReview("run", mapOf("a" to "rev"), settings)
+            for (pass in listOf(1, 3)) {
+                for (attempt in 1..2) {
+                    assertTrue(run.record("run", "a", "rev", pass, attempt, RetryObservation.FAIL))
+                }
+            }
+            if (middle != null) {
+                assertTrue(run.record("run", "a", "rev", 2, 1, middle))
+            }
+            assertEquals(RetryPassOutcome.UNKNOWN, run.passResult("a", 2))
+            assertTrue(run.finish())
+            assertTrue("Incomplete middle pass must break the streak: $middle",
+                run.reviewMatches(RetryReviewRule.LAST_THREE_FAILED_ATTEMPTS,
+                    mapOf("a" to "rev")).isEmpty())
+        }
+
+        val completed = AdvancedRetryReview("run", mapOf("a" to "rev"), settings)
+        for (pass in 1..3) for (attempt in 1..2) {
+            assertTrue(completed.record("run", "a", "rev", pass, attempt, RetryObservation.FAIL))
+        }
+        assertTrue(completed.finish())
+        assertEquals(setOf("a"), completed.reviewMatches(
+            RetryReviewRule.LAST_THREE_FAILED_ATTEMPTS, mapOf("a" to "rev")))
+    }
+
     @Test fun reviewOnlyAvailableAfterFinishAndNeverTriggersRemoval() {
         val run = AdvancedRetryReview("run", mapOf("a" to "rev"), AdvancedRetrySettings(1, 3, 1))
         for (pass in 1..3) run.record("run", "a", "rev", pass, 1, RetryObservation.FAIL)

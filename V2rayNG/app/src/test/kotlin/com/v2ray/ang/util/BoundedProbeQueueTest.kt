@@ -37,16 +37,23 @@ class BoundedProbeQueueTest {
     @Test fun concurrentWorkersClaimEachTargetExactlyOnce() {
         val queue = BoundedProbeQueue((0 until 1000).toList(), 8)
         val claimed = Collections.synchronizedSet(mutableSetOf<Int>())
+        val failures = Collections.synchronizedList(mutableListOf<Throwable>())
         val workers = (0 until queue.workerCount).map {
             Thread {
-                while (true) {
-                    val item = queue.claim() ?: break
-                    check(claimed.add(item)) { "duplicate target: $item" }
+                try {
+                    while (true) {
+                        val item = queue.claim() ?: break
+                        check(claimed.add(item)) { "duplicate target: $item" }
+                    }
+                } catch (failure: Throwable) {
+                    failures.add(failure)
                 }
             }
         }
         workers.forEach(Thread::start)
         workers.forEach(Thread::join)
+        // Thread.join does not propagate worker exceptions to JUnit.
+        assertTrue("Worker failures: " + failures, failures.isEmpty())
         assertEquals(1000, claimed.size)
         assertTrue(claimed.contains(999))
     }

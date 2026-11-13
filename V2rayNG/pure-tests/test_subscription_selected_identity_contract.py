@@ -12,7 +12,9 @@ class SelectedSubscriptionIdentityContractTest(unittest.TestCase):
         source = MANAGER.read_text(encoding="utf-8")
         selected = source.split(
             "val selectedAfter = SubscriptionReplacementPlan.matchSelected(", 1
-        )[1].split(") ?: if (selectedGuid", 1)[0]
+        )[1]
+        selected, closing, _ = selected.partition("} ?: if (selectedGuid")
+        self.assertTrue(closing, "Selected-profile matching boundary not found")
         self.assertIn("SubscriptionReplacementPlan.matchesOutbound(", selected)
         self.assertEqual(2, selected.count("getProxyOutbound()?.let"))
         self.assertIn("outboundEncoder.toJson(it)", selected)

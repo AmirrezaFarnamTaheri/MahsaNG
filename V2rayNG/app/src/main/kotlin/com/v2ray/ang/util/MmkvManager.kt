@@ -127,8 +127,8 @@ object MmkvManager {
                 // Compare the complete outbound, including credentials, protocol,
                 // TLS/transport and chain settings, before carrying the selection.
                 SubscriptionReplacementPlan.matchesOutbound(
-                    before.getProxyOutbound()?.let { outboundEncoder.toJson(it) },
-                    after.getProxyOutbound()?.let { outboundEncoder.toJson(it) },
+                    SubscriptionOutboundIdentity.serialize(before, outboundEncoder),
+                    SubscriptionOutboundIdentity.serialize(after, outboundEncoder),
                 )
             } ?: if (selectedGuid == null) stagedProfiles.keys.firstOrNull() else null
 

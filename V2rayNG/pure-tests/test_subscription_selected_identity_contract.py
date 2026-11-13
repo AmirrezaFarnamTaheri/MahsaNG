@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1] / "app/src/main/kotlin/com/v2ray/ang"
 MANAGER = ROOT / "util/MmkvManager.kt"
 PLAN = ROOT / "util/SubscriptionReplacementPlan.kt"
+IDENTITY = ROOT / "util/SubscriptionOutboundIdentity.kt"
 
 
 class SelectedSubscriptionIdentityContractTest(unittest.TestCase):
@@ -16,10 +17,21 @@ class SelectedSubscriptionIdentityContractTest(unittest.TestCase):
         selected, closing, _ = selected.partition("} ?: if (selectedGuid")
         self.assertTrue(closing, "Selected-profile matching boundary not found")
         self.assertIn("SubscriptionReplacementPlan.matchesOutbound(", selected)
-        self.assertEqual(2, selected.count("getProxyOutbound()?.let"))
-        self.assertIn("outboundEncoder.toJson(it)", selected)
+        self.assertIn("SubscriptionOutboundIdentity.serialize(before, outboundEncoder)", selected)
+        self.assertIn("SubscriptionOutboundIdentity.serialize(after, outboundEncoder)", selected)
         self.assertNotIn("getServerAddress()", selected)
         self.assertNotIn("getServerPort()", selected)
+
+    def test_chain_dependency_is_resolved_transitively_and_fails_closed(self):
+        helper = IDENTITY.read_text(encoding="utf-8")
+        self.assertIn("profile.getProxyOutbound()", helper)
+        self.assertIn("proxySettings", helper)
+        self.assertIn('get("tag")', helper)
+        self.assertIn("sockopt?.dialerProxy", helper)
+        self.assertIn("byTag[tag]?.singleOrNull()", helper)
+        self.assertIn("refs.all(::visit)", helper)
+        self.assertIn("resolved.toSortedMap()", helper)
+        self.assertIn("return@runCatching null", helper)
 
     def test_missing_outbound_identity_cannot_match(self):
         plan = PLAN.read_text(encoding="utf-8")

@@ -330,8 +330,16 @@ object V2RayServiceManager {
         invalidateLiveDelay()
         val service = serviceControl?.get()?.getService() ?: return
         val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
-            ?.takeIf { it.isNotBlank() } ?: return
-        if (!v2rayPoint.isRunning) return
+            ?.takeIf { it.isNotBlank() }
+        if (guid == null || !v2rayPoint.isRunning) {
+            // A rejected request must terminate the UI's "testing" state.
+            MessageUtil.sendMsg2UI(
+                service,
+                AppConfig.MSG_MEASURE_DELAY_SUCCESS,
+                service.getString(R.string.connection_test_error, "request rejected")
+            )
+            return
+        }
 
         val runId = liveDelayTracker.begin(listOf(guid))
         liveDelayJob = liveDelayScope.launch {

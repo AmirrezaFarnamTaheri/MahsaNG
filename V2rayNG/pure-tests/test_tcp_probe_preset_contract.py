@@ -29,8 +29,10 @@ class TcpProbePresetIntegrationTest(unittest.TestCase):
     def test_udp_and_custom_profiles_are_skipped_before_tcp_connect(self):
         main = (KOTLIN / "viewmodel/MainViewModel.kt").read_text(encoding="utf-8")
         code = main.split("fun testAllTcping() {", 1)[1].split("fun testAllRealPing()", 1)[0]
-        self.assertIn("TcpProbeEligibility.supportsTcpConnect(", code)
-        self.assertLess(code.index("TcpProbeEligibility.supportsTcpConnect("),
+        self.assertIn("if (!TcpProbeEligibility.supportsTcpConnect(", code)
+        self.assertLess(code.index("if (!TcpProbeEligibility.supportsTcpConnect("),
+                        code.index("BoundedProbeQueue(targets"))
+        self.assertLess(code.index("BoundedProbeQueue(targets"),
                         code.index("SpeedtestUtil.tcping("))
         self.assertIn("MmkvManager.clearTestDelayResults(visibleGuids)", main)
 

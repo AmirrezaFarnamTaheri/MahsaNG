@@ -24,7 +24,7 @@ object SpeedtestUtil {
         tcpingEvidence(url, port).delayMs
 
     /** Same direct socket-connect preset as tcping; only adds transient safe evidence. */
-    suspend fun tcpingEvidence(url: String, port: Int): TcpProbeEvidence {
+    internal suspend fun tcpingEvidence(url: String, port: Int): TcpProbeEvidence {
         val preset = TcpProbePreset.fromStored(tcpSettings?.decodeString(AppConfig.PREF_TCP_PROBE_PRESET))
         val context = coroutineContext
         return TcpProbeEvidenceRunner.measure(preset, cancelled = { !context.isActive }) { timeoutMs ->

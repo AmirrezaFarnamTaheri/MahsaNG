@@ -44,6 +44,8 @@ val productionHelpers = listOf(
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
+    "DnsWire",
+    "DnsProbe",
 )
 
 sourceSets {

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dns_diagnostics_title">عیب‌یابی و اسکن DNS</string>
+    <string name="dns_diagnostics_route_warning">پرس‌وجوهای DNS فقط برای بررسی و از داخل برنامه ارسال می‌شوند. ممکن است از VPN فعال یا شبکه دستگاه عبور کنند؛ این نتایج نه مسیر واقعی Xray را ثابت می‌کنند و نه به‌تنهایی نشت DNS را نشان می‌دهند. هیچ کانفیگ یا تنظیم DNS تغییر نمی‌کند.</string>
+    <string name="dns_diagnostics_domains">دامنه‌ها (با ویرگول یا خط جدید، حداکثر ۱۲ دامنه)</string>
+    <string name="dns_diagnostics_resolvers">IP سرورهای DNS و در صورت نیاز پورت (حداکثر ۴، مانند 1.1.1.1)</string>
+    <string name="dns_diagnostics_types">نوع رکورد (A, AAAA, CNAME, MX, TXT, NS, SOA)</string>
+    <string name="dns_diagnostics_timeout">مهلت هر تلاش UDP/TCP برحسب میلی‌ثانیه (۳۰۰ تا ۱۰۰۰۰)</string>
+    <string name="dns_diagnostics_one">بررسی اولین دامنه و DNS</string>
+    <string name="dns_diagnostics_scan">اسکن دامنه‌ها و DNSهای انتخاب‌شده</string>
+    <string name="dns_diagnostics_stop">توقف اسکن</string>
+    <string name="dns_diagnostics_filter_all">نمایش: همه نتایج</string>
+    <string name="dns_diagnostics_filter_ok">نمایش: پاسخ‌های موفق</string>
+    <string name="dns_diagnostics_filter_errors">نمایش: خطاها و پاسخ‌های خالی</string>
+    <string name="dns_diagnostics_sort_original">ترتیب: زمان تکمیل</string>
+    <string name="dns_diagnostics_sort_fastest">ترتیب: موفق و سریع‌تر</string>
+    <string name="dns_diagnostics_progress">تکمیل شده: %1$d از %2$d پرس‌وجو</string>
+    <string name="dns_diagnostics_empty">نتیجه‌ای برای نمایش وجود ندارد.</string>
+    <string name="dns_diagnostics_invalid">دامنه، IP عددی سرور DNS، نوع رکورد، مهلت و محدودیت‌ها را بررسی کنید (حداکثر ۱۴۴ پرس‌وجو). چیزی ارسال نشده است.</string>
+    <string name="dns_diagnostics_confirm_title">تأیید تعداد پرس‌وجوهای DNS</string>
+    <string name="dns_diagnostics_budget">حداکثر %1$d پرس‌وجوی DNS در مسیر شبکه برنامه ارسال شود؟ این کار داده مصرف می‌کند و دامنه‌های بررسی‌شده را به DNSهای انتخابی نشان می‌دهد. پاسخ کوتاه‌شده UDP ممکن است یک پرس‌وجوی TCP دیگر لازم داشته باشد.</string>
+    <string name="dns_diagnostics_run">شروع پرس‌وجو</string>
+    <string name="dns_diagnostics_stopped">متوقف شد. نتایج دیررس پذیرفته نمی‌شوند و نتیجه‌های تکمیل‌شده قابل مشاهده‌اند.</string>
+</resources>

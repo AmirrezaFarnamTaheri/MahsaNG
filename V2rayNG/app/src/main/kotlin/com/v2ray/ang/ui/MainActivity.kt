@@ -311,6 +311,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             mainViewModel.testAllRealPing()
             true
         }
+        R.id.dns_diagnostics -> {
+            startActivity(Intent(this, DnsDiagnosticsActivity::class.java))
+            true
+        }
 
         R.id.service_restart -> {
             restartV2Ray()

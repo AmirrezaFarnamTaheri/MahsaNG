@@ -36,10 +36,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val serversCache = mutableListOf<ServersCache>()
     val isRunning by lazy { MutableLiveData<Boolean>() }
     val updateListAction by lazy { MutableLiveData<Int>() }
+    /** TCP-only row invalidation batches; native probe updates stay unchanged. */
+    val updateListBatchAction by lazy { MutableLiveData<List<Int>>() }
     val updateTestResultAction by lazy { MutableLiveData<String>() }
 
     private val tcpingTestScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     private val testRuns = TestRunTracker()
+    private val tcpDisplayRows = TcpRowBatch()
+    private var tcpDisplayFlushJob: Job? = null
     private var realPingScheduleJob: Job? = null
     private var nativeTestRunPending = false
     private var broadcastRegistered = false
@@ -53,6 +57,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         realPingScheduleJob?.cancel()
         SpeedtestUtil.closeAllTcpSockets()
         val runId = testRuns.begin(visibleGuids)
+        tcpDisplayFlushJob?.cancel()
+        tcpDisplayRows.begin(runId)
         // Starting a TCP-only run must not launch a native service unnecessarily.
         // If a real-ping run preceded it, this command cancels that native run.
         if (native || nativeTestRunPending) {
@@ -82,6 +88,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             broadcastRegistered = false
         }
         testRuns.invalidate()
+        tcpDisplayFlushJob?.cancel()
+        tcpDisplayRows.clear()
         realPingScheduleJob?.cancel()
         // Do not send a global native Cancel from an obsolete ViewModel: a new
         // activity may already own the native service with a newer run token.
@@ -181,9 +189,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 true
                             }
                         }
-                        if (published) updateListAction.value = getPosition(guid)
+                        if (published) queueTcpDisplayUpdate(runId, guid)
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Batch RecyclerView invalidations at ~10 Hz. Persistent delay writes stay
+     * in the existing TestRunTracker ownership gate and on the main thread.
+     */
+    private fun queueTcpDisplayUpdate(runId: String, guid: String) {
+        if (!tcpDisplayRows.add(runId, guid)) return
+        if (tcpDisplayFlushJob?.isActive == true) return
+        tcpDisplayFlushJob = viewModelScope.launch(Dispatchers.Main.immediate) {
+            while (isActive) {
+                delay(100L)
+                val visible = synchronized(this@MainViewModel) { serversCache.map { it.guid } }
+                val rows = tcpDisplayRows.drain(runId, visible)
+                    .filter { index -> testRuns.accepts(runId, visible[index]) }
+                if (rows.isEmpty()) break
+                updateListBatchAction.value = rows
             }
         }
     }

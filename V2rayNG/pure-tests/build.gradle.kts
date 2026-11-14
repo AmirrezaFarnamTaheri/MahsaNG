@@ -48,6 +48,8 @@ val productionHelpers = listOf(
     "DnsProbe",
     "DnsResolverDefaults",
     "DnsSocks5Tcp",
+    "TcpRowBatch",
+    "HttpsEvidence",
 )
 
 sourceSets {

@@ -146,6 +146,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 adapter.notifyDataSetChanged()
             }
         }
+        mainViewModel.updateListBatchAction.observe(this) { indices ->
+            TcpRowBatch.ranges(indices, adapter.itemCount).forEach { range ->
+                adapter.notifyItemRangeChanged(range.first, range.last - range.first + 1)
+            }
+        }
         mainViewModel.updateTestResultAction.observe(this) { setTestState(it) }
         mainViewModel.isRunning.observe(this) { isRunning ->
             adapter.isRunning = isRunning
@@ -313,6 +318,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         }
         R.id.dns_diagnostics -> {
             startActivity(Intent(this, DnsDiagnosticsActivity::class.java))
+            true
+        }
+
+        R.id.https_evidence -> {
+            startActivity(Intent(this, HttpsEvidenceActivity::class.java))
             true
         }
 

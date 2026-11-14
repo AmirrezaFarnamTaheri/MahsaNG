@@ -168,6 +168,13 @@ object Utils {
         return configured.toIntOrNull()?.takeIf { it in 1..65535 }
     }
 
+    /** Read-only configured local HTTP proxy listener. Invalid preferences fail closed. */
+    fun getConfiguredHttpPortOrNull(): Int? {
+        val configured = settingsStorage?.decodeString(AppConfig.PREF_HTTP_PORT)
+            ?: AppConfig.PORT_HTTP
+        return configured.toIntOrNull()?.takeIf { it in 1..65535 }
+    }
+
     fun getVpnDnsServers(): List<String> {
         val vpnDns = settingsStorage?.decodeString(AppConfig.PREF_VPN_DNS)
             ?: settingsStorage?.decodeString(AppConfig.PREF_REMOTE_DNS)

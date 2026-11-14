@@ -93,6 +93,10 @@
         android:title="@string/dns_diagnostics_title"
         app:showAsAction="never" />
     <item
+        android:id="@+id/https_evidence"
+        android:title="@string/https_evidence_title"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/ping_all"
         android:title="@string/title_ping_all_server"
         app:showAsAction="never" />

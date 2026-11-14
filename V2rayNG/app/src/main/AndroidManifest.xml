@@ -74,6 +74,9 @@
             android:name=".ui.SettingsActivity" />
         <activity
             android:exported="false"
+            android:name=".ui.AdvancedTcpRetryActivity" />
+        <activity
+            android:exported="false"
             android:name=".ui.PerAppProxyActivity" />
         <activity
             android:exported="false"

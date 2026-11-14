@@ -146,6 +146,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 adapter.notifyDataSetChanged()
             }
         }
+        mainViewModel.updateListBatchAction.observe(this) { indices ->
+            TcpRowBatch.ranges(indices).forEach { range ->
+                adapter.notifyItemRangeChanged(range.first, range.last - range.first + 1)
+            }
+        }
         mainViewModel.updateTestResultAction.observe(this) { setTestState(it) }
         mainViewModel.isRunning.observe(this) { isRunning ->
             adapter.isRunning = isRunning

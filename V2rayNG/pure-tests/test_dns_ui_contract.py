@@ -30,7 +30,8 @@ class DnsUiContract(unittest.TestCase):
         code = (UI / 'DnsDiagnosticsActivity.kt').read_text()
         self.assertIn('DnsResolverDefaults.fromConfiguredEntries(Utils.getRemoteDnsServers())', code)
         self.assertIn('NetworkCapabilities.TRANSPORT_VPN', code)
-        self.assertIn('routeInfo.text = getString(', code)
+        self.assertIn('routeInfo.text = when (lastRunRoute)', code)
+        self.assertIn('dns_diagnostics_test_route_socks', code)
         self.assertNotIn('"1.1.1.1,8.8.8.8"', code)
         resources = ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml')
         labels = {s.attrib['name']: s.text for s in resources.findall('string')}

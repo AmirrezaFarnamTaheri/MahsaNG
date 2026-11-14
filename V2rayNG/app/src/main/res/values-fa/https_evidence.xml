@@ -35,4 +35,5 @@
     <string name="https_evidence_handshake">زمان دست‌دهی TLS</string>
     <string name="https_evidence_protocol">نسخهٔ توافق‌شدهٔ TLS</string>
     <string name="https_evidence_alpn">پروتکل ALPN</string>
+    <string name="https_evidence_tls_unsupported">بررسی مستقل دست‌دهی TLS برای اعتبارسنجی امن نام میزبان به اندروید ۷ یا بالاتر نیاز دارد. درخواستی ارسال نشد.</string>
 </resources>

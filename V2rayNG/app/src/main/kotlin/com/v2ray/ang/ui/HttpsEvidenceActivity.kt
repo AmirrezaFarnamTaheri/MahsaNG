@@ -1,5 +1,6 @@
 package com.v2ray.ang.ui
 
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -137,6 +138,12 @@ class HttpsEvidenceActivity : BaseActivity() {
 
     private fun runHandshake() {
         if (job?.isActive == true) return
+        // Endpoint identification during SSLSocket handshake is API 24+.
+        // Earlier Android releases must not silently drop hostname verification.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            output.setText(R.string.https_evidence_tls_unsupported)
+            return
+        }
         val deadline = timeout.text.toString().toIntOrNull()
         val port = tlsPort.text.toString().toIntOrNull()
         if (deadline == null || deadline !in 300..10_000 || port == null || port !in 1..65535) {

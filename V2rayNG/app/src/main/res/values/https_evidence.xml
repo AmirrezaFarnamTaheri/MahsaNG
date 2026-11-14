@@ -35,4 +35,5 @@
     <string name="https_evidence_handshake">TLS handshake time</string>
     <string name="https_evidence_protocol">TLS negotiated version</string>
     <string name="https_evidence_alpn">ALPN protocol</string>
+    <string name="https_evidence_tls_unsupported">Standalone TLS handshake inspection requires Android 7.0 or later for secure hostname verification. No request was sent.</string>
 </resources>

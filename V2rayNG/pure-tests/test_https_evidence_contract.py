@@ -43,6 +43,8 @@ class HttpsEvidenceContract(unittest.TestCase):
         tls = (ROOT / 'kotlin/com/v2ray/ang/util/TlsHandshakeProbe.kt').read_text()
         ui = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
         self.assertIn('TlsHandshakeProbe.inspect(', ui)
+        self.assertIn('Build.VERSION.SDK_INT < Build.VERSION_CODES.N', ui)
+        self.assertIn('https_evidence_tls_unsupported', ui)
         self.assertIn('endpointIdentificationAlgorithm = "HTTPS"', tls)
         self.assertIn('SSLSocketFactory.getDefault()', tls)
         self.assertIn('startHandshake()', tls)

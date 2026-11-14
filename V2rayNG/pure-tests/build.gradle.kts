@@ -48,6 +48,7 @@ val productionHelpers = listOf(
     "DnsProbe",
     "DnsResolverDefaults",
     "DnsSocks5Tcp",
+    "DnsScanAnalysis",
     "TcpRowBatch",
     "HttpsEvidence",
     "SafeProbeFailure",

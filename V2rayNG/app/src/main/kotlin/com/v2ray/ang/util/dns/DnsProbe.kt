@@ -114,7 +114,7 @@ internal class DnsProbe(private val transactionId: () -> Int = { SecureRandom().
                 }
                 val truncated = DnsWire.isTruncated(udp, id)
                 attempts.add(DnsAttempt("UDP", elapsed(udpStart), if (truncated) "TRUNCATED" else "OK"))
-                val response = if (truncated) {
+                if (truncated) {
                     val tcpStart = System.nanoTime()
                     try {
                         val tcp = Socket().use { socket ->

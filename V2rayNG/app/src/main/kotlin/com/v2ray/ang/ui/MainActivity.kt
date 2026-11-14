@@ -567,12 +567,12 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 if (!Utils.isValidUrl(url)) {
                     return@forEach
                 }
-                Log.d(ANG_PACKAGE, url)
+                // Subscription URLs may contain access tokens. Never write them to Logcat.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val configText = try {
                         Utils.getUrlContentWithCustomUserAgent(url)
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.w(ANG_PACKAGE, "Subscription request failed")
                         launch(Dispatchers.Main) {
                             toast("\"" + it.second.remarks + "\" " + getString(R.string.toast_failure))
                         }
@@ -584,7 +584,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(ANG_PACKAGE, "Subscription refresh could not start")
             return false
         }
         return true

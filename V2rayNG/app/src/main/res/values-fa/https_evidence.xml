@@ -28,4 +28,11 @@
     <string name="https_evidence_type">نوع محتوا</string>
     <string name="https_evidence_length">طول محتوا</string>
     <string name="https_evidence_connectivity">پاسخ مورد انتظار ۲۰۴ یا ۲۰۰ خالی</string>
+    <string name="https_evidence_tls_only">بررسی دست‌دهی تأییدشدهٔ TLS (شبکه برنامه)</string>
+    <string name="https_evidence_tls_only_route">دست‌دهی TLS از شبکه برنامه (بدون پراکسی HTTP محلی؛ ممکن است از VPN عبور کند)</string>
+    <string name="https_evidence_tls_only_info">زمان دست‌دهی فقط TLS را پس از اتصال TCP می‌سنجد. هیچ درخواست HTTP یا خروجی Xray آزمایش نمی‌شود. ALPN فقط در صورت دسترسی نمایش داده می‌شود.</string>
+    <string name="https_evidence_tcp_connect">زمان اتصال TCP</string>
+    <string name="https_evidence_handshake">زمان دست‌دهی TLS</string>
+    <string name="https_evidence_protocol">نسخهٔ توافق‌شدهٔ TLS</string>
+    <string name="https_evidence_alpn">پروتکل ALPN</string>
 </resources>

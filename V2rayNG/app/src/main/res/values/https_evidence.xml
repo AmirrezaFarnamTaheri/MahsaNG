@@ -28,4 +28,11 @@
     <string name="https_evidence_type">Content-Type</string>
     <string name="https_evidence_length">Content length</string>
     <string name="https_evidence_connectivity">Expected 204 / empty 200 response</string>
+    <string name="https_evidence_tls_only">Inspect verified TLS handshake (app network)</string>
+    <string name="https_evidence_tls_only_route">App network TLS handshake (no local HTTP proxy; VPN may still route)</string>
+    <string name="https_evidence_tls_only_info">Handshake time measures TLS only, after TCP connect. No HTTP request or Xray outbound is tested. ALPN is shown only when available.</string>
+    <string name="https_evidence_tcp_connect">TCP connect time</string>
+    <string name="https_evidence_handshake">TLS handshake time</string>
+    <string name="https_evidence_protocol">TLS negotiated version</string>
+    <string name="https_evidence_alpn">ALPN protocol</string>
 </resources>

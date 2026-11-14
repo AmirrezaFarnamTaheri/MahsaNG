@@ -14,6 +14,8 @@ import com.v2ray.ang.R
 import com.v2ray.ang.util.HttpsEvidence
 import com.v2ray.ang.util.HttpsEvidenceRoute
 import com.v2ray.ang.util.HttpsObservation
+import com.v2ray.ang.util.TlsHandshakeProbe
+import com.v2ray.ang.util.TlsHandshakeObservation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -30,6 +32,7 @@ class HttpsEvidenceActivity : BaseActivity() {
     private lateinit var timeout: EditText
     private lateinit var direct: Button
     private lateinit var viaProxy: Button
+    private lateinit var tlsOnly: Button
     private lateinit var stop: Button
     private lateinit var output: TextView
     private var generation = 0L
@@ -77,6 +80,10 @@ class HttpsEvidenceActivity : BaseActivity() {
             setText(R.string.https_evidence_via_proxy)
             setOnClickListener { runEvidence(viaLocalProxy = true) }
         }
+        tlsOnly = Button(this).apply {
+            setText(R.string.https_evidence_tls_only)
+            setOnClickListener { runHandshake() }
+        }
         stop = Button(this).apply {
             setText(R.string.https_evidence_stop)
             visibility = View.GONE
@@ -89,7 +96,7 @@ class HttpsEvidenceActivity : BaseActivity() {
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
             setPadding(0, dp(14), 0, dp(24))
         }
-        listOf(direct, viaProxy, stop, output).forEach(column::addView)
+        listOf(direct, viaProxy, tlsOnly, stop, output).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
     }
 
@@ -105,6 +112,7 @@ class HttpsEvidenceActivity : BaseActivity() {
         val token = ++generation
         direct.isEnabled = false
         viaProxy.isEnabled = false
+        tlsOnly.isEnabled = false
         stop.visibility = View.VISIBLE
         output.setText(R.string.https_evidence_running)
         job = lifecycleScope.launch {
@@ -120,8 +128,80 @@ class HttpsEvidenceActivity : BaseActivity() {
                 if (token == generation) {
                     direct.isEnabled = true
                     viaProxy.isEnabled = true
+                    tlsOnly.isEnabled = true
                     stop.visibility = View.GONE
                 }
+            }
+        }
+    }
+
+    private fun runHandshake() {
+        if (job?.isActive == true) return
+        val deadline = timeout.text.toString().toIntOrNull()
+        val port = tlsPort.text.toString().toIntOrNull()
+        if (deadline == null || deadline !in 300..10_000 || port == null || port !in 1..65535) {
+            output.setText(R.string.https_evidence_invalid)
+            return
+        }
+        val endpoint = host.text.toString()
+        val token = ++generation
+        direct.isEnabled = false
+        viaProxy.isEnabled = false
+        tlsOnly.isEnabled = false
+        stop.visibility = View.VISIBLE
+        output.setText(R.string.https_evidence_running)
+        job = lifecycleScope.launch {
+            try {
+                val evidence = withContext(Dispatchers.IO) {
+                    TlsHandshakeProbe.inspect(endpoint, port, deadline)
+                }
+                if (token == generation && isActive) renderHandshake(evidence)
+            } catch (_: Exception) {
+                if (token == generation) output.setText(R.string.https_evidence_invalid)
+            } finally {
+                if (token == generation) {
+                    direct.isEnabled = true
+                    viaProxy.isEnabled = true
+                    tlsOnly.isEnabled = true
+                    stop.visibility = View.GONE
+                }
+            }
+        }
+    }
+
+    private fun renderHandshake(result: TlsHandshakeObservation) {
+        fun clean(value: String?): String =
+            value?.replace(Regex("[\\p{Cntrl}]"), " ")?.take(140) ?: "—"
+        fun line(key: Int, value: String) = getString(key) + ": " + value + "\n"
+        output.text = buildString {
+            append(line(R.string.https_evidence_route,
+                getString(R.string.https_evidence_tls_only_route)))
+            append(getString(R.string.https_evidence_tls_only_info)).append("\n")
+            append(line(R.string.https_evidence_result, result.status))
+            result.tcpElapsedMs?.let {
+                append(line(R.string.https_evidence_tcp_connect, it.toString() + " ms"))
+            }
+            result.handshakeElapsedMs?.let {
+                append(line(R.string.https_evidence_handshake, it.toString() + " ms"))
+            }
+            result.tlsVersion?.let {
+                append(line(R.string.https_evidence_protocol, clean(it)))
+            }
+            result.alpn?.let {
+                append(line(R.string.https_evidence_alpn, clean(it)))
+            }
+            result.cipherSuite?.let {
+                append(line(R.string.https_evidence_cipher, clean(it)))
+            }
+            result.certificateSubject?.let {
+                append(line(R.string.https_evidence_cert, clean(it)))
+            }
+            result.certificateSha256?.let {
+                append(line(R.string.https_evidence_fingerprint, clean(it)))
+            }
+            result.certificateExpiresAt?.let {
+                append(line(R.string.https_evidence_expiry,
+                    DateFormat.getDateInstance().format(Date(it))))
             }
         }
     }
@@ -157,6 +237,7 @@ class HttpsEvidenceActivity : BaseActivity() {
         job = null
         direct.isEnabled = true
         viaProxy.isEnabled = true
+        tlsOnly.isEnabled = true
         stop.visibility = View.GONE
         output.setText(R.string.https_evidence_stopped)
     }

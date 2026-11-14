@@ -9,7 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
-import com.v2ray.ang.AppConfig
+import com.v2ray.ang.util.Utils
 import com.v2ray.ang.R
 import com.v2ray.ang.util.HttpsEvidence
 import com.v2ray.ang.util.HttpsEvidenceRoute
@@ -66,7 +66,8 @@ class HttpsEvidenceActivity : BaseActivity() {
         label(R.string.https_evidence_route_warning)
         host = field(R.string.https_evidence_host, "example.com")
         tlsPort = field(R.string.https_evidence_tls_port, "443", true)
-        proxyPort = field(R.string.https_evidence_proxy_port, AppConfig.PORT_HTTP, true)
+        proxyPort = field(R.string.https_evidence_proxy_port,
+            Utils.getConfiguredHttpPortOrNull()?.toString() ?: "", true)
         timeout = field(R.string.https_evidence_timeout, "4000", true)
         direct = Button(this).apply {
             setText(R.string.https_evidence_direct)

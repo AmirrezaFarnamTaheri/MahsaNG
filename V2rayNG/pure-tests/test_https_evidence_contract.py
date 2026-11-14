@@ -31,6 +31,14 @@ class HttpsEvidenceContract(unittest.TestCase):
         self.assertIn('connection.serverCertificates', code)
         self.assertIn('connection.cipherSuite', code)
 
+    def test_local_http_port_is_read_from_saved_setting_without_writes(self):
+        ui = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        utils = (ROOT / 'kotlin/com/v2ray/ang/util/Utils.kt').read_text()
+        self.assertIn('Utils.getConfiguredHttpPortOrNull()', ui)
+        self.assertNotIn('AppConfig.PORT_HTTP', ui)
+        self.assertIn('AppConfig.PREF_HTTP_PORT', utils)
+        self.assertIn('configured.toIntOrNull()?.takeIf { it in 1..65535 }', utils)
+
     def test_english_persian_parity(self):
         names=[]
         for dir in ('values','values-fa'):

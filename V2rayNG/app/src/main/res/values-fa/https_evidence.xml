@@ -4,7 +4,7 @@
     <string name="https_evidence_route_warning">این بررسی فقط خواندنی و با یک درخواست در هر بار اجرا است. اتصال مستقیم HTTPS یعنی استفاده نکردن از پراکسی HTTP محلی، نه دور زدن VPN. درخواست HTTPS از طریق پراکسی به یک نشانی ثابت و از درگاه HTTP محلی مهسا ارسال می‌شود، اگر سرویس فعال باشد. هیچ‌کدام به‌تنهایی پایداری کلی پراکسی را ثابت نمی‌کند. اعتبارسنجی گواهی و نام میزبان TLS سیستم فعال می‌ماند.</string>
     <string name="https_evidence_host">نام میزبان HTTPS مستقیم (بدون پیشوند و مسیر URL)</string>
     <string name="https_evidence_tls_port">درگاه HTTPS مستقیم (۱ تا ۶۵۵۳۵)</string>
-    <string name="https_evidence_proxy_port">درگاه پراکسی HTTP محلی (پیش‌فرض ۱۰۸۰۹)</string>
+    <string name="https_evidence_proxy_port">درگاه پراکسی HTTP محلی (تنظیم ذخیره‌شدهٔ فعلی، قابل ویرایش)</string>
     <string name="https_evidence_timeout">مهلت هر اتصال و خواندن، میلی‌ثانیه (۳۰۰ تا ۱۰۰۰۰)</string>
     <string name="https_evidence_direct">بررسی HTTPS در مسیر شبکه برنامه</string>
     <string name="https_evidence_via_proxy">بررسی HTTPS از طریق پراکسی HTTP محلی</string>

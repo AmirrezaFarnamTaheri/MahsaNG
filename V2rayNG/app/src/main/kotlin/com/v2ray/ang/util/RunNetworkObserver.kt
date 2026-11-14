@@ -39,8 +39,9 @@ internal class RunNetworkObserver private constructor(
                 true
             }
         }
-        if (shouldUnregister && callback != null) {
-            runCatching { connectivity?.unregisterNetworkCallback(callback) }
+        val leasedCallback = callback
+        if (shouldUnregister && leasedCallback != null) {
+            runCatching { connectivity?.unregisterNetworkCallback(leasedCallback) }
         }
     }
 

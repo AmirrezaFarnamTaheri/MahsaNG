@@ -46,10 +46,19 @@ class DiagnosticIntegrationContract(unittest.TestCase):
         self.assertIn('DnsRoute.LOCAL_SOCKS5_TCP', dns)
         self.assertIn('HttpsEvidenceRoute.LOCAL_HTTP_PROXY', https)
 
+    def test_legacy_proxy_probes_keep_credential_safe_error_messages(self):
+        speed = (KOTLIN / 'util/SpeedtestUtil.kt').read_text()
+        safe = (KOTLIN / 'util/SafeProbeFailure.kt').read_text()
+        self.assertIn('SafeProbeFailure.safeReason(e)', speed)
+        self.assertIn('SafeProbeFailure.classify(e)', speed)
+        self.assertNotIn('printStackTrace()', speed)
+        self.assertNotIn('Log.getStackTraceString', speed)
+        self.assertNotIn('Throwable.toString()', safe)
+
     def test_pure_kotlin_test_suite_carries_all_production_helpers(self):
         build = (BASE / 'pure-tests/build.gradle.kts').read_text()
         for helper in ('DnsWire', 'DnsProbe', 'DnsResolverDefaults',
-                       'DnsSocks5Tcp', 'TcpRowBatch', 'HttpsEvidence'):
+                       'DnsSocks5Tcp', 'TcpRowBatch', 'HttpsEvidence', 'SafeProbeFailure'):
             with self.subTest(helper=helper):
                 self.assertIn('"'+helper+'"', build)
 

@@ -35,7 +35,7 @@ object SpeedtestUtil {
         return try {
             Libv2ray.measureOutboundDelay(config, AppConfig.DelayTestUrl)
         } catch (e: Exception) {
-            Log.d(AppConfig.ANG_PACKAGE, "realPing: $e")
+            Log.d(AppConfig.ANG_PACKAGE, "realPing: " + SafeProbeFailure.safeReason(e))
             -1L
         }
     }
@@ -53,7 +53,7 @@ object SpeedtestUtil {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.d(AppConfig.ANG_PACKAGE, "ping: " + SafeProbeFailure.safeReason(e))
         }
         return "-1ms"
     }
@@ -72,12 +72,8 @@ object SpeedtestUtil {
                     synchronized(this) { tcpTestingSockets.remove(socket) }
                 },
             )
-        } catch (e: UnknownHostException) {
-            e.printStackTrace()
-        } catch (e: IOException) {
-            Log.d(AppConfig.ANG_PACKAGE, "socketConnectTime IOException: $e")
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.d(AppConfig.ANG_PACKAGE, "socketConnectTime: " + SafeProbeFailure.safeReason(e))
         }
         return -1L
     }
@@ -116,16 +112,20 @@ object SpeedtestUtil {
             if (code == 204 || code == 200 && conn.responseLength == 0L) {
                 result = context.getString(R.string.connection_test_available, elapsed)
             } else {
-                throw IOException(context.getString(R.string.connection_test_error_status_code, code))
+                result = context.getString(R.string.connection_test_error_status_code, code)
             }
-        } catch (e: IOException) {
-            // network exception
-            Log.d(AppConfig.ANG_PACKAGE, "testConnection IOException: " + Log.getStackTraceString(e))
-            result = context.getString(R.string.connection_test_error, e.message)
         } catch (e: Exception) {
-            // library exception, eg sumsung
-            Log.d(AppConfig.ANG_PACKAGE, "testConnection Exception: " + Log.getStackTraceString(e))
-            result = context.getString(R.string.connection_test_error, e.message)
+            // Exception messages can contain full URLs and authentication tokens.
+            Log.d(AppConfig.ANG_PACKAGE, "testConnection: " + SafeProbeFailure.safeReason(e))
+            val error = when (SafeProbeFailure.classify(e)) {
+                SafeProbeFailure.Kind.DNS -> R.string.probe_failure_dns
+                SafeProbeFailure.Kind.REFUSED -> R.string.probe_failure_refused
+                SafeProbeFailure.Kind.TIMEOUT -> R.string.probe_failure_timeout
+                SafeProbeFailure.Kind.TLS_CERT -> R.string.probe_failure_tls
+                SafeProbeFailure.Kind.NETWORK -> R.string.probe_failure_network
+                SafeProbeFailure.Kind.OTHER -> R.string.probe_failure_other
+            }
+            result = context.getString(R.string.connection_test_error, context.getString(error))
         } finally {
             conn?.disconnect()
         }

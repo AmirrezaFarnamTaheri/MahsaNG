@@ -50,6 +50,7 @@ val productionHelpers = listOf(
     "DnsSocks5Tcp",
     "TcpRowBatch",
     "HttpsEvidence",
+    "SafeProbeFailure",
 )
 
 sourceSets {

@@ -39,4 +39,11 @@ class TcpRowBatchTest {
         assertTrue(TcpRowBatch.ranges(emptyList()).isEmpty())
         assertEquals(listOf(0..0), TcpRowBatch.ranges(listOf(-1, 0, -5)))
     }
+
+    @Test fun replayedBatchNeverReferencesRowsOutsideCurrentAdapter() {
+        assertEquals(listOf(0..1), TcpRowBatch.ranges(listOf(0, 1, 50), rowCount = 2))
+        assertTrue(TcpRowBatch.ranges(listOf(8, 9), rowCount = 8).isEmpty())
+        assertEquals(listOf(0..1, 4..4),
+            TcpRowBatch.ranges(listOf(0, 1, 4, 5), rowCount = 5))
+    }
 }

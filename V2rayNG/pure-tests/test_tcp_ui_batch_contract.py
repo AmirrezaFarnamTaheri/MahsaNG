@@ -18,7 +18,7 @@ class TcpUiBatchContract(unittest.TestCase):
     def test_batched_rows_are_rendered_as_ranges(self):
         source = ACTIVITY.read_text()
         self.assertIn('updateListBatchAction.observe(this)', source)
-        self.assertIn('TcpRowBatch.ranges(indices)', source)
+        self.assertIn('TcpRowBatch.ranges(indices, adapter.itemCount)', source)
         self.assertIn('adapter.notifyItemRangeChanged', source)
 
 if __name__ == '__main__': unittest.main()

@@ -147,7 +147,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             }
         }
         mainViewModel.updateListBatchAction.observe(this) { indices ->
-            TcpRowBatch.ranges(indices).forEach { range ->
+            TcpRowBatch.ranges(indices, adapter.itemCount).forEach { range ->
                 adapter.notifyItemRangeChanged(range.first, range.last - range.first + 1)
             }
         }

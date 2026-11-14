@@ -33,8 +33,8 @@ internal class TcpRowBatch {
 
     companion object {
         /** Convert many row events into minimal contiguous RecyclerView range notifications. */
-        fun ranges(indices: List<Int>): List<IntRange> {
-            val ordered = indices.filter { it >= 0 }.distinct().sorted()
+        fun ranges(indices: List<Int>, rowCount: Int = Int.MAX_VALUE): List<IntRange> {
+            val ordered = indices.filter { it >= 0 && it < rowCount }.distinct().sorted()
             if (ordered.isEmpty()) return emptyList()
             val output = mutableListOf<IntRange>()
             var first = ordered.first()

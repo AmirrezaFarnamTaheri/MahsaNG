@@ -39,6 +39,16 @@ class HttpsEvidenceContract(unittest.TestCase):
         self.assertIn('AppConfig.PREF_HTTP_PORT', utils)
         self.assertIn('configured.toIntOrNull()?.takeIf { it in 1..65535 }', utils)
 
+    def test_explicit_tls_handshake_is_verified_and_not_an_http_timing_claim(self):
+        tls = (ROOT / 'kotlin/com/v2ray/ang/util/TlsHandshakeProbe.kt').read_text()
+        ui = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        self.assertIn('TlsHandshakeProbe.inspect(', ui)
+        self.assertIn('endpointIdentificationAlgorithm = "HTTPS"', tls)
+        self.assertIn('SSLSocketFactory.getDefault()', tls)
+        self.assertIn('startHandshake()', tls)
+        self.assertNotIn('X509TrustManager', tls)
+        self.assertNotIn('HostnameVerifier {', tls)
+
     def test_english_persian_parity(self):
         names=[]
         for dir in ('values','values-fa'):

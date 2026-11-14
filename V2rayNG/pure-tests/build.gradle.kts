@@ -51,6 +51,7 @@ val productionHelpers = listOf(
     "DnsScanAnalysis",
     "TcpRowBatch",
     "HttpsEvidence",
+    "TlsHandshakeProbe",
     "SafeProbeFailure",
 )
 

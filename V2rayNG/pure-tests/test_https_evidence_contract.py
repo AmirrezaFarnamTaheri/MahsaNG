@@ -38,5 +38,9 @@ class HttpsEvidenceContract(unittest.TestCase):
             names.append({x.attrib['name'] for x in tree.findall('string')})
         self.assertEqual(names[0], names[1])
         self.assertGreaterEqual(len(names[0]), 20)
+        # Android AAPT string resources reject unescaped ASCII apostrophes.
+        for locale in ('values', 'values-fa'):
+            text = (ROOT / 'res' / locale / 'https_evidence.xml').read_text()
+            self.assertNotRegex(text, r"(?<!\\)'", locale)
 
 if __name__ == '__main__': unittest.main()

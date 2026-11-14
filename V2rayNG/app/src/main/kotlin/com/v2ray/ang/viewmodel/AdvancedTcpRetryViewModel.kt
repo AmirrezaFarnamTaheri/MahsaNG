@@ -1,8 +1,6 @@
 package com.v2ray.ang.viewmodel
 
 import android.app.Application
-import android.content.Context
-import android.net.ConnectivityManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -40,6 +38,7 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
     @Volatile private var currentRunId: String = ""
     private var prepared: Prepared? = null
     private var session: AdvancedTcpRetrySession? = null
+    private var networkObserver: RunNetworkObserver? = null
     private var preparation: Job? = null
 
     /** Snapshot the selected scope once on IO, never the mutable Activity cache. */
@@ -94,12 +93,16 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
         prepared = null
         val id = currentRunId
         val app = getApplication<Application>()
-        val connectivity = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val initialNetwork = runCatching { connectivity.activeNetwork }.getOrNull()
-        val networkStillCurrent = {
-            initialNetwork != null &&
-                runCatching { connectivity.activeNetwork == initialNetwork }.getOrDefault(false)
+        // An activeNetwork identity snapshot alone cannot detect A -> B -> A.
+        // Register a per-session callback; fail closed if the network cannot be monitored.
+        val observer = RunNetworkObserver.register(app)
+        if (!observer.isCurrent()) {
+            observer.close()
+            state.value = AdvancedRetryScreenState(AdvancedRetryScreenPhase.ERROR)
+            return false
         }
+        networkObserver = observer
+        val networkStillCurrent = { observer.isCurrent() }
         val lookupRevision = { guid: String ->
             runCatching {
                 MmkvManager.decodeServerConfig(guid)?.let {
@@ -114,6 +117,13 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
             onReport = { report ->
                 viewModelScope.launch(Dispatchers.Main.immediate) {
                     if (currentRunId == id) {
+                        if (report.snapshot.phase == RetryRunPhase.FINISHED ||
+                            report.snapshot.phase == RetryRunPhase.STOPPED) {
+                            if (networkObserver === observer) {
+                                networkObserver = null
+                                observer.close()
+                            }
+                        }
                         state.value = AdvancedRetryScreenState(
                             phase = when (report.snapshot.phase) {
                                 RetryRunPhase.RUNNING -> AdvancedRetryScreenPhase.RUNNING
@@ -131,8 +141,18 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
             },
         )
         session = runner
-        runner.start()
-        return true
+        return runCatching {
+            runner.start()
+            true
+        }.getOrElse {
+            // Ignore queued callbacks from a run whose start failed.
+            currentRunId = ""
+            observer.close()
+            if (networkObserver === observer) networkObserver = null
+            session = null
+            state.value = AdvancedRetryScreenState(AdvancedRetryScreenPhase.ERROR)
+            false
+        }
     }
 
     fun pauseOrContinue() {
@@ -149,6 +169,8 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
         val last = session
         currentRunId = "" // Reject even already-queued UI reports.
         session = null
+        networkObserver?.close()
+        networkObserver = null
         prepared = null
         preparation?.cancel()
         preparation = null

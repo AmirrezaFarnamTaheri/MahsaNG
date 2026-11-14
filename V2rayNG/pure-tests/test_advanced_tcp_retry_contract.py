@@ -55,5 +55,20 @@ class AdvancedTcpRetryContractTest(unittest.TestCase):
         self.assertNotIn("AdvancedRetryTarget(guid, gson.toJson(config)", viewmodel)
         self.assertIn("currentRevision = lookupRevision", viewmodel)
 
+    def test_network_handover_guard_is_registered_and_released(self):
+        observer = (MAIN / "util" / "RunNetworkObserver.kt").read_text()
+        viewmodel = (MAIN / "viewmodel" / "AdvancedTcpRetryViewModel.kt").read_text()
+        self.assertIn("registerDefaultNetworkCallback(observer)", observer)
+        self.assertIn("registerNetworkCallback(request, observer)", observer)
+        self.assertIn("gate.onAvailable(network)", observer)
+        self.assertIn("gate.onLost(network)", observer)
+        self.assertIn("gate.invalidate()", observer)
+        self.assertIn("unregisterNetworkCallback(callback)", observer)
+        self.assertIn("RunNetworkObserver.register(app)", viewmodel)
+        self.assertIn("networkStillCurrent = { observer.isCurrent() }", viewmodel)
+        self.assertIn("networkObserver?.close()", viewmodel)
+        self.assertIn("RetryRunPhase.FINISHED", viewmodel)
+        self.assertNotIn("initialNetwork != null &&", viewmodel)
+
 if __name__ == "__main__":
     unittest.main()

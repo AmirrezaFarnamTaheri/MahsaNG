@@ -161,6 +161,13 @@ object Utils {
         return ret
     }
 
+    /** Read-only configured listener port; invalid values must not silently use another port. */
+    fun getConfiguredSocksPortOrNull(): Int? {
+        val configured = settingsStorage?.decodeString(AppConfig.PREF_SOCKS_PORT)
+            ?: AppConfig.PORT_SOCKS
+        return configured.toIntOrNull()?.takeIf { it in 1..65535 }
+    }
+
     fun getVpnDnsServers(): List<String> {
         val vpnDns = settingsStorage?.decodeString(AppConfig.PREF_VPN_DNS)
             ?: settingsStorage?.decodeString(AppConfig.PREF_REMOTE_DNS)

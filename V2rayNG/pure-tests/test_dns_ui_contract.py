@@ -37,6 +37,15 @@ class DnsUiContract(unittest.TestCase):
         self.assertIn('through-proxy DNS was NOT tested', labels['dns_diagnostics_test_route'])
         self.assertIn('not proof of the active profile', labels['dns_diagnostics_configured'])
 
+    def test_dns_over_socks_is_explicit_and_never_falls_back_to_direct(self):
+        code = (UI / 'DnsDiagnosticsActivity.kt').read_text()
+        probe = (ROOT / 'kotlin' / 'com' / 'v2ray' / 'ang' / 'util' / 'dns' / 'DnsProbe.kt').read_text()
+        self.assertIn('DnsRoute.LOCAL_SOCKS5_TCP', code)
+        self.assertIn('Utils.getConfiguredSocksPortOrNull()', code)
+        self.assertIn('localSocksPort = socksPort', code)
+        self.assertIn('DnsSocks5Tcp.exchange(', probe)
+        self.assertIn('No direct-network fallback after SOCKS failure', probe)
+
     def test_persian_parity_and_manifest_internal_only(self):
         en = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml').findall('string')}
         fa = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values-fa' / 'dns_diagnostics.xml').findall('string')}

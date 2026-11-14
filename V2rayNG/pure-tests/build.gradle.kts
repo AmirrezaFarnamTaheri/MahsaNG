@@ -47,6 +47,7 @@ val productionHelpers = listOf(
     "DnsWire",
     "DnsProbe",
     "DnsResolverDefaults",
+    "DnsSocks5Tcp",
 )
 
 sourceSets {

@@ -21,6 +21,7 @@ import com.v2ray.ang.util.Utils
 import com.v2ray.ang.util.dns.DnsResolverDefaults
 import com.v2ray.ang.util.dns.DnsProbe
 import com.v2ray.ang.util.dns.DnsProbeResult
+import com.v2ray.ang.util.dns.DnsRoute
 import com.v2ray.ang.util.dns.DnsResolverInput
 import com.v2ray.ang.util.dns.DnsType
 import com.v2ray.ang.util.dns.DnsWire
@@ -45,6 +46,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private lateinit var cancel: Button
     private lateinit var filterButton: Button
     private lateinit var sortButton: Button
+    private lateinit var routeButton: Button
     private lateinit var status: TextView
     private lateinit var resultsText: TextView
     private lateinit var routeInfo: TextView
@@ -55,6 +57,9 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private var job: Job? = null
     private var completed = 0
     private var total = 0
+    private var selectedRoute = DnsRoute.APP_UDP_TCP
+    private var lastRunRoute: DnsRoute? = null
+    private var lastRunSocksPort: Int? = null
     private var runNetwork: Network? = null
     private var runRouteHint: Int? = null
     private var observedNetworkChange = false
@@ -105,6 +110,14 @@ class DnsDiagnosticsActivity : BaseActivity() {
         })
         types = input(R.string.dns_diagnostics_types, "A,AAAA")
         timeout = input(R.string.dns_diagnostics_timeout, "1500", multiline = false)
+        routeButton = Button(this).apply {
+            setOnClickListener {
+                if (job?.isActive == true) return@setOnClickListener
+                selectedRoute = if (selectedRoute == DnsRoute.APP_UDP_TCP)
+                    DnsRoute.LOCAL_SOCKS5_TCP else DnsRoute.APP_UDP_TCP
+                render()
+            }
+        }
         diagnose = Button(this).apply {
             setText(R.string.dns_diagnostics_one)
             setOnClickListener { begin(single = true) }
@@ -135,7 +148,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
             setTextIsSelectable(true)
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
         }
-        listOf(diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, resultsText).forEach(column::addView)
+        listOf(routeButton, diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, resultsText).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
         render()
     }
@@ -172,10 +185,22 @@ class DnsDiagnosticsActivity : BaseActivity() {
             return
         }
         val timeoutMs = timeout.text.toString().toIntOrNull() ?: return
+        val route = selectedRoute
+        val socksPort = if (route == DnsRoute.LOCAL_SOCKS5_TCP)
+            Utils.getConfiguredSocksPortOrNull() else null
+        if (route == DnsRoute.LOCAL_SOCKS5_TCP && socksPort == null) {
+            AlertDialog.Builder(this).setMessage(R.string.dns_diagnostics_invalid_socks_port)
+                .setPositiveButton(android.R.string.ok, null).show()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle(R.string.dns_diagnostics_confirm_title)
-            .setMessage(getString(R.string.dns_diagnostics_budget, selected.size))
-            .setPositiveButton(R.string.dns_diagnostics_run) { _, _ -> execute(selected, timeoutMs) }
+            .setMessage(if (route == DnsRoute.LOCAL_SOCKS5_TCP)
+                getString(R.string.dns_diagnostics_budget_socks, selected.size, socksPort)
+                else getString(R.string.dns_diagnostics_budget, selected.size))
+            .setPositiveButton(R.string.dns_diagnostics_run) { _, _ ->
+                execute(selected, timeoutMs, route, socksPort)
+            }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
@@ -205,8 +230,10 @@ class DnsDiagnosticsActivity : BaseActivity() {
         }
     }
 
-    private fun execute(queries: List<Query>, timeoutMs: Int) {
+    private fun execute(queries: List<Query>, timeoutMs: Int, route: DnsRoute, socksPort: Int?) {
         val token = ++generation
+        lastRunRoute = route
+        lastRunSocksPort = socksPort
         runNetwork = defaultNetwork()
         runRouteHint = appRouteHint()
         observedNetworkChange = false
@@ -216,6 +243,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
         lastRender = 0L
         diagnose.isEnabled = false
         scan.isEnabled = false
+        routeButton.isEnabled = false
         cancel.visibility = View.VISIBLE
         render()
         job = lifecycleScope.launch {
@@ -230,7 +258,8 @@ class DnsDiagnosticsActivity : BaseActivity() {
                                 val position = index.getAndIncrement()
                                 if (position >= queries.size) break
                                 val query = queries[position]
-                                val observation = probe.query(query.resolver, query.domain, query.type, timeoutMs)
+                                val observation = probe.query(query.resolver, query.domain, query.type, timeoutMs,
+                                    route = route, localSocksPort = socksPort)
                                 withContext(Dispatchers.Main) {
                                     if (token == generation) {
                                         if (defaultNetwork() != runNetwork) observedNetworkChange = true
@@ -254,6 +283,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
                     if (defaultNetwork() != runNetwork) observedNetworkChange = true
                     diagnose.isEnabled = true
                     scan.isEnabled = true
+                    routeButton.isEnabled = true
                     cancel.visibility = View.GONE
                     render()
                 }
@@ -267,12 +297,15 @@ class DnsDiagnosticsActivity : BaseActivity() {
         job = null
         diagnose.isEnabled = true
         scan.isEnabled = true
+        routeButton.isEnabled = true
         cancel.visibility = View.GONE
         status.setText(R.string.dns_diagnostics_stopped)
         renderResults()
     }
 
     private fun render() {
+        routeButton.setText(if (selectedRoute == DnsRoute.APP_UDP_TCP)
+            R.string.dns_diagnostics_route_select_app else R.string.dns_diagnostics_route_select_socks)
         filterButton.text = getString(when (filter) {
             1 -> R.string.dns_diagnostics_filter_ok
             2 -> R.string.dns_diagnostics_filter_errors
@@ -280,9 +313,13 @@ class DnsDiagnosticsActivity : BaseActivity() {
         })
         sortButton.text = getString(if (fastestFirst)
             R.string.dns_diagnostics_sort_fastest else R.string.dns_diagnostics_sort_original)
-        routeInfo.text = getString(R.string.dns_diagnostics_test_route,
-            getString(runRouteHint ?: appRouteHint())) +
-            if (observedNetworkChange) "\n" + getString(R.string.dns_diagnostics_route_changed) else ""
+        routeInfo.text = when (lastRunRoute) {
+            DnsRoute.LOCAL_SOCKS5_TCP -> getString(
+                R.string.dns_diagnostics_test_route_socks, lastRunSocksPort ?: 0)
+            else -> getString(R.string.dns_diagnostics_test_route,
+                getString(runRouteHint ?: appRouteHint()))
+        } + if (observedNetworkChange) "\n" +
+            getString(R.string.dns_diagnostics_route_changed) else ""
         status.text = getString(R.string.dns_diagnostics_progress, completed, total)
         renderResults()
     }
@@ -299,7 +336,10 @@ class DnsDiagnosticsActivity : BaseActivity() {
             .thenBy { it.elapsedMs }) else visible
         resultsText.text = if (selected.isEmpty()) getString(R.string.dns_diagnostics_empty) else buildString {
             for (res in selected) {
-                append(res.domain).append("  ").append(res.qtype.name)
+                append(if (res.route == DnsRoute.LOCAL_SOCKS5_TCP)
+                    getString(R.string.dns_diagnostics_result_socks) else
+                    getString(R.string.dns_diagnostics_result_app))
+                    .append(" | ").append(res.domain).append("  ").append(res.qtype.name)
                     .append("  @ ").append(res.resolver)
                     .append("\n").append(res.status).append("  ").append(res.elapsedMs).append(" ms")
                 append("  ").append(res.attempts.joinToString(" → ") { "${it.transport}: ${it.status} (${it.elapsedMs} ms)" })

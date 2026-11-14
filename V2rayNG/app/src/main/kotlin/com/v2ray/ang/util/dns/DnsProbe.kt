@@ -53,6 +53,7 @@ internal object DnsResolverInput {
     }
 }
 
+internal enum class DnsRoute { APP_UDP_TCP, LOCAL_SOCKS5_TCP }
 internal data class DnsAttempt(val transport: String, val elapsedMs: Long, val status: String)
 internal data class DnsProbeResult(
     val resolver: String,
@@ -62,13 +63,15 @@ internal data class DnsProbeResult(
     val elapsedMs: Long,
     val answer: DnsMessage?,
     val attempts: List<DnsAttempt>,
+    val route: DnsRoute = DnsRoute.APP_UDP_TCP,
 ) {
     val succeeded: Boolean get() = status == "OK" && answer?.rcode == 0
 }
 
 /** Read-only query over the app's current network route (possibly the active VPN). */
 internal class DnsProbe(private val transactionId: () -> Int = { SecureRandom().nextInt(65536) }) {
-    fun query(resolver: String, domain: String, type: DnsType, timeoutMs: Int = 1500): DnsProbeResult {
+    fun query(resolver: String, domain: String, type: DnsType, timeoutMs: Int = 1500,
+        route: DnsRoute = DnsRoute.APP_UDP_TCP, localSocksPort: Int? = null): DnsProbeResult {
         require(timeoutMs in 300..10_000)
         val attempts = mutableListOf<DnsAttempt>()
         var addressLabel = resolver.trim().take(96)
@@ -81,45 +84,59 @@ internal class DnsProbe(private val transactionId: () -> Int = { SecureRandom().
             addressLabel = endpoint.label
             val id = transactionId()
             val request = DnsWire.query(normalizedDomain, type, id)
-            val udpStart = System.nanoTime()
-            val udp = try {
-                DatagramSocket().use { socket ->
-                    socket.soTimeout = timeoutMs
-                    socket.connect(endpoint.address, endpoint.port)
-                    socket.send(DatagramPacket(request, request.size))
-                    val buffer = ByteArray(4096)
-                    val packet = DatagramPacket(buffer, buffer.size)
-                    socket.receive(packet)
-                    buffer.copyOf(packet.length)
-                }
-            } catch (error: Exception) {
-                attempts.add(DnsAttempt("UDP", elapsed(udpStart), classify(error)))
-                throw error
-            }
-            val truncated = DnsWire.isTruncated(udp, id)
-            attempts.add(DnsAttempt("UDP", elapsed(udpStart), if (truncated) "TRUNCATED" else "OK"))
-            val response = if (truncated) {
+            val response = if (route == DnsRoute.LOCAL_SOCKS5_TCP) {
+                val port = localSocksPort?.takeIf { it in 1..65535 }
+                    ?: throw IllegalArgumentException("INVALID_SOCKS_PORT")
                 val tcpStart = System.nanoTime()
                 try {
-                    val tcp = Socket().use { socket ->
-                        socket.connect(InetSocketAddress(endpoint.address, endpoint.port), timeoutMs)
-                        socket.soTimeout = timeoutMs
-                        val out = DataOutputStream(socket.getOutputStream())
-                        out.writeShort(request.size)
-                        out.write(request)
-                        out.flush()
-                        val input = DataInputStream(socket.getInputStream())
-                        val length = input.readUnsignedShort()
-                        if (length < 12) throw DnsWireException("TRUNCATED_PACKET")
-                        ByteArray(length).also { input.readFully(it) }
-                    }
-                    attempts.add(DnsAttempt("TCP", elapsed(tcpStart), "OK"))
+                    val tcp = DnsSocks5Tcp.exchange(endpoint.address, endpoint.port, port, request, timeoutMs)
+                    attempts.add(DnsAttempt("SOCKS5/TCP", elapsed(tcpStart), "OK"))
                     tcp
                 } catch (error: Exception) {
-                    attempts.add(DnsAttempt("TCP", elapsed(tcpStart), classify(error)))
+                    attempts.add(DnsAttempt("SOCKS5/TCP", elapsed(tcpStart), classify(error)))
+                    throw error // No direct-network fallback after SOCKS failure.
+                }
+            } else {
+                val udpStart = System.nanoTime()
+                val udp = try {
+                    DatagramSocket().use { socket ->
+                        socket.soTimeout = timeoutMs
+                        socket.connect(endpoint.address, endpoint.port)
+                        socket.send(DatagramPacket(request, request.size))
+                        val buffer = ByteArray(4096)
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        socket.receive(packet)
+                        buffer.copyOf(packet.length)
+                    }
+                } catch (error: Exception) {
+                    attempts.add(DnsAttempt("UDP", elapsed(udpStart), classify(error)))
                     throw error
                 }
-            } else udp
+                val truncated = DnsWire.isTruncated(udp, id)
+                attempts.add(DnsAttempt("UDP", elapsed(udpStart), if (truncated) "TRUNCATED" else "OK"))
+                val response = if (truncated) {
+                    val tcpStart = System.nanoTime()
+                    try {
+                        val tcp = Socket().use { socket ->
+                            socket.connect(InetSocketAddress(endpoint.address, endpoint.port), timeoutMs)
+                            socket.soTimeout = timeoutMs
+                            val out = DataOutputStream(socket.getOutputStream())
+                            out.writeShort(request.size)
+                            out.write(request)
+                            out.flush()
+                            val input = DataInputStream(socket.getInputStream())
+                            val length = input.readUnsignedShort()
+                            if (length < 12) throw DnsWireException("TRUNCATED_PACKET")
+                            ByteArray(length).also { input.readFully(it) }
+                        }
+                        attempts.add(DnsAttempt("TCP", elapsed(tcpStart), "OK"))
+                        tcp
+                    } catch (error: Exception) {
+                        attempts.add(DnsAttempt("TCP", elapsed(tcpStart), classify(error)))
+                        throw error
+                    }
+                } else udp
+            }
             decoded = DnsWire.decode(response, id)
             if (!decoded.questionName.equals(java.net.IDN.toASCII(normalizedDomain, java.net.IDN.USE_STD3_ASCII_RULES), ignoreCase = true) || decoded.questionType != type.code) {
                 throw DnsWireException("QUESTION_MISMATCH")
@@ -137,12 +154,13 @@ internal class DnsProbe(private val transactionId: () -> Int = { SecureRandom().
             decoded = null
         }
         return DnsProbeResult(addressLabel, normalizedDomain.take(253), type, status,
-            elapsed(start), decoded, attempts.toList())
+            elapsed(start), decoded, attempts.toList(), route)
     }
 
     private fun elapsed(start: Long): Long = maxOf(1L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start))
     private fun classify(error: Exception): String = when (error) {
         is DnsWireException -> error.code
+        is DnsSocks5Exception -> error.code
         is IllegalArgumentException -> "INVALID_INPUT"
         is SocketTimeoutException -> "TIMEOUT"
         is PortUnreachableException, is ConnectException -> "UNREACHABLE"

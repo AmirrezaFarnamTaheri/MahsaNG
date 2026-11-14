@@ -28,4 +28,11 @@
     <string name="dns_diagnostics_route_vpn_not_reported">VPN transport not reported</string>
     <string name="dns_diagnostics_route_unknown">unknown</string>
     <string name="dns_diagnostics_route_changed">A default-network change was observed during this run; compare results cautiously.</string>
+    <string name="dns_diagnostics_route_select_app">Next test route: app network (UDP, TCP fallback). Tap to change</string>
+    <string name="dns_diagnostics_route_select_socks">Next test route: local SOCKS5 (DNS-over-TCP). Tap to change</string>
+    <string name="dns_diagnostics_invalid_socks_port">Configured local SOCKS5 port is invalid. No queries were sent.</string>
+    <string name="dns_diagnostics_budget_socks">Send up to %1$d DNS-over-TCP queries through the local SOCKS5 listener at 127.0.0.1:%2$d? This tests a local relay, not Xray internal DNS or the selected outbound. No direct DNS fallback is allowed.</string>
+    <string name="dns_diagnostics_test_route_socks">Test route: local SOCKS5 on 127.0.0.1:%1$d, relaying DNS-over-TCP to the chosen resolver. This does not establish the active profile, remote outbound, or Xray internal DNS route. It does not establish a DNS leak.</string>
+    <string name="dns_diagnostics_result_socks">Local SOCKS5/TCP</string>
+    <string name="dns_diagnostics_result_app">App network UDP/TCP</string>
 </resources>

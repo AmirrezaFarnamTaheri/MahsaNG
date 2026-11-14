@@ -27,6 +27,7 @@ import java.util.*
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mainStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
     private val serverRawStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SERVER_RAW, MMKV.MULTI_PROCESS_MODE) }
+    private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
     var serverList = MmkvManager.decodeServerList()
     var subscriptionId: String = ""
@@ -148,17 +149,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val runId = beginTestRun(snapshot.map { it.guid }, native = false)
         getApplication<AngApplication>().toast(R.string.connection_test_testing)
 
-        for (item in snapshot) {
-            val outbound = item.config.getProxyOutbound() ?: continue
-            val address = outbound.getServerAddress() ?: continue
-            val port = outbound.getServerPort() ?: continue
-            val guid = item.guid
+        // Make an immutable, transport-eligible target list before any worker
+        // launches. UDP/custom profiles remain UNKNOWN, not false TCP failures.
+        val targets = snapshot.mapNotNull { item ->
+            val outbound = item.config.getProxyOutbound() ?: return@mapNotNull null
+            if (!TcpProbeEligibility.supportsTcpConnect(
+                    item.config.configType.name, outbound.protocol, outbound.streamSettings?.network
+                )) return@mapNotNull null
+            val address = outbound.getServerAddress() ?: return@mapNotNull null
+            val port = outbound.getServerPort() ?: return@mapNotNull null
+            Triple(item.guid, address, port)
+        }
+        // A new run snapshots its concurrency: preferences cannot change active
+        // scheduling. At most 16 workers exist, even for thousands of targets.
+        val concurrency = BoundedProbeQueue.concurrencyFromStored(
+            settingsStorage?.decodeString(AppConfig.PREF_TCP_PROBE_CONCURRENCY)
+        )
+        val queue = BoundedProbeQueue(targets, concurrency)
+        repeat(queue.workerCount) {
             tcpingTestScope.launch {
-                val delay = SpeedtestUtil.tcping(address, port)
-                withContext(Dispatchers.Main) {
-                    if (testRuns.accepts(runId, guid) && MmkvManager.decodeServerConfig(guid) != null) {
-                        MmkvManager.encodeServerTestDelayMillis(guid, delay)
-                        updateListAction.value = getPosition(guid)
+                while (isActive) {
+                    val (guid, address, port) = queue.claim() ?: break
+                    if (!testRuns.accepts(runId, guid)) continue
+                    val delay = SpeedtestUtil.tcping(address, port)
+                    withContext(Dispatchers.Main) {
+                        // Share forgetGuid's lock through the final persistent write.
+                        val published = testRuns.publishIfCurrent(runId, guid) {
+                            if (MmkvManager.decodeServerConfig(guid) == null) false
+                            else {
+                                MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                                true
+                            }
+                        }
+                        if (published) updateListAction.value = getPosition(guid)
                     }
                 }
             }
@@ -273,12 +296,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> {
                     val result = intent.getSerializableExtra("content") as? ConfigTestResult ?: return
-                    if (testRuns.accepts(result.runId, result.guid) &&
-                        MmkvManager.decodeServerConfig(result.guid) != null
-                    ) {
-                        MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
-                        updateListAction.value = getPosition(result.guid)
+                    val published = testRuns.publishIfCurrent(result.runId, result.guid) {
+                        if (MmkvManager.decodeServerConfig(result.guid) == null) false
+                        else {
+                            MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
+                            true
+                        }
                     }
+                    if (published) updateListAction.value = getPosition(result.guid)
                 }
             }
         }

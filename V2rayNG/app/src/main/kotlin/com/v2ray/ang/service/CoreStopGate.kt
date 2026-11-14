@@ -7,6 +7,10 @@ internal class CoreStopGate {
     private var activeStop: Long? = null
     private var pendingStart = false
 
+    /** A stopLoop can be pending while the native core still reports running. */
+    @Synchronized
+    fun isStopping(): Boolean = stopping
+
     @Synchronized
     fun requestStart(): Boolean {
         if (!stopping) return true

@@ -311,4 +311,13 @@
     <string name="warning_mux_on">لطفا mux را خاموش کنید\nاکثر کانفیگا با mux کار نمی کنند</string>
     <string name="warning_warp_on">دقت کنید warp روشن است.\nاگر مشکلی دارید، آن را خاموش کنید</string>
 
+    <string name="title_tcp_probe_concurrency">تعداد آزمون‌های هم‌زمان TCP (نه ترافیک پروکسی)</string>
+    <string name="tcp_probe_concurrency_4">۴ آزمون هم‌زمان TCP</string>
+    <string name="tcp_probe_concurrency_8">۸ آزمون هم‌زمان TCP (پیش‌فرض)</string>
+    <string name="tcp_probe_concurrency_12">۱۲ آزمون هم‌زمان TCP</string>
+    <string name="tcp_probe_concurrency_16">۱۶ آزمون هم‌زمان TCP (بیشینه)</string>
+    <string name="title_tcp_probe_preset">آزمون دسترسی TCP (نه تأیید عملکرد پروکسی)</string>
+    <string name="tcp_probe_quick">سریع: ۱ تلاش با مهلت اتصال ۱٫۵ ثانیه</string>
+    <string name="tcp_probe_balanced">متعادل: حداکثر ۲ تلاش، هرکدام ۳ ثانیه؛ توقف پس از موفقیت</string>
+    <string name="tcp_probe_diagnostic">تشخیصی: حداکثر ۳ تلاش، هرکدام ۵ ثانیه؛ توقف پس از موفقیت</string>
 </resources>

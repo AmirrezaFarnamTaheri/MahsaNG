@@ -1,6 +1,7 @@
 package com.v2ray.ang.util
 
 import android.content.Context
+import com.tencent.mmkv.MMKV
 import android.os.SystemClock
 import android.text.TextUtils
 import android.util.Log
@@ -17,19 +18,17 @@ import kotlin.coroutines.coroutineContext
 object SpeedtestUtil {
 
     private val tcpTestingSockets = ArrayList<Socket>()
+    private val tcpSettings by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
     suspend fun tcping(url: String, port: Int): Long {
-        var time = -1L
-        for (k in 0 until 2) {
-            val one = socketConnectTime(url, port)
-            if (!coroutineContext.isActive) {
-                break
-            }
-            if (one != -1L && (time == -1L || one < time)) {
-                time = one
-            }
-        }
-        return time
+        // Snapshot this TCP-only setting for one probe; it cannot control native
+        // real-ping, UDP, TLS or through-proxy HTTP methods.
+        val preset = TcpProbePreset.fromStored(tcpSettings?.decodeString(AppConfig.PREF_TCP_PROBE_PRESET))
+        val context = coroutineContext
+        return preset.probe(
+            cancelled = { !context.isActive },
+            connect = { timeoutMs -> socketConnectTime(url, port, timeoutMs) },
+        )
     }
 
     fun realPing(config: String): Long {
@@ -59,12 +58,12 @@ object SpeedtestUtil {
         return "-1ms"
     }
 
-    fun socketConnectTime(url: String, port: Int): Long {
+    fun socketConnectTime(url: String, port: Int, timeoutMs: Int = 3000): Long {
         try {
             return SocketConnectTimer.measure(
                 host = url,
                 port = port,
-                timeoutMs = 3000,
+                timeoutMs = timeoutMs,
                 socket = Socket(),
                 onRegister = { socket ->
                     synchronized(this) { tcpTestingSockets.add(socket) }

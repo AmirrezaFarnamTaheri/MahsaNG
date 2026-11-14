@@ -52,6 +52,13 @@ class SubscriptionReplacementPlanTest {
         assertEquals("new2", selected)
     }
 
+    @Test fun onlyPresentAndEqualSerializedOutboundIdentitiesMayMatch() {
+        assertEquals(false, SubscriptionReplacementPlan.matchesOutbound(null, null))
+        assertEquals(false, SubscriptionReplacementPlan.matchesOutbound("", ""))
+        assertEquals(false, SubscriptionReplacementPlan.matchesOutbound("outbound-a", "outbound-b"))
+        assertEquals(true, SubscriptionReplacementPlan.matchesOutbound("outbound-a", "outbound-a"))
+    }
+
     @Test fun selectedProfileOutsideReplacedSubscriptionStaysSelected() {
         val selected = SubscriptionReplacementPlan.matchSelected(
             selectedGuid = "other",

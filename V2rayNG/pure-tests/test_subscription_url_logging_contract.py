@@ -12,6 +12,10 @@ class SubscriptionUrlLoggingContractTest(unittest.TestCase):
         self.assertIn("val url = Utils.idnToASCII(it.second.url)", source)
         self.assertNotRegex(source, r"Log\.[a-z]+\(ANG_PACKAGE,\s*url\s*\)")
         self.assertIn("// Subscription URLs may contain access tokens.", source)
+        refresh = source.split("fun importConfigViaSub()", 1)[1].split("show file chooser", 1)[0]
+        self.assertNotIn("printStackTrace()", refresh)
+        self.assertNotRegex(refresh, r"Log\.[a-z]+\(ANG_PACKAGE,\s*(?:url|e)\s*\)")
+
 
 if __name__ == "__main__":
     unittest.main()

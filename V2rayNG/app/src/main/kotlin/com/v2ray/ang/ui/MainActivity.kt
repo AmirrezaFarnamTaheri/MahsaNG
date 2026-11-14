@@ -572,7 +572,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     val configText = try {
                         Utils.getUrlContentWithCustomUserAgent(url)
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.w(ANG_PACKAGE, "Subscription request failed")
                         launch(Dispatchers.Main) {
                             toast("\"" + it.second.remarks + "\" " + getString(R.string.toast_failure))
                         }
@@ -584,7 +584,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(ANG_PACKAGE, "Subscription refresh could not start")
             return false
         }
         return true

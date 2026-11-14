@@ -5,7 +5,6 @@ on:
     branches: [master, 'roadmap/**', 'fix/**']
   push:
     branches:
-      - 'integration/**'
       - 'fix/failed-deletion-observation-id-*'
       - 'roadmap/**'
       - 'upstream/**'
@@ -14,7 +13,7 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded PR/push runs for the same integration branch, not any test jobs.
+# Cancel outdated runs on a branch; PR checks replace duplicate integration pushes.
 concurrency:
   group: mahsa-safety-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true

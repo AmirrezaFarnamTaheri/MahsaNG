@@ -24,6 +24,10 @@ val productionHelpers = listOf(
     "TcpProbeEligibility",
     "BoundedProbeQueue",
     "AdvancedRetryReview",
+    "AdvancedRetryScheduler",
+    "AdvancedTcpRetrySession",
+    "ProfileRevisionDigest",
+    "NetworkHandoverGate",
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "CoreStopGate",
@@ -58,6 +62,7 @@ sourceSets {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     testImplementation("junit:junit:4.13.2")
 }
 

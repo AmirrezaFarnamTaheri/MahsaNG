@@ -311,6 +311,12 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             mainViewModel.testAllRealPing()
             true
         }
+        R.id.advanced_tcp_retry -> {
+            startActivity(Intent(this, AdvancedTcpRetryActivity::class.java)
+                .putExtra(AdvancedTcpRetryActivity.EXTRA_SUBSCRIPTION, mainViewModel.subscriptionId)
+                .putExtra(AdvancedTcpRetryActivity.EXTRA_KEYWORD, mainViewModel.keywordFilter))
+            true
+        }
 
         R.id.service_restart -> {
             restartV2Ray()

@@ -47,6 +47,16 @@ class DnsUiContract(unittest.TestCase):
         self.assertIn('DnsSocks5Tcp.exchange(', probe)
         self.assertIn('No direct-network fallback after SOCKS failure', probe)
 
+    def test_comparison_filter_is_read_only_and_never_a_leak_verdict(self):
+        code = (UI / 'DnsDiagnosticsActivity.kt').read_text()
+        comparison = (ROOT / 'kotlin' / 'com' / 'v2ray' / 'ang' / 'util' /
+                      'dns' / 'DnsScanAnalysis.kt').read_text()
+        self.assertIn('DnsScanAnalysis.summarize(results)', code)
+        self.assertIn('dns_diagnostics_filter_mismatches', code)
+        self.assertIn('dns_diagnostics_scan_summary', code)
+        self.assertIn('record.type == DnsType.TXT', comparison)
+        self.assertNotIn('DNS_LEAK', comparison)
+
     def test_persian_parity_and_manifest_internal_only(self):
         en = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml').findall('string')}
         fa = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values-fa' / 'dns_diagnostics.xml').findall('string')}

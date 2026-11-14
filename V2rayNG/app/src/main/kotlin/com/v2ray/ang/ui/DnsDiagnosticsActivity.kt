@@ -22,6 +22,8 @@ import com.v2ray.ang.util.dns.DnsResolverDefaults
 import com.v2ray.ang.util.dns.DnsProbe
 import com.v2ray.ang.util.dns.DnsProbeResult
 import com.v2ray.ang.util.dns.DnsRoute
+import com.v2ray.ang.util.dns.DnsScanAnalysis
+import com.v2ray.ang.util.dns.DnsScanSummary
 import com.v2ray.ang.util.dns.DnsResolverInput
 import com.v2ray.ang.util.dns.DnsType
 import com.v2ray.ang.util.dns.DnsWire
@@ -48,6 +50,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private lateinit var sortButton: Button
     private lateinit var routeButton: Button
     private lateinit var status: TextView
+    private lateinit var summaryText: TextView
     private lateinit var resultsText: TextView
     private lateinit var routeInfo: TextView
     private val results = mutableListOf<DnsProbeResult>()
@@ -56,6 +59,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private var generation = 0L
     private var job: Job? = null
     private var completed = 0
+    private var wasStopped = false
     private var total = 0
     private var selectedRoute = DnsRoute.APP_UDP_TCP
     private var lastRunRoute: DnsRoute? = null
@@ -131,7 +135,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
             visibility = View.GONE
             setOnClickListener { stopRun() }
         }
-        filterButton = Button(this).apply { setOnClickListener { filter = (filter + 1) % 3; render() } }
+        filterButton = Button(this).apply { setOnClickListener { filter = (filter + 1) % 5; render() } }
         sortButton = Button(this).apply { setOnClickListener { fastestFirst = !fastestFirst; render() } }
         routeInfo = TextView(this).apply {
             textSize = 13f
@@ -143,12 +147,17 @@ class DnsDiagnosticsActivity : BaseActivity() {
             setPadding(0, dp(10), 0, dp(8))
             setTextIsSelectable(true)
         }
+        summaryText = TextView(this).apply {
+            textSize = 14f
+            setPadding(0, dp(4), 0, dp(8))
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        }
         resultsText = TextView(this).apply {
             textSize = 14f
             setTextIsSelectable(true)
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
         }
-        listOf(routeButton, diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, resultsText).forEach(column::addView)
+        listOf(routeButton, diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, summaryText, resultsText).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
         render()
     }
@@ -232,6 +241,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
 
     private fun execute(queries: List<Query>, timeoutMs: Int, route: DnsRoute, socksPort: Int?) {
         val token = ++generation
+        wasStopped = false
         lastRunRoute = route
         lastRunSocksPort = socksPort
         runNetwork = defaultNetwork()
@@ -292,6 +302,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     }
 
     private fun stopRun() {
+        wasStopped = true
         generation++ // Results from blocked sockets may not re-enter this screen.
         job?.cancel()
         job = null
@@ -309,6 +320,8 @@ class DnsDiagnosticsActivity : BaseActivity() {
         filterButton.text = getString(when (filter) {
             1 -> R.string.dns_diagnostics_filter_ok
             2 -> R.string.dns_diagnostics_filter_errors
+            3 -> R.string.dns_diagnostics_filter_mismatches
+            4 -> R.string.dns_diagnostics_filter_timeouts
             else -> R.string.dns_diagnostics_filter_all
         })
         sortButton.text = getString(if (fastestFirst)
@@ -320,28 +333,37 @@ class DnsDiagnosticsActivity : BaseActivity() {
                 getString(runRouteHint ?: appRouteHint()))
         } + if (observedNetworkChange) "\n" +
             getString(R.string.dns_diagnostics_route_changed) else ""
-        status.text = getString(R.string.dns_diagnostics_progress, completed, total)
-        renderResults()
+        val analysis = DnsScanAnalysis.summarize(results)
+        status.text = if (wasStopped) getString(R.string.dns_diagnostics_stopped)
+            else getString(R.string.dns_diagnostics_progress, completed, total)
+        summaryText.text = getString(R.string.dns_diagnostics_scan_summary,
+            analysis.validResponses, analysis.timeouts, analysis.tcpFallbacks, analysis.mismatchedGroups)
+        renderResults(analysis)
     }
 
-    private fun renderResults() {
-        val visible = results.filter {
+    private fun renderResults(analysis: DnsScanSummary = DnsScanAnalysis.summarize(results)) {
+        val visible = results.withIndex().filter {
             when (filter) {
-                1 -> it.succeeded
-                2 -> !it.succeeded
+                1 -> it.value.succeeded
+                2 -> !it.value.succeeded
+                3 -> it.index in analysis.mismatchedResultIndices
+                4 -> it.value.status == "TIMEOUT"
                 else -> true
             }
         }
-        val selected = if (fastestFirst) visible.sortedWith(compareBy<DnsProbeResult> { !it.succeeded }
-            .thenBy { it.elapsedMs }) else visible
+        val selected = if (fastestFirst) visible.sortedWith(compareBy<IndexedValue<DnsProbeResult>> { !it.value.succeeded }
+            .thenBy { it.value.elapsedMs }) else visible
         resultsText.text = if (selected.isEmpty()) getString(R.string.dns_diagnostics_empty) else buildString {
-            for (res in selected) {
+            for ((index, res) in selected) {
                 append(if (res.route == DnsRoute.LOCAL_SOCKS5_TCP)
                     getString(R.string.dns_diagnostics_result_socks) else
                     getString(R.string.dns_diagnostics_result_app))
                     .append(" | ").append(res.domain).append("  ").append(res.qtype.name)
                     .append("  @ ").append(res.resolver)
                     .append("\n").append(res.status).append("  ").append(res.elapsedMs).append(" ms")
+                if (index in analysis.mismatchedResultIndices) {
+                    append("\n").append(getString(R.string.dns_diagnostics_mismatch_notice))
+                }
                 append("  ").append(res.attempts.joinToString(" → ") { "${it.transport}: ${it.status} (${it.elapsedMs} ms)" })
                 res.answer?.let { reply ->
                     append("\nRCODE=").append(reply.rcode)

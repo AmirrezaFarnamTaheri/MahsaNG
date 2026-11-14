@@ -35,4 +35,8 @@
     <string name="dns_diagnostics_test_route_socks">Test route: local SOCKS5 on 127.0.0.1:%1$d, relaying DNS-over-TCP to the chosen resolver. This does not establish the active profile, remote outbound, or Xray internal DNS route. It does not establish a DNS leak.</string>
     <string name="dns_diagnostics_result_socks">Local SOCKS5/TCP</string>
     <string name="dns_diagnostics_result_app">App network UDP/TCP</string>
+    <string name="dns_diagnostics_filter_mismatches">Show: observed answer differences</string>
+    <string name="dns_diagnostics_filter_timeouts">Show: timeouts</string>
+    <string name="dns_diagnostics_scan_summary">DNS responses: %1$d | Timeouts: %2$d | UDP to TCP fallbacks: %3$d | Different-answer groups: %4$d</string>
+    <string name="dns_diagnostics_mismatch_notice">Different DNS answers were observed across resolvers; not proof of a DNS leak.</string>
 </resources>

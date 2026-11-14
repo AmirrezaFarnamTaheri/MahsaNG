@@ -35,4 +35,8 @@
     <string name="dns_diagnostics_test_route_socks">مسیر آزمایش: SOCKS5 محلی در 127.0.0.1:%1$d که DNS را روی TCP به سرور انتخابی می‌فرستد. این آزمایش پروفایل فعال، خروجی راه‌دور یا مسیر DNS داخلی Xray را تأیید نمی‌کند و نشتی DNS را ثابت نمی‌کند.</string>
     <string name="dns_diagnostics_result_socks">SOCKS5 محلی / TCP</string>
     <string name="dns_diagnostics_result_app">شبکه برنامه UDP/TCP</string>
+    <string name="dns_diagnostics_filter_mismatches">نمایش: اختلاف پاسخ‌های مشاهده‌شده</string>
+    <string name="dns_diagnostics_filter_timeouts">نمایش: پایان مهلت پاسخ</string>
+    <string name="dns_diagnostics_scan_summary">پاسخ DNS: %1$d | پایان مهلت: %2$d | تغییر UDP به TCP: %3$d | گروه‌های با پاسخ متفاوت: %4$d</string>
+    <string name="dns_diagnostics_mismatch_notice">پاسخ‌های متفاوتی از DNSهای مختلف دریافت شد؛ این به‌تنهایی نشانهٔ نشت DNS نیست.</string>
 </resources>

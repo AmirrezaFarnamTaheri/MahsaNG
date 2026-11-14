@@ -9,10 +9,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class AdvancedTcpRetrySessionTest {
     private val target = AdvancedRetryTarget("guid", "rev", "example.invalid", 443)
@@ -20,19 +20,19 @@ class AdvancedTcpRetrySessionTest {
 
     @Test fun realWorkerLoopCompletesThreePassesWithOwnedTickets() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val reports = Collections.synchronizedList(mutableListOf<AdvancedTcpRetryReport>())
+        val latest = AtomicReference<AdvancedTcpRetryReport?>()
         try {
             val session = AdvancedTcpRetrySession(scope, "session", listOf(target), settings,
                 RetryPassMode.ALL_EVERY_PASS, 1_000,
                 currentRevision = { "rev" }, networkStillCurrent = { true },
-                onReport = { reports.add(it) },
+                onReport = { latest.set(it) },
                 testConnect = { _, _ -> 1L },
             )
             session.start()
             withTimeout(5_000) {
-                while (reports.none { it.snapshot.phase == RetryRunPhase.FINISHED }) delay(25)
+                while (latest.get()?.snapshot?.phase != RetryRunPhase.FINISHED) delay(25)
             }
-            val finished = reports.last { it.snapshot.phase == RetryRunPhase.FINISHED }
+            val finished = requireNotNull(latest.get())
             assertEquals(3L, finished.snapshot.attemptsCompleted)
             assertEquals(0L, finished.snapshot.failedAttempts)
             assertEquals(1, finished.snapshot.succeededProfiles)
@@ -70,15 +70,39 @@ class AdvancedTcpRetrySessionTest {
         }
     }
 
+    @Test fun editedProfileRevisionTurnsSuccessfulSocketConnectIntoUnknown() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val latest = AtomicReference<AdvancedTcpRetryReport?>()
+        val revision = AtomicReference("rev")
+        try {
+            val session = AdvancedTcpRetrySession(scope, "edited", listOf(target),
+                AdvancedRetrySettings(1, 1, 1), RetryPassMode.ALL_EVERY_PASS, 1_000,
+                currentRevision = { revision.get() }, networkStillCurrent = { true },
+                onReport = { latest.set(it) },
+                testConnect = { _, _ -> revision.set("rev-updated"); 1L },
+            )
+            session.start()
+            withTimeout(5_000) {
+                while (latest.get()?.snapshot?.phase != RetryRunPhase.FINISHED) delay(25)
+            }
+            val summary = requireNotNull(latest.get())
+            assertEquals(1L, summary.snapshot.unknownAttempts)
+            assertEquals(0L, summary.snapshot.failedAttempts)
+            assertEquals(0, summary.snapshot.succeededProfiles)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     @Test fun aHandoverIsUnknownNotEligibleTcpFailure() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val reports = Collections.synchronizedList(mutableListOf<AdvancedTcpRetryReport>())
+        val latest = AtomicReference<AdvancedTcpRetryReport?>()
         val current = AtomicBoolean(true)
         try {
             val session = AdvancedTcpRetrySession(scope, "handover", listOf(target),
                 AdvancedRetrySettings(2, 1, 1), RetryPassMode.ALL_EVERY_PASS, 1_000,
                 currentRevision = { "rev" }, networkStillCurrent = { current.get() },
-                onReport = { reports.add(it) },
+                onReport = { latest.set(it) },
                 testConnect = { _, _ ->
                     current.set(false)
                     1L
@@ -86,9 +110,9 @@ class AdvancedTcpRetrySessionTest {
             )
             session.start()
             withTimeout(5_000) {
-                while (reports.none { it.snapshot.phase == RetryRunPhase.FINISHED }) delay(25)
+                while (latest.get()?.snapshot?.phase != RetryRunPhase.FINISHED) delay(25)
             }
-            val summary = reports.last { it.snapshot.phase == RetryRunPhase.FINISHED }
+            val summary = requireNotNull(latest.get())
             assertEquals(2L, summary.snapshot.unknownAttempts)
             assertEquals(0L, summary.snapshot.failedAttempts)
             assertEquals(0, summary.snapshot.succeededProfiles)

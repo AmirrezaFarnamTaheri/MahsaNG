@@ -567,7 +567,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 if (!Utils.isValidUrl(url)) {
                     return@forEach
                 }
-                Log.d(ANG_PACKAGE, url)
+                // Subscription URLs may contain access tokens. Never write them to Logcat.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val configText = try {
                         Utils.getUrlContentWithCustomUserAgent(url)

@@ -44,6 +44,7 @@ val productionHelpers = listOf(
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
+    "SafeProbeFailure",
 )
 
 sourceSets {

@@ -1,5 +1,10 @@
 package com.v2ray.ang.ui
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.text.InputType
@@ -12,6 +17,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.R
+import com.v2ray.ang.util.Utils
+import com.v2ray.ang.util.dns.DnsResolverDefaults
 import com.v2ray.ang.util.dns.DnsProbe
 import com.v2ray.ang.util.dns.DnsProbeResult
 import com.v2ray.ang.util.dns.DnsResolverInput
@@ -40,6 +47,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private lateinit var sortButton: Button
     private lateinit var status: TextView
     private lateinit var resultsText: TextView
+    private lateinit var routeInfo: TextView
     private val results = mutableListOf<DnsProbeResult>()
     private var filter = 0
     private var fastestFirst = false
@@ -47,6 +55,9 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private var job: Job? = null
     private var completed = 0
     private var total = 0
+    private var runNetwork: Network? = null
+    private var runRouteHint: Int? = null
+    private var observedNetworkChange = false
     private var lastRender = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,7 +91,18 @@ class DnsDiagnosticsActivity : BaseActivity() {
         }
         label(R.string.dns_diagnostics_route_warning)
         domains = input(R.string.dns_diagnostics_domains, "example.com")
-        resolvers = input(R.string.dns_diagnostics_resolvers, "1.1.1.1,8.8.8.8")
+        // Read existing Xray settings without interpreting them as the active DNS path.
+        // Credential-bearing DoH/DoQ URLs must never be echoed into this UI.
+        val configuredResolvers = DnsResolverDefaults.fromConfiguredEntries(Utils.getRemoteDnsServers())
+        resolvers = input(R.string.dns_diagnostics_resolvers, configuredResolvers.suggestedInput)
+        val visibleConfigured = configuredResolvers.numericResolvers.take(4).joinToString(", ")
+            .ifBlank { getString(R.string.dns_diagnostics_no_plain_resolver) }
+        column.addView(TextView(this).apply {
+            text = getString(R.string.dns_diagnostics_configured, visibleConfigured,
+                configuredResolvers.unsupportedCount + configuredResolvers.additionalNumericCount)
+            textSize = 13f
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        })
         types = input(R.string.dns_diagnostics_types, "A,AAAA")
         timeout = input(R.string.dns_diagnostics_timeout, "1500", multiline = false)
         diagnose = Button(this).apply {
@@ -98,6 +120,11 @@ class DnsDiagnosticsActivity : BaseActivity() {
         }
         filterButton = Button(this).apply { setOnClickListener { filter = (filter + 1) % 3; render() } }
         sortButton = Button(this).apply { setOnClickListener { fastestFirst = !fastestFirst; render() } }
+        routeInfo = TextView(this).apply {
+            textSize = 13f
+            setPadding(0, dp(10), 0, dp(8))
+            textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+        }
         status = TextView(this).apply {
             textSize = 16f
             setPadding(0, dp(10), 0, dp(8))
@@ -108,9 +135,30 @@ class DnsDiagnosticsActivity : BaseActivity() {
             setTextIsSelectable(true)
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
         }
-        listOf(diagnose, scan, cancel, filterButton, sortButton, status, resultsText).forEach(column::addView)
+        listOf(diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, resultsText).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
         render()
+    }
+
+    // Android 5 cannot provide activeNetwork. A transport hint is not packet-route
+    // proof; a separate Xray-routed DNS test must not be inferred from this field.
+    private fun defaultNetwork(): Network? = runCatching {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) null
+        else (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).activeNetwork
+    }.getOrNull()
+
+    private fun appRouteHint(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return R.string.dns_diagnostics_route_unknown
+        return runCatching {
+            val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val capabilities = defaultNetwork()?.let { manager.getNetworkCapabilities(it) }
+            when {
+                capabilities == null -> R.string.dns_diagnostics_route_unknown
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ->
+                    R.string.dns_diagnostics_route_vpn_reported
+                else -> R.string.dns_diagnostics_route_vpn_not_reported
+            }
+        }.getOrDefault(R.string.dns_diagnostics_route_unknown)
     }
 
     private data class Query(val resolver: String, val domain: String, val type: DnsType)
@@ -159,6 +207,9 @@ class DnsDiagnosticsActivity : BaseActivity() {
 
     private fun execute(queries: List<Query>, timeoutMs: Int) {
         val token = ++generation
+        runNetwork = defaultNetwork()
+        runRouteHint = appRouteHint()
+        observedNetworkChange = false
         results.clear()
         completed = 0
         total = queries.size
@@ -182,6 +233,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
                                 val observation = probe.query(query.resolver, query.domain, query.type, timeoutMs)
                                 withContext(Dispatchers.Main) {
                                     if (token == generation) {
+                                        if (defaultNetwork() != runNetwork) observedNetworkChange = true
                                         results.add(observation)
                                         completed++
                                         val now = SystemClock.elapsedRealtime()
@@ -199,6 +251,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
                 // Cancellation is normal; never report skipped queries as failures.
             } finally {
                 if (token == generation) {
+                    if (defaultNetwork() != runNetwork) observedNetworkChange = true
                     diagnose.isEnabled = true
                     scan.isEnabled = true
                     cancel.visibility = View.GONE
@@ -227,6 +280,9 @@ class DnsDiagnosticsActivity : BaseActivity() {
         })
         sortButton.text = getString(if (fastestFirst)
             R.string.dns_diagnostics_sort_fastest else R.string.dns_diagnostics_sort_original)
+        routeInfo.text = getString(R.string.dns_diagnostics_test_route,
+            getString(runRouteHint ?: appRouteHint())) +
+            if (observedNetworkChange) "\n" + getString(R.string.dns_diagnostics_route_changed) else ""
         status.text = getString(R.string.dns_diagnostics_progress, completed, total)
         renderResults()
     }

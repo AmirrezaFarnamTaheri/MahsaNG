@@ -26,6 +26,17 @@ class DnsUiContract(unittest.TestCase):
         self.assertIn('may use the active VPN', label)
         self.assertIn('do not prove an Xray through-proxy path', label)
 
+    def test_configured_dns_and_route_evidence_are_separate_from_queries(self):
+        code = (UI / 'DnsDiagnosticsActivity.kt').read_text()
+        self.assertIn('DnsResolverDefaults.fromConfiguredEntries(Utils.getRemoteDnsServers())', code)
+        self.assertIn('NetworkCapabilities.TRANSPORT_VPN', code)
+        self.assertIn('routeInfo.text = getString(', code)
+        self.assertNotIn('"1.1.1.1,8.8.8.8"', code)
+        resources = ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml')
+        labels = {s.attrib['name']: s.text for s in resources.findall('string')}
+        self.assertIn('through-proxy DNS was NOT tested', labels['dns_diagnostics_test_route'])
+        self.assertIn('not proof of the active profile', labels['dns_diagnostics_configured'])
+
     def test_persian_parity_and_manifest_internal_only(self):
         en = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml').findall('string')}
         fa = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values-fa' / 'dns_diagnostics.xml').findall('string')}

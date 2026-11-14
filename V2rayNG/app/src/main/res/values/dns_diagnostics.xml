@@ -21,4 +21,11 @@
     <string name="dns_diagnostics_budget">Send up to %1$d explicit DNS queries on the app network route? DNS lookups use data and can reveal the queried domains to the selected resolvers. UDP-truncated replies may require another query over TCP.</string>
     <string name="dns_diagnostics_run">Start queries</string>
     <string name="dns_diagnostics_stopped">Stopped. Late socket results are ignored. Already completed observations remain visible.</string>
+    <string name="dns_diagnostics_no_plain_resolver">No configured plain-IP resolver; enter a numeric resolver manually</string>
+    <string name="dns_diagnostics_configured">Xray DNS settings (not proof of the active profile): %1$s. %2$d additional entries omitted, including non-IP endpoints. Resolver URLs are not displayed.</string>
+    <string name="dns_diagnostics_test_route">Test route: app-originated UDP/TCP to the selected resolver. OS-reported default network at run start: %1$s. Xray through-proxy DNS was NOT tested.</string>
+    <string name="dns_diagnostics_route_vpn_reported">VPN transport reported</string>
+    <string name="dns_diagnostics_route_vpn_not_reported">VPN transport not reported</string>
+    <string name="dns_diagnostics_route_unknown">unknown</string>
+    <string name="dns_diagnostics_route_changed">A default-network change was observed during this run; compare results cautiously.</string>
 </resources>

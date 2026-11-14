@@ -46,6 +46,7 @@ val productionHelpers = listOf(
     "TlsCertificatePolicy",
     "DnsWire",
     "DnsProbe",
+    "DnsResolverDefaults",
 )
 
 sourceSets {

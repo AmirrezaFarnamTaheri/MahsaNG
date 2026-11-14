@@ -21,4 +21,11 @@
     <string name="dns_diagnostics_budget">حداکثر %1$d پرس‌وجوی DNS در مسیر شبکه برنامه ارسال شود؟ این کار داده مصرف می‌کند و دامنه‌های بررسی‌شده را به DNSهای انتخابی نشان می‌دهد. پاسخ کوتاه‌شده UDP ممکن است یک پرس‌وجوی TCP دیگر لازم داشته باشد.</string>
     <string name="dns_diagnostics_run">شروع پرس‌وجو</string>
     <string name="dns_diagnostics_stopped">متوقف شد. نتایج دیررس پذیرفته نمی‌شوند و نتیجه‌های تکمیل‌شده قابل مشاهده‌اند.</string>
+    <string name="dns_diagnostics_no_plain_resolver">سرور DNS با IP عددی در تنظیمات یافت نشد؛ IP را دستی وارد کنید</string>
+    <string name="dns_diagnostics_configured">DNS تنظیم‌شدهٔ Xray (بدون تأیید پروفایل فعال): %1$s. تعداد %2$d ورودی دیگر، از جمله آدرس‌های غیر IP، نمایش داده نشده است. نشانی‌های URL نمایش داده نمی‌شوند.</string>
+    <string name="dns_diagnostics_test_route">مسیر آزمایش: UDP/TCP از داخل برنامه به DNS انتخابی. شبکه پیش‌فرض گزارش‌شدهٔ اندروید در آغاز آزمایش: %1$s. مسیر واقعی DNS از درون پراکسی Xray آزمایش نشده است.</string>
+    <string name="dns_diagnostics_route_vpn_reported">حمل‌ونقل VPN گزارش شده</string>
+    <string name="dns_diagnostics_route_vpn_not_reported">حمل‌ونقل VPN گزارش نشده</string>
+    <string name="dns_diagnostics_route_unknown">نامشخص</string>
+    <string name="dns_diagnostics_route_changed">تغییر شبکه پیش‌فرض در طول آزمایش مشاهده شد؛ نتایج را با احتیاط مقایسه کنید.</string>
 </resources>

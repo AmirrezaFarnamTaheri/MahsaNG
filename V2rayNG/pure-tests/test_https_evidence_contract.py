@@ -27,7 +27,9 @@ class HttpsEvidenceContract(unittest.TestCase):
         self.assertNotIn('X509TrustManager', code)
         self.assertNotIn('e.message', code)
         self.assertNotIn('printStackTrace()', code)
-        self.assertIn('getServerCertificates', code)
+        # Kotlin maps HttpsURLConnection.getServerCertificates() to this property.
+        self.assertIn('connection.serverCertificates', code)
+        self.assertIn('connection.cipherSuite', code)
 
     def test_english_persian_parity(self):
         names=[]

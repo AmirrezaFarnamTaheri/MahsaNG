@@ -2,7 +2,8 @@ name: MahsaNG safety checks
 
 on:
   pull_request:
-    branches: [master, 'roadmap/**', 'fix/**']
+    # Validate stacked feature PRs without duplicate push-triggered jobs.
+    branches: [master, 'roadmap/**', 'fix/**', 'feat/**']
   push:
     branches:
       - 'fix/failed-deletion-observation-id-*'

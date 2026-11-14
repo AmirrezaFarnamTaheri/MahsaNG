@@ -33,6 +33,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var subscriptionId: String = ""
     var keywordFilter: String = ""
         private set
+    private var profileProbeStatus = ProfileProbeStatus.ALL
+    private var profileMaxLatencyMs: Long? = null
     val serversCache = mutableListOf<ServersCache>()
     val isRunning by lazy { MutableLiveData<Boolean>() }
     val updateListAction by lazy { MutableLiveData<Int>() }
@@ -147,7 +149,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (keywordFilter.isEmpty() || config.remarks.contains(keywordFilter)) {
-                serversCache.add(ServersCache(guid, config))
+                val delay = if (profileProbeStatus == ProfileProbeStatus.ALL && profileMaxLatencyMs == null)
+                    null else runCatching {
+                        MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis
+                    }.getOrNull()
+                if (ProfileProbeFilter.matches(delay, profileProbeStatus, profileMaxLatencyMs)) {
+                    serversCache.add(ServersCache(guid, config))
+                }
             }
         }
     }
@@ -255,10 +263,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ivBinding.spSubscriptionId.adapter = ArrayAdapter<String>( context, android.R.layout.simple_spinner_dropdown_item, listRemarks)
         ivBinding.spSubscriptionId.setSelection(checkedItem)
         ivBinding.etKeyword.text = Utils.getEditable(keywordFilter)
+        val statuses = context.resources.getStringArray(R.array.profile_probe_statuses).toList()
+        ivBinding.spTestStatus.adapter = ArrayAdapter(
+            context, android.R.layout.simple_spinner_dropdown_item, statuses)
+        ivBinding.spTestStatus.setSelection(profileProbeStatus.ordinal)
+        ivBinding.etMaxLatency.setText(profileMaxLatencyMs?.toString() ?: "")
         val builder = AlertDialog.Builder(context).setView(ivBinding.root)
         builder.setTitle(R.string.title_filter_config)
         builder.setPositiveButton(R.string.tasker_setting_confirm) { dialogInterface: DialogInterface?, _: Int ->
             try {
+                val rawLatency = ivBinding.etMaxLatency.text.toString().trim()
+                val parsedLatency = if (rawLatency.isEmpty()) null else rawLatency.toLongOrNull()
+                if (rawLatency.isNotEmpty() && (parsedLatency == null || parsedLatency !in 1..60_000)) {
+                    android.widget.Toast.makeText(context, R.string.profile_probe_invalid_latency,
+                        android.widget.Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
                 val position = ivBinding.spSubscriptionId.selectedItemPosition
                 subscriptionId = if (listRemarks.count() - 1 == position) {
                     ""
@@ -266,6 +286,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     subscriptions[position].first
                 }
                 keywordFilter = ivBinding.etKeyword.text.toString()
+                profileProbeStatus = ProfileProbeStatus.values()
+                    .getOrNull(ivBinding.spTestStatus.selectedItemPosition)
+                    ?: ProfileProbeStatus.ALL
+                profileMaxLatencyMs = parsedLatency
                 reloadServerList()
 
                 dialogInterface?.dismiss()

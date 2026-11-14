@@ -68,7 +68,7 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
                         ?: return@mapNotNull null
                     val port = outbound.getServerPort()?.takeIf { it in 1..65535 }
                         ?: return@mapNotNull null
-                    AdvancedRetryTarget(guid, gson.toJson(config), address, port)
+                    AdvancedRetryTarget(guid, ProfileRevisionDigest.fromSerializedConfig(gson.toJson(config)), address, port)
                 }
                 withContext(Dispatchers.Main) {
                     if (currentRunId != id || !isActive) return@withContext
@@ -101,7 +101,11 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
                 runCatching { connectivity.activeNetwork == initialNetwork }.getOrDefault(false)
         }
         val lookupRevision = { guid: String ->
-            runCatching { MmkvManager.decodeServerConfig(guid)?.let { Gson().toJson(it) } }.getOrNull()
+            runCatching {
+                MmkvManager.decodeServerConfig(guid)?.let {
+                    ProfileRevisionDigest.fromSerializedConfig(Gson().toJson(it))
+                }
+            }.getOrNull()
         }
         val runner = AdvancedTcpRetrySession(
             scope = viewModelScope, runId = id, targets = ready.targets,

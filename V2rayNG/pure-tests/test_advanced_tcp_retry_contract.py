@@ -48,5 +48,12 @@ class AdvancedTcpRetryContractTest(unittest.TestCase):
             self.assertNotIn("removeConfirmedFailedServers", source)
             self.assertNotIn("removeAllServer", source)
 
+    def test_retry_run_snapshots_hashed_revisions_not_raw_credentials(self):
+        viewmodel = (MAIN / "viewmodel" / "AdvancedTcpRetryViewModel.kt").read_text()
+        self.assertIn("ProfileRevisionDigest.fromSerializedConfig(gson.toJson(config))", viewmodel)
+        self.assertIn("ProfileRevisionDigest.fromSerializedConfig(Gson().toJson(it))", viewmodel)
+        self.assertNotIn("AdvancedRetryTarget(guid, gson.toJson(config)", viewmodel)
+        self.assertIn("currentRevision = lookupRevision", viewmodel)
+
 if __name__ == "__main__":
     unittest.main()

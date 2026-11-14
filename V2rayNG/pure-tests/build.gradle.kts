@@ -26,6 +26,7 @@ val productionHelpers = listOf(
     "AdvancedRetryReview",
     "AdvancedRetryScheduler",
     "AdvancedTcpRetrySession",
+    "ProfileRevisionDigest",
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "CoreStopGate",

@@ -45,6 +45,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val tcpingTestScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     private val testRuns = TestRunTracker()
     private val tcpDisplayRows = TcpRowBatch()
+    private val tcpEvidenceByGuid = mutableMapOf<String, TcpProbeEvidence>()
     private var tcpDisplayFlushJob: Job? = null
     private var realPingScheduleJob: Job? = null
     private var nativeTestRunPending = false
@@ -61,6 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val runId = testRuns.begin(visibleGuids)
         tcpDisplayFlushJob?.cancel()
         tcpDisplayRows.begin(runId)
+        tcpEvidenceByGuid.clear()
         // Starting a TCP-only run must not launch a native service unnecessarily.
         // If a real-ping run preceded it, this command cancels that native run.
         if (native || nativeTestRunPending) {
@@ -71,6 +73,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateListAction.value = -1
         return runId
     }
+
+    internal fun getTcpEvidence(guid: String): TcpProbeEvidence? = tcpEvidenceByGuid[guid]
 
     fun startListenBroadcast() {
         if (broadcastRegistered) return
@@ -92,6 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         testRuns.invalidate()
         tcpDisplayFlushJob?.cancel()
         tcpDisplayRows.clear()
+        tcpEvidenceByGuid.clear()
         realPingScheduleJob?.cancel()
         // Do not send a global native Cancel from an obsolete ViewModel: a new
         // activity may already own the native service with a newer run token.
@@ -187,7 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 while (isActive) {
                     val (guid, address, port) = queue.claim() ?: break
                     if (!testRuns.accepts(runId, guid)) continue
-                    val delay = SpeedtestUtil.tcping(address, port)
+                    val evidence = SpeedtestUtil.tcpingEvidence(address, port)
+                    val delay = evidence.delayMs
                     withContext(Dispatchers.Main) {
                         // Share forgetGuid's lock through the final persistent write.
                         val published = testRuns.publishIfCurrent(runId, guid) {
@@ -197,7 +203,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 true
                             }
                         }
-                        if (published) queueTcpDisplayUpdate(runId, guid)
+                        if (published) {
+                            tcpEvidenceByGuid[guid] = evidence
+                            queueTcpDisplayUpdate(runId, guid)
+                        }
                     }
                 }
             }

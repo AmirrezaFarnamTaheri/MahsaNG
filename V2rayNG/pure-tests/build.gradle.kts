@@ -53,6 +53,7 @@ val productionHelpers = listOf(
     "HttpsEvidence",
     "TlsHandshakeProbe",
     "ProfileProbeFilter",
+    "TcpProbeEvidence",
     "SafeProbeFailure",
 )
 

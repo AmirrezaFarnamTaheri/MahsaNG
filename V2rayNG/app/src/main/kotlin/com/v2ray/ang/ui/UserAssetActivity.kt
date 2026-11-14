@@ -58,10 +58,15 @@ class UserAssetActivity : BaseActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_asset, menu)
+        menuInflater.inflate(R.menu.menu_contextual_help, menu)
         return super.onCreateOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
+        R.id.action_contextual_help -> {
+            ContextualHelp.show(this, R.id.user_asset_setting)
+            true
+        }
         R.id.add_file -> {
             showFileChooser()
             true

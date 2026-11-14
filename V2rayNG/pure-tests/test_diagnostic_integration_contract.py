@@ -53,7 +53,8 @@ class DiagnosticIntegrationContract(unittest.TestCase):
         self.assertIn('SafeProbeFailure.classify(e)', speed)
         self.assertNotIn('printStackTrace()', speed)
         self.assertNotIn('Log.getStackTraceString', speed)
-        self.assertNotIn('Throwable.toString()', safe)
+        self.assertNotIn('error.toString()', safe)
+        self.assertNotIn('error.message', safe)
 
     def test_pure_kotlin_test_suite_carries_all_production_helpers(self):
         build = (BASE / 'pure-tests/build.gradle.kts').read_text()

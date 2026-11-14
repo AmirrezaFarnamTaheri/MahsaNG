@@ -43,6 +43,7 @@ val productionHelpers = listOf(
     "ProfileDelayOrder",
     "ProfileIndexSwap",
     "DuplicateProfileSelection",
+    "HttpsEvidence",
     "TlsCertificatePolicy",
 )
 

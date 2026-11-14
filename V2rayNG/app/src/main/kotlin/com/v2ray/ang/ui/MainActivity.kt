@@ -317,6 +317,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             true
         }
 
+        R.id.https_evidence -> {
+            startActivity(Intent(this, HttpsEvidenceActivity::class.java))
+            true
+        }
         R.id.del_all_config -> {
             AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
                     .setPositiveButton(android.R.string.ok) { _, _ ->

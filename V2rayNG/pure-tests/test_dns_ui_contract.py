@@ -57,6 +57,16 @@ class DnsUiContract(unittest.TestCase):
         self.assertIn('record.type == DnsType.TXT', comparison)
         self.assertNotIn('DNS_LEAK', comparison)
 
+    def test_activity_recreation_preserves_dns_results_and_inputs(self):
+        code = (UI / 'DnsDiagnosticsActivity.kt').read_text()
+        retained = (ROOT / 'kotlin/com/v2ray/ang/viewmodel/DnsDiagnosticsViewModel.kt').read_text()
+        self.assertIn('private val model: DnsDiagnosticsViewModel by viewModels()', code)
+        self.assertIn('model.interruptActiveRun()', code)
+        self.assertIn('override fun onSaveInstanceState(outState: Bundle)', code)
+        self.assertIn('dns_rendered_snapshot', code)
+        self.assertIn('val results = mutableListOf<DnsProbeResult>()', retained)
+        self.assertIn('generation++', retained)
+
     def test_persian_parity_and_manifest_internal_only(self):
         en = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values' / 'dns_diagnostics.xml').findall('string')}
         fa = {s.attrib['name'] for s in ET.parse(ROOT / 'res' / 'values-fa' / 'dns_diagnostics.xml').findall('string')}

@@ -15,6 +15,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.viewModels
+import com.v2ray.ang.viewmodel.DnsDiagnosticsViewModel
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.R
 import com.v2ray.ang.util.Utils
@@ -53,21 +55,22 @@ class DnsDiagnosticsActivity : BaseActivity() {
     private lateinit var summaryText: TextView
     private lateinit var resultsText: TextView
     private lateinit var routeInfo: TextView
-    private val results = mutableListOf<DnsProbeResult>()
-    private var filter = 0
-    private var fastestFirst = false
-    private var generation = 0L
-    private var job: Job? = null
-    private var completed = 0
-    private var wasStopped = false
-    private var total = 0
-    private var selectedRoute = DnsRoute.APP_UDP_TCP
-    private var lastRunRoute: DnsRoute? = null
-    private var lastRunSocksPort: Int? = null
-    private var runNetwork: Network? = null
-    private var runRouteHint: Int? = null
-    private var observedNetworkChange = false
-    private var lastRender = 0L
+    private val model: DnsDiagnosticsViewModel by viewModels()
+    private val results get() = model.results
+    private var filter: Int get() = model.filter; set(value) { model.filter = value }
+    private var fastestFirst: Boolean get() = model.fastestFirst; set(value) { model.fastestFirst = value }
+    private var generation: Long get() = model.generation; set(value) { model.generation = value }
+    private var job: Job? = null // Lifecycle-bound worker: never auto-restart on recreation.
+    private var completed: Int get() = model.completed; set(value) { model.completed = value }
+    private var wasStopped: Boolean get() = model.wasStopped; set(value) { model.wasStopped = value }
+    private var total: Int get() = model.total; set(value) { model.total = value }
+    private var selectedRoute: DnsRoute get() = model.selectedRoute; set(value) { model.selectedRoute = value }
+    private var lastRunRoute: DnsRoute? get() = model.lastRunRoute; set(value) { model.lastRunRoute = value }
+    private var lastRunSocksPort: Int? get() = model.lastRunSocksPort; set(value) { model.lastRunSocksPort = value }
+    private var runNetwork: Network? get() = model.runNetwork; set(value) { model.runNetwork = value }
+    private var runRouteHint: Int? get() = model.runRouteHint; set(value) { model.runRouteHint = value }
+    private var observedNetworkChange: Boolean get() = model.observedNetworkChange; set(value) { model.observedNetworkChange = value }
+    private var lastRender: Long get() = model.lastRender; set(value) { model.lastRender = value }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,11 +102,13 @@ class DnsDiagnosticsActivity : BaseActivity() {
             }
         }
         label(R.string.dns_diagnostics_route_warning)
-        domains = input(R.string.dns_diagnostics_domains, "example.com")
+        domains = input(R.string.dns_diagnostics_domains,
+            savedInstanceState?.getString("dns_domains") ?: "example.com")
         // Read existing Xray settings without interpreting them as the active DNS path.
         // Credential-bearing DoH/DoQ URLs must never be echoed into this UI.
         val configuredResolvers = DnsResolverDefaults.fromConfiguredEntries(Utils.getRemoteDnsServers())
-        resolvers = input(R.string.dns_diagnostics_resolvers, configuredResolvers.suggestedInput)
+        resolvers = input(R.string.dns_diagnostics_resolvers,
+            savedInstanceState?.getString("dns_resolvers") ?: configuredResolvers.suggestedInput)
         val visibleConfigured = configuredResolvers.numericResolvers.take(4).joinToString(", ")
             .ifBlank { getString(R.string.dns_diagnostics_no_plain_resolver) }
         column.addView(TextView(this).apply {
@@ -112,8 +117,10 @@ class DnsDiagnosticsActivity : BaseActivity() {
             textSize = 13f
             textDirection = View.TEXT_DIRECTION_FIRST_STRONG
         })
-        types = input(R.string.dns_diagnostics_types, "A,AAAA")
-        timeout = input(R.string.dns_diagnostics_timeout, "1500", multiline = false)
+        types = input(R.string.dns_diagnostics_types,
+            savedInstanceState?.getString("dns_types") ?: "A,AAAA")
+        timeout = input(R.string.dns_diagnostics_timeout,
+            savedInstanceState?.getString("dns_timeout") ?: "1500", multiline = false)
         routeButton = Button(this).apply {
             setOnClickListener {
                 if (job?.isActive == true) return@setOnClickListener
@@ -159,7 +166,23 @@ class DnsDiagnosticsActivity : BaseActivity() {
         }
         listOf(routeButton, diagnose, scan, cancel, filterButton, sortButton, routeInfo, status, summaryText, resultsText).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
+        if (savedInstanceState != null) {
+            filter = savedInstanceState.getInt("dns_filter", filter)
+            fastestFirst = savedInstanceState.getBoolean("dns_sort", fastestFirst)
+            selectedRoute = runCatching {
+                DnsRoute.valueOf(savedInstanceState.getString("dns_selected_route").orEmpty())
+            }.getOrDefault(selectedRoute)
+        }
+        // The old Activity's lifecycleScope is cancelled on rotation. A retained
+        // observation is evidence; silently resuming a fresh network scan is not.
+        if (model.activeRun || savedInstanceState?.getBoolean("dns_was_running") == true) {
+            model.interruptActiveRun()
+        }
         render()
+        if (results.isEmpty()) {
+            savedInstanceState?.getString("dns_rendered_snapshot")?.takeIf { it.isNotBlank() }
+                ?.let { resultsText.text = it }
+        }
     }
 
     // Android 5 cannot provide activeNetwork. A transport hint is not packet-route
@@ -241,6 +264,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
 
     private fun execute(queries: List<Query>, timeoutMs: Int, route: DnsRoute, socksPort: Int?) {
         val token = ++generation
+        model.activeRun = true
         wasStopped = false
         lastRunRoute = route
         lastRunSocksPort = socksPort
@@ -290,6 +314,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
                 // Cancellation is normal; never report skipped queries as failures.
             } finally {
                 if (token == generation) {
+                    model.activeRun = false
                     if (defaultNetwork() != runNetwork) observedNetworkChange = true
                     diagnose.isEnabled = true
                     scan.isEnabled = true
@@ -302,6 +327,7 @@ class DnsDiagnosticsActivity : BaseActivity() {
     }
 
     private fun stopRun() {
+        model.activeRun = false
         wasStopped = true
         generation++ // Results from blocked sockets may not re-enter this screen.
         job?.cancel()
@@ -379,6 +405,21 @@ class DnsDiagnosticsActivity : BaseActivity() {
                 append("\n\n")
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("dns_domains", domains.text.toString())
+        outState.putString("dns_resolvers", resolvers.text.toString())
+        outState.putString("dns_types", types.text.toString())
+        outState.putString("dns_timeout", timeout.text.toString())
+        outState.putInt("dns_filter", filter)
+        outState.putBoolean("dns_sort", fastestFirst)
+        outState.putString("dns_selected_route", selectedRoute.name)
+        outState.putBoolean("dns_was_running", model.activeRun || job?.isActive == true)
+        // A process-death restore can display the last read-only text snapshot.
+        // Typed results across rotation live in the ViewModel, not the Bundle.
+        outState.putString("dns_rendered_snapshot", resultsText.text.toString().take(60_000))
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {

@@ -38,6 +38,7 @@ class HttpsEvidenceActivity : BaseActivity() {
     private lateinit var output: TextView
     private var generation = 0L
     private var job: Job? = null
+    private var activeRun = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,9 +58,10 @@ class HttpsEvidenceActivity : BaseActivity() {
                 setPadding(0, dp(10), 0, dp(4))
             })
         }
-        fun field(labelRes: Int, defaultText: String, number: Boolean = false): EditText {
+        fun field(labelRes: Int, defaultText: String, fieldId: Int, number: Boolean = false): EditText {
             label(labelRes)
             return EditText(this).also {
+                it.id = fieldId // Stable view identity for Android hierarchy restoration.
                 it.setText(defaultText)
                 it.setSingleLine(true)
                 if (number) it.inputType = InputType.TYPE_CLASS_NUMBER
@@ -68,11 +70,19 @@ class HttpsEvidenceActivity : BaseActivity() {
             }
         }
         label(R.string.https_evidence_route_warning)
-        host = field(R.string.https_evidence_host, "example.com")
-        tlsPort = field(R.string.https_evidence_tls_port, "443", true)
+        host = field(R.string.https_evidence_host,
+            savedInstanceState?.getString("https_host") ?: "example.com",
+            R.id.https_evidence_host_field)
+        tlsPort = field(R.string.https_evidence_tls_port,
+            savedInstanceState?.getString("https_tls_port") ?: "443",
+            R.id.https_evidence_tls_port_field, true)
         proxyPort = field(R.string.https_evidence_proxy_port,
-            Utils.getConfiguredHttpPortOrNull()?.toString() ?: "", true)
-        timeout = field(R.string.https_evidence_timeout, "4000", true)
+            savedInstanceState?.getString("https_proxy_port")
+                ?: (Utils.getConfiguredHttpPortOrNull()?.toString() ?: ""),
+            R.id.https_evidence_proxy_port_field, true)
+        timeout = field(R.string.https_evidence_timeout,
+            savedInstanceState?.getString("https_timeout") ?: "4000",
+            R.id.https_evidence_timeout_field, true)
         direct = Button(this).apply {
             setText(R.string.https_evidence_direct)
             setOnClickListener { runEvidence(viaLocalProxy = false) }
@@ -99,6 +109,12 @@ class HttpsEvidenceActivity : BaseActivity() {
         }
         listOf(direct, viaProxy, tlsOnly, stop, output).forEach(column::addView)
         setContentView(ScrollView(this).apply { addView(column) })
+        if (savedInstanceState?.getBoolean("https_active_run") == true) {
+            // Network work from the former Activity was interrupted. Never auto-resend.
+            output.setText(R.string.https_evidence_stopped)
+        } else {
+            savedInstanceState?.getString("https_rendered_output")?.let { output.text = it }
+        }
     }
 
     private fun runEvidence(viaLocalProxy: Boolean) {
@@ -111,6 +127,7 @@ class HttpsEvidenceActivity : BaseActivity() {
         }
         val endpoint = host.text.toString()
         val token = ++generation
+        activeRun = true
         direct.isEnabled = false
         viaProxy.isEnabled = false
         tlsOnly.isEnabled = false
@@ -127,6 +144,7 @@ class HttpsEvidenceActivity : BaseActivity() {
                 if (token == generation) output.setText(R.string.https_evidence_invalid)
             } finally {
                 if (token == generation) {
+                    activeRun = false
                     direct.isEnabled = true
                     viaProxy.isEnabled = true
                     tlsOnly.isEnabled = true
@@ -152,6 +170,7 @@ class HttpsEvidenceActivity : BaseActivity() {
         }
         val endpoint = host.text.toString()
         val token = ++generation
+        activeRun = true
         direct.isEnabled = false
         viaProxy.isEnabled = false
         tlsOnly.isEnabled = false
@@ -167,6 +186,7 @@ class HttpsEvidenceActivity : BaseActivity() {
                 if (token == generation) output.setText(R.string.https_evidence_invalid)
             } finally {
                 if (token == generation) {
+                    activeRun = false
                     direct.isEnabled = true
                     viaProxy.isEnabled = true
                     tlsOnly.isEnabled = true
@@ -239,6 +259,7 @@ class HttpsEvidenceActivity : BaseActivity() {
     }
 
     private fun stopRun() {
+        activeRun = false
         generation++
         job?.cancel()
         job = null
@@ -247,6 +268,16 @@ class HttpsEvidenceActivity : BaseActivity() {
         tlsOnly.isEnabled = true
         stop.visibility = View.GONE
         output.setText(R.string.https_evidence_stopped)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("https_host", host.text.toString())
+        outState.putString("https_tls_port", tlsPort.text.toString())
+        outState.putString("https_proxy_port", proxyPort.text.toString())
+        outState.putString("https_timeout", timeout.text.toString())
+        outState.putBoolean("https_active_run", activeRun || job?.isActive == true)
+        outState.putString("https_rendered_output", output.text.toString().take(60_000))
+        super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {

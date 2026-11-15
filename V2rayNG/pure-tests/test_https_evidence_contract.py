@@ -51,6 +51,18 @@ class HttpsEvidenceContract(unittest.TestCase):
         self.assertNotIn('X509TrustManager', tls)
         self.assertNotIn('HostnameVerifier {', tls)
 
+    def test_inputs_and_evidence_survive_rotation_without_reissuing_requests(self):
+        code = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        resources = ET.parse(ROOT / 'res/values/https_evidence_ids.xml')
+        ids = [x.attrib['name'] for x in resources.findall('item')]
+        self.assertEqual(4, len(ids))
+        self.assertEqual(4, len(set(ids)))
+        self.assertIn('it.id = fieldId', code)
+        self.assertIn('override fun onSaveInstanceState(outState: Bundle)', code)
+        self.assertIn('https_rendered_output', code)
+        self.assertIn('https_active_run', code)
+        self.assertIn('output.setText(R.string.https_evidence_stopped)', code)
+
     def test_english_persian_parity(self):
         names=[]
         for dir in ('values','values-fa'):

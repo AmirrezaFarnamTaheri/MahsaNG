@@ -30,6 +30,20 @@ class SubscriptionIndexDecoderTest {
         assertEquals(listOf("old", "new"), decoded.map { it.second.remarks })
     }
 
+    @Test fun explicitNullModelFieldsDoNotHideHealthyLocalOrRemoteGroups() {
+        val records = linkedMapOf(
+            "bad-remarks" to """{"remarks":null,"url":"","addedTime":1}""",
+            "bad-url" to """{"remarks":"feed","url":null,"addedTime":2}""",
+            "local" to """{"remarks":"My local group","url":"","addedTime":3}""",
+            "remote" to gson.toJson(SubscriptionItem("remote", "https://example.invalid/feed", addedTime = 4L)),
+        )
+        val decoded = SubscriptionIndexDecoder.read(records.keys, records::get) {
+            gson.fromJson(it, SubscriptionItem::class.java)
+        }
+        assertEquals(listOf("local", "remote"), decoded.map { it.first })
+        assertEquals("", decoded.first().second.url)
+    }
+
     @Test fun emptyAndDuplicateKeysAreIgnoredAndEqualTimesUseStableKeyOrder() {
         val same = SubscriptionItem("same", addedTime = 9L)
         val result = SubscriptionIndexDecoder.read(

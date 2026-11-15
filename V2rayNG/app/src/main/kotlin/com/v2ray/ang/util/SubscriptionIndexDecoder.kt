@@ -21,6 +21,14 @@ internal object SubscriptionIndexDecoder {
                     ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 val item = runCatching { parse(json) }.getOrNull()
                     ?: return@mapNotNull null
+                // Gson can assign JSON null to Kotlin non-null model properties.
+                // Check both fields before exposing the item to Kotlin consumers.
+                val requiredFieldsPresent = runCatching {
+                    item.remarks.length
+                    item.url.length
+                    true
+                }.getOrDefault(false)
+                if (!requiredFieldsPresent) return@mapNotNull null
                 key to item
             }
             .sortedWith(compareBy<Pair<String, SubscriptionItem>> { it.second.addedTime }

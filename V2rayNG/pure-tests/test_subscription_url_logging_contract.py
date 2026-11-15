@@ -1,6 +1,9 @@
 """Regression: subscription update never writes a credential-bearing URL to Logcat."""
 import pathlib
 import re
+
+URL_INTERPOLATION = re.compile(r'Log\.\w+\s*\([^)]*\$(?:\{url\}|url\b)')
+THROWABLE_LOG = re.compile(r'Log\.\w+\s*\([^)]*,\s*[^,)]+,\s*(?:e|error|exception)\s*\)')
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "app" / "src" / "main"
@@ -15,6 +18,20 @@ class SubscriptionUrlLoggingContractTest(unittest.TestCase):
         refresh = source.split("fun importConfigViaSub()", 1)[1].split("show file chooser", 1)[0]
         self.assertNotIn("printStackTrace()", refresh)
         self.assertNotRegex(refresh, r"Log\.[a-z]+\(ANG_PACKAGE,\s*(?:url|e)\s*\)")
+        self.assertNotRegex(refresh, URL_INTERPOLATION)
+        self.assertNotRegex(refresh, THROWABLE_LOG)
+
+    def test_guards_reject_interpolated_urls_and_throwables(self):
+        for unsafe in (
+            'Log.w(ANG_PACKAGE, "Subscription failed: $url")',
+            'Log.w(ANG_PACKAGE, "Subscription failed: ${url}")',
+        ):
+            self.assertRegex(unsafe, URL_INTERPOLATION)
+        for unsafe in (
+            'Log.w(ANG_PACKAGE, "request failed", e)',
+            'Log.e(ANG_PACKAGE, "request failed", error)',
+        ):
+            self.assertRegex(unsafe, THROWABLE_LOG)
 
 
 if __name__ == "__main__":

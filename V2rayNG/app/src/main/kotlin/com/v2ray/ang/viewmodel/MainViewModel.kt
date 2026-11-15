@@ -23,6 +23,7 @@ import com.v2ray.ang.util.*
 import com.v2ray.ang.util.MmkvManager.KEY_ANG_CONFIGS
 import kotlinx.coroutines.*
 import java.util.*
+import java.security.MessageDigest
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mainStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
@@ -33,16 +34,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var subscriptionId: String = ""
     var keywordFilter: String = ""
         private set
+    private var profileProbeStatus = ProfileProbeStatus.ALL
+    private var profileMaxLatencyMs: Long? = null
     val serversCache = mutableListOf<ServersCache>()
     val isRunning by lazy { MutableLiveData<Boolean>() }
     val updateListAction by lazy { MutableLiveData<Int>() }
+    /** TCP-only row invalidation batches; native probe updates stay unchanged. */
+    val updateListBatchAction by lazy { MutableLiveData<List<Int>>() }
     val updateTestResultAction by lazy { MutableLiveData<String>() }
 
     private val tcpingTestScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     private val testRuns = TestRunTracker()
+    private val tcpDisplayRows = TcpRowBatch()
+    private val tcpEvidenceByGuid = mutableMapOf<String, TcpProbeEvidence>()
+    private val tcpEvidenceRevisions = mutableMapOf<String, String>()
+    private var tcpDisplayFlushJob: Job? = null
     private var realPingScheduleJob: Job? = null
     private var nativeTestRunPending = false
     private var broadcastRegistered = false
+
+    private fun probeFilterActive(): Boolean =
+        profileProbeStatus != ProfileProbeStatus.ALL || profileMaxLatencyMs != null
+
+    // The digest never stores or prints profile credentials; only matching
+    // evidence for the same saved configuration remains eligible for display.
+    private fun profileDigest(config: ServerConfig): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(Gson().toJson(config).toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
 
     /**
      * Called on the UI thread. Snapshot identifiers before scheduling any background work.
@@ -53,6 +72,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         realPingScheduleJob?.cancel()
         SpeedtestUtil.closeAllTcpSockets()
         val runId = testRuns.begin(visibleGuids)
+        tcpDisplayFlushJob?.cancel()
+        tcpDisplayRows.begin(runId)
+        tcpEvidenceByGuid.clear()
+        tcpEvidenceRevisions.clear()
         // Starting a TCP-only run must not launch a native service unnecessarily.
         // If a real-ping run preceded it, this command cancels that native run.
         if (native || nativeTestRunPending) {
@@ -60,8 +83,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         nativeTestRunPending = native
         MmkvManager.clearTestDelayResults(visibleGuids)
+        // Resetting saved delays changes membership under success/latency filters.
+        if (probeFilterActive()) updateCache()
         updateListAction.value = -1
         return runId
+    }
+
+    internal fun getTcpEvidence(guid: String): TcpProbeEvidence? {
+        val evidence = tcpEvidenceByGuid[guid] ?: return null
+        val revision = tcpEvidenceRevisions[guid] ?: return null
+        val current = runCatching { MmkvManager.decodeServerConfig(guid) }.getOrNull()
+        if (current == null || profileDigest(current) != revision) {
+            // A profile was edited/deleted: drop only its old TCP evidence.
+            tcpEvidenceByGuid.remove(guid)
+            tcpEvidenceRevisions.remove(guid)
+            return null
+        }
+        return evidence
     }
 
     fun startListenBroadcast() {
@@ -82,6 +120,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             broadcastRegistered = false
         }
         testRuns.invalidate()
+        tcpDisplayFlushJob?.cancel()
+        tcpDisplayRows.clear()
+        tcpEvidenceByGuid.clear()
+        tcpEvidenceRevisions.clear()
         realPingScheduleJob?.cancel()
         // Do not send a global native Cancel from an obsolete ViewModel: a new
         // activity may already own the native service with a newer run token.
@@ -98,6 +140,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeServer(guid: String) {
+        tcpEvidenceByGuid.remove(guid)
+        tcpEvidenceRevisions.remove(guid)
         serverList.remove(guid)
         MmkvManager.removeServer(guid)
         val index = getPosition(guid)
@@ -134,12 +178,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         serversCache.clear()
         for (guid in serverList) {
             val config = MmkvManager.decodeServerConfig(guid) ?: continue
+            if (tcpEvidenceByGuid.containsKey(guid) &&
+                tcpEvidenceRevisions[guid] != profileDigest(config)) {
+                tcpEvidenceByGuid.remove(guid)
+                tcpEvidenceRevisions.remove(guid)
+            }
             if (subscriptionId.isNotEmpty() && subscriptionId != config.subscriptionId) {
                 continue
             }
 
             if (keywordFilter.isEmpty() || config.remarks.contains(keywordFilter)) {
-                serversCache.add(ServersCache(guid, config))
+                val delay = if (profileProbeStatus == ProfileProbeStatus.ALL && profileMaxLatencyMs == null)
+                    null else runCatching {
+                        MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis
+                    }.getOrNull()
+                if (ProfileProbeFilter.matches(delay, profileProbeStatus, profileMaxLatencyMs)) {
+                    serversCache.add(ServersCache(guid, config))
+                }
             }
         }
     }
@@ -171,19 +226,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 while (isActive) {
                     val (guid, address, port) = queue.claim() ?: break
                     if (!testRuns.accepts(runId, guid)) continue
-                    val delay = SpeedtestUtil.tcping(address, port)
+                    val evidence = SpeedtestUtil.tcpingEvidence(address, port)
+                    val delay = evidence.delayMs
                     withContext(Dispatchers.Main) {
                         // Share forgetGuid's lock through the final persistent write.
-                        val published = testRuns.publishIfCurrent(runId, guid) {
-                            if (MmkvManager.decodeServerConfig(guid) == null) false
+                        testRuns.publishIfCurrent(runId, guid) {
+                            val current = MmkvManager.decodeServerConfig(guid)
+                            if (current == null) false
                             else {
                                 MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                                tcpEvidenceByGuid[guid] = evidence
+                                tcpEvidenceRevisions[guid] = profileDigest(current)
+                                if (probeFilterActive()) {
+                                    updateCache()
+                                    updateListAction.value = -1
+                                } else {
+                                    queueTcpDisplayUpdate(runId, guid)
+                                }
                                 true
                             }
                         }
-                        if (published) updateListAction.value = getPosition(guid)
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Batch RecyclerView invalidations at ~10 Hz. Persistent delay writes stay
+     * in the existing TestRunTracker ownership gate and on the main thread.
+     */
+    private fun queueTcpDisplayUpdate(runId: String, guid: String) {
+        if (!tcpDisplayRows.add(runId, guid)) return
+        if (tcpDisplayFlushJob?.isActive == true) return
+        tcpDisplayFlushJob = viewModelScope.launch(Dispatchers.Main.immediate) {
+            while (isActive) {
+                delay(100L)
+                val visible = synchronized(this@MainViewModel) { serversCache.map { it.guid } }
+                val rows = tcpDisplayRows.drain(runId, visible)
+                    .filter { index -> testRuns.accepts(runId, visible[index]) }
+                if (rows.isEmpty()) break
+                updateListBatchAction.value = rows
             }
         }
     }
@@ -228,10 +311,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ivBinding.spSubscriptionId.adapter = ArrayAdapter<String>( context, android.R.layout.simple_spinner_dropdown_item, listRemarks)
         ivBinding.spSubscriptionId.setSelection(checkedItem)
         ivBinding.etKeyword.text = Utils.getEditable(keywordFilter)
+        val statuses = context.resources.getStringArray(R.array.profile_probe_statuses).toList()
+        ivBinding.spTestStatus.adapter = ArrayAdapter(
+            context, android.R.layout.simple_spinner_dropdown_item, statuses)
+        ivBinding.spTestStatus.setSelection(profileProbeStatus.ordinal)
+        ivBinding.etMaxLatency.setText(profileMaxLatencyMs?.toString() ?: "")
         val builder = AlertDialog.Builder(context).setView(ivBinding.root)
         builder.setTitle(R.string.title_filter_config)
         builder.setPositiveButton(R.string.tasker_setting_confirm) { dialogInterface: DialogInterface?, _: Int ->
             try {
+                val rawLatency = ivBinding.etMaxLatency.text.toString().trim()
+                val parsedLatency = if (rawLatency.isEmpty()) null else rawLatency.toLongOrNull()
+                if (rawLatency.isNotEmpty() && (parsedLatency == null || parsedLatency !in 1..60_000)) {
+                    android.widget.Toast.makeText(context, R.string.profile_probe_invalid_latency,
+                        android.widget.Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
                 val position = ivBinding.spSubscriptionId.selectedItemPosition
                 subscriptionId = if (listRemarks.count() - 1 == position) {
                     ""
@@ -239,6 +334,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     subscriptions[position].first
                 }
                 keywordFilter = ivBinding.etKeyword.text.toString()
+                profileProbeStatus = ProfileProbeStatus.values()
+                    .getOrNull(ivBinding.spTestStatus.selectedItemPosition)
+                    ?: ProfileProbeStatus.ALL
+                profileMaxLatencyMs = parsedLatency
                 reloadServerList()
 
                 dialogInterface?.dismiss()
@@ -303,7 +402,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             true
                         }
                     }
-                    if (published) updateListAction.value = getPosition(result.guid)
+                    if (published) {
+                        if (probeFilterActive()) {
+                            updateCache()
+                            updateListAction.value = -1
+                        } else {
+                            updateListAction.value = getPosition(result.guid)
+                        }
+                    }
                 }
             }
         }

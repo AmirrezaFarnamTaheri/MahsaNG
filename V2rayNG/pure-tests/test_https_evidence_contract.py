@@ -1,0 +1,78 @@
+"""HTTPS/TLS evidence must remain explicit, safe and method-attributed."""
+from pathlib import Path
+import unittest
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[1] / 'app' / 'src' / 'main'
+ANDROID = '{http://schemas.android.com/apk/res/android}'
+
+class HttpsEvidenceContract(unittest.TestCase):
+    def test_internal_activity_and_explicit_one_shot_buttons(self):
+        manifest = ET.parse(ROOT / 'AndroidManifest.xml')
+        found = [x for x in manifest.iter('activity') if x.get(ANDROID+'name') == '.ui.HttpsEvidenceActivity']
+        self.assertEqual(1, len(found))
+        self.assertEqual('false', found[0].get(ANDROID+'exported'))
+        code = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        self.assertIn('setOnClickListener { runEvidence(viaLocalProxy = false) }', code)
+        self.assertIn('setOnClickListener { runEvidence(viaLocalProxy = true) }', code)
+        self.assertIn('generation++', code)
+        self.assertNotIn('MmkvManager', code)
+
+    def test_default_platform_tls_verification_and_safe_codes(self):
+        code = (ROOT / 'kotlin/com/v2ray/ang/util/HttpsEvidence.kt').read_text()
+        self.assertIn('HttpsURLConnection', code)
+        self.assertIn('Proxy.NO_PROXY', code)
+        self.assertIn('Proxy.Type.HTTP', code)
+        self.assertNotIn('HostnameVerifier {', code)
+        self.assertNotIn('X509TrustManager', code)
+        self.assertNotIn('e.message', code)
+        self.assertNotIn('printStackTrace()', code)
+        # Kotlin maps HttpsURLConnection.getServerCertificates() to this property.
+        self.assertIn('connection.serverCertificates', code)
+        self.assertIn('connection.cipherSuite', code)
+
+    def test_local_http_port_is_read_from_saved_setting_without_writes(self):
+        ui = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        utils = (ROOT / 'kotlin/com/v2ray/ang/util/Utils.kt').read_text()
+        self.assertIn('Utils.getConfiguredHttpPortOrNull()', ui)
+        self.assertNotIn('AppConfig.PORT_HTTP', ui)
+        self.assertIn('AppConfig.PREF_HTTP_PORT', utils)
+        self.assertIn('configured.toIntOrNull()?.takeIf { it in 1..65535 }', utils)
+
+    def test_explicit_tls_handshake_is_verified_and_not_an_http_timing_claim(self):
+        tls = (ROOT / 'kotlin/com/v2ray/ang/util/TlsHandshakeProbe.kt').read_text()
+        ui = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        self.assertIn('TlsHandshakeProbe.inspect(', ui)
+        self.assertIn('Build.VERSION.SDK_INT < Build.VERSION_CODES.N', ui)
+        self.assertIn('https_evidence_tls_unsupported', ui)
+        self.assertIn('endpointIdentificationAlgorithm = "HTTPS"', tls)
+        self.assertIn('SSLSocketFactory.getDefault()', tls)
+        self.assertIn('startHandshake()', tls)
+        self.assertNotIn('X509TrustManager', tls)
+        self.assertNotIn('HostnameVerifier {', tls)
+
+    def test_inputs_and_evidence_survive_rotation_without_reissuing_requests(self):
+        code = (ROOT / 'kotlin/com/v2ray/ang/ui/HttpsEvidenceActivity.kt').read_text()
+        resources = ET.parse(ROOT / 'res/values/https_evidence_ids.xml')
+        ids = [x.attrib['name'] for x in resources.findall('item')]
+        self.assertEqual(4, len(ids))
+        self.assertEqual(4, len(set(ids)))
+        self.assertIn('it.id = fieldId', code)
+        self.assertIn('override fun onSaveInstanceState(outState: Bundle)', code)
+        self.assertIn('https_rendered_output', code)
+        self.assertIn('https_active_run', code)
+        self.assertIn('output.setText(R.string.https_evidence_stopped)', code)
+
+    def test_english_persian_parity(self):
+        names=[]
+        for dir in ('values','values-fa'):
+            tree = ET.parse(ROOT / 'res' / dir / 'https_evidence.xml')
+            names.append({x.attrib['name'] for x in tree.findall('string')})
+        self.assertEqual(names[0], names[1])
+        self.assertGreaterEqual(len(names[0]), 20)
+        # Android AAPT string resources reject unescaped ASCII apostrophes.
+        for locale in ('values', 'values-fa'):
+            text = (ROOT / 'res' / locale / 'https_evidence.xml').read_text()
+            self.assertNotRegex(text, r"(?<!\\)'", locale)
+
+if __name__ == '__main__': unittest.main()

@@ -33,7 +33,7 @@ class TcpProbePresetIntegrationTest(unittest.TestCase):
         self.assertLess(code.index("if (!TcpProbeEligibility.supportsTcpConnect("),
                         code.index("BoundedProbeQueue(targets"))
         self.assertLess(code.index("BoundedProbeQueue(targets"),
-                        code.index("SpeedtestUtil.tcping("))
+                        code.index("SpeedtestUtil.tcpingEvidence("))
         self.assertIn("MmkvManager.clearTestDelayResults(visibleGuids)", main)
 
     def test_native_http_and_proxy_methods_are_not_relabelled_as_tcp(self):

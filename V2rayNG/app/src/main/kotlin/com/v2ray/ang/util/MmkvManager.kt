@@ -266,15 +266,16 @@ object MmkvManager {
     }
 
     fun decodeSubscriptions(): List<Pair<String, SubscriptionItem>> {
-        val subscriptions = mutableListOf<Pair<String, SubscriptionItem>>()
-        subStorage?.allKeys()?.forEach { key ->
-            val json = subStorage?.decodeString(key)
-            if (!json.isNullOrBlank()) {
-                subscriptions.add(Pair(key, Gson().fromJson(json, SubscriptionItem::class.java)))
-            }
-        }
-        subscriptions.sortedBy { (_, value) -> value.addedTime }
-        return subscriptions
+        val storage = subStorage ?: return emptyList()
+        // MMKV can contain one corrupt item after an interrupted import.
+        // Snapshot keys once and isolate decoding failures per item.
+        val keys = runCatching { storage.allKeys()?.toList().orEmpty() }.getOrDefault(emptyList())
+        val gson = Gson()
+        return SubscriptionIndexDecoder.read(
+            keys = keys,
+            readStoredJson = { key -> storage.decodeString(key) },
+            parse = { raw -> gson.fromJson(raw, SubscriptionItem::class.java) },
+        )
     }
 
     @Synchronized

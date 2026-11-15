@@ -146,6 +146,11 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 adapter.notifyDataSetChanged()
             }
         }
+        mainViewModel.updateListBatchAction.observe(this) { indices ->
+            TcpRowBatch.ranges(indices, adapter.itemCount).forEach { range ->
+                adapter.notifyItemRangeChanged(range.first, range.last - range.first + 1)
+            }
+        }
         mainViewModel.updateTestResultAction.observe(this) { setTestState(it) }
         mainViewModel.isRunning.observe(this) { isRunning ->
             adapter.isRunning = isRunning
@@ -316,13 +321,22 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             mainViewModel.testAllRealPing()
             true
         }
+        R.id.dns_diagnostics -> {
+            startActivity(Intent(this, DnsDiagnosticsActivity::class.java))
+            true
+        }
+
+        R.id.https_evidence -> {
+            startActivity(Intent(this, HttpsEvidenceActivity::class.java))
+            true
+        }
+
         R.id.advanced_tcp_retry -> {
             startActivity(Intent(this, AdvancedTcpRetryActivity::class.java)
                 .putExtra(AdvancedTcpRetryActivity.EXTRA_SUBSCRIPTION, mainViewModel.subscriptionId)
                 .putExtra(AdvancedTcpRetryActivity.EXTRA_KEYWORD, mainViewModel.keywordFilter))
             true
         }
-
         R.id.service_restart -> {
             restartV2Ray()
             true
@@ -588,12 +602,12 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 if (!Utils.isValidUrl(url)) {
                     return@forEach
                 }
-                Log.d(ANG_PACKAGE, url)
+                // Subscription URLs may contain access tokens. Never write them to Logcat.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val configText = try {
                         Utils.getUrlContentWithCustomUserAgent(url)
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        Log.w(ANG_PACKAGE, "Subscription request failed")
                         launch(Dispatchers.Main) {
                             toast("\"" + it.second.remarks + "\" " + getString(R.string.toast_failure))
                         }
@@ -605,7 +619,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w(ANG_PACKAGE, "Subscription refresh could not start")
             return false
         }
         return true

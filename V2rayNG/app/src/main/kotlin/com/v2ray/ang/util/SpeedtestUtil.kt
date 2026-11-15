@@ -20,22 +20,40 @@ object SpeedtestUtil {
     private val tcpTestingSockets = ArrayList<Socket>()
     private val tcpSettings by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
-    suspend fun tcping(url: String, port: Int): Long {
-        // Snapshot this TCP-only setting for one probe; it cannot control native
-        // real-ping, UDP, TLS or through-proxy HTTP methods.
+    suspend fun tcping(url: String, port: Int): Long =
+        tcpingEvidence(url, port).delayMs
+
+    /** Same direct socket-connect preset as tcping; only adds transient safe evidence. */
+    internal suspend fun tcpingEvidence(url: String, port: Int): TcpProbeEvidence {
         val preset = TcpProbePreset.fromStored(tcpSettings?.decodeString(AppConfig.PREF_TCP_PROBE_PRESET))
         val context = coroutineContext
-        return preset.probe(
-            cancelled = { !context.isActive },
-            connect = { timeoutMs -> socketConnectTime(url, port, timeoutMs) },
-        )
+        return TcpProbeEvidenceRunner.measure(preset, cancelled = { !context.isActive }) { timeoutMs ->
+            try {
+                val delay = SocketConnectTimer.measure(
+                    host = url,
+                    port = port,
+                    timeoutMs = timeoutMs,
+                    socket = Socket(),
+                    onRegister = { socket ->
+                        synchronized(this) { tcpTestingSockets.add(socket) }
+                    },
+                    onUnregister = { socket ->
+                        synchronized(this) { tcpTestingSockets.remove(socket) }
+                    },
+                )
+                delay to null
+            } catch (error: Exception) {
+                Log.d(AppConfig.ANG_PACKAGE, "tcping: " + SafeProbeFailure.safeReason(error))
+                -1L to SafeProbeFailure.classify(error)
+            }
+        }
     }
 
     fun realPing(config: String): Long {
         return try {
             Libv2ray.measureOutboundDelay(config, AppConfig.DelayTestUrl)
         } catch (e: Exception) {
-            Log.d(AppConfig.ANG_PACKAGE, "realPing: $e")
+            Log.d(AppConfig.ANG_PACKAGE, "realPing: " + SafeProbeFailure.safeReason(e))
             -1L
         }
     }
@@ -53,7 +71,7 @@ object SpeedtestUtil {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.d(AppConfig.ANG_PACKAGE, "ping: " + SafeProbeFailure.safeReason(e))
         }
         return "-1ms"
     }
@@ -72,12 +90,8 @@ object SpeedtestUtil {
                     synchronized(this) { tcpTestingSockets.remove(socket) }
                 },
             )
-        } catch (e: UnknownHostException) {
-            e.printStackTrace()
-        } catch (e: IOException) {
-            Log.d(AppConfig.ANG_PACKAGE, "socketConnectTime IOException: $e")
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.d(AppConfig.ANG_PACKAGE, "socketConnectTime: " + SafeProbeFailure.safeReason(e))
         }
         return -1L
     }
@@ -116,16 +130,20 @@ object SpeedtestUtil {
             if (code == 204 || code == 200 && conn.responseLength == 0L) {
                 result = context.getString(R.string.connection_test_available, elapsed)
             } else {
-                throw IOException(context.getString(R.string.connection_test_error_status_code, code))
+                result = context.getString(R.string.connection_test_error_status_code, code)
             }
-        } catch (e: IOException) {
-            // network exception
-            Log.d(AppConfig.ANG_PACKAGE, "testConnection IOException: " + Log.getStackTraceString(e))
-            result = context.getString(R.string.connection_test_error, e.message)
         } catch (e: Exception) {
-            // library exception, eg sumsung
-            Log.d(AppConfig.ANG_PACKAGE, "testConnection Exception: " + Log.getStackTraceString(e))
-            result = context.getString(R.string.connection_test_error, e.message)
+            // Exception messages can contain full URLs and authentication tokens.
+            Log.d(AppConfig.ANG_PACKAGE, "testConnection: " + SafeProbeFailure.safeReason(e))
+            val error = when (SafeProbeFailure.classify(e)) {
+                SafeProbeFailure.Kind.DNS -> R.string.probe_failure_dns
+                SafeProbeFailure.Kind.REFUSED -> R.string.probe_failure_refused
+                SafeProbeFailure.Kind.TIMEOUT -> R.string.probe_failure_timeout
+                SafeProbeFailure.Kind.TLS_CERT -> R.string.probe_failure_tls
+                SafeProbeFailure.Kind.NETWORK -> R.string.probe_failure_network
+                SafeProbeFailure.Kind.OTHER -> R.string.probe_failure_other
+            }
+            result = context.getString(R.string.connection_test_error, context.getString(error))
         } finally {
             conn?.disconnect()
         }

@@ -15,6 +15,12 @@ class ProfileProbeFilterContract(unittest.TestCase):
         self.assertIn("MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis", code)
         self.assertIn("parsedLatency !in 1..60_000", code)
 
+    def test_results_refresh_visible_membership_at_start_and_completion(self):
+        code = VM.read_text()
+        self.assertIn('if (probeFilterActive()) updateCache()', code)
+        self.assertIn('if (probeFilterActive()) {', code)
+        self.assertIn('updateListAction.value = -1', code)
+
     def test_spinner_and_localized_options(self):
         layout = ET.parse(ROOT / "res/layout/dialog_config_filter.xml")
         namespace = "{http://schemas.android.com/apk/res/android}"

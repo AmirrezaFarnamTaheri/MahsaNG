@@ -23,6 +23,7 @@ import com.v2ray.ang.util.*
 import com.v2ray.ang.util.MmkvManager.KEY_ANG_CONFIGS
 import kotlinx.coroutines.*
 import java.util.*
+import java.security.MessageDigest
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mainStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_MAIN, MMKV.MULTI_PROCESS_MODE) }
@@ -46,10 +47,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val testRuns = TestRunTracker()
     private val tcpDisplayRows = TcpRowBatch()
     private val tcpEvidenceByGuid = mutableMapOf<String, TcpProbeEvidence>()
+    private val tcpEvidenceRevisions = mutableMapOf<String, String>()
     private var tcpDisplayFlushJob: Job? = null
     private var realPingScheduleJob: Job? = null
     private var nativeTestRunPending = false
     private var broadcastRegistered = false
+
+    private fun probeFilterActive(): Boolean =
+        profileProbeStatus != ProfileProbeStatus.ALL || profileMaxLatencyMs != null
+
+    // The digest never stores or prints profile credentials; only matching
+    // evidence for the same saved configuration remains eligible for display.
+    private fun profileDigest(config: ServerConfig): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(Gson().toJson(config).toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
 
     /**
      * Called on the UI thread. Snapshot identifiers before scheduling any background work.
@@ -63,6 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         tcpDisplayFlushJob?.cancel()
         tcpDisplayRows.begin(runId)
         tcpEvidenceByGuid.clear()
+        tcpEvidenceRevisions.clear()
         // Starting a TCP-only run must not launch a native service unnecessarily.
         // If a real-ping run preceded it, this command cancels that native run.
         if (native || nativeTestRunPending) {
@@ -70,11 +83,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         nativeTestRunPending = native
         MmkvManager.clearTestDelayResults(visibleGuids)
+        // Resetting saved delays changes membership under success/latency filters.
+        if (probeFilterActive()) updateCache()
         updateListAction.value = -1
         return runId
     }
 
-    internal fun getTcpEvidence(guid: String): TcpProbeEvidence? = tcpEvidenceByGuid[guid]
+    internal fun getTcpEvidence(guid: String): TcpProbeEvidence? {
+        val evidence = tcpEvidenceByGuid[guid] ?: return null
+        val revision = tcpEvidenceRevisions[guid] ?: return null
+        val current = runCatching { MmkvManager.decodeServerConfig(guid) }.getOrNull()
+        if (current == null || profileDigest(current) != revision) {
+            // A profile was edited/deleted: drop only its old TCP evidence.
+            tcpEvidenceByGuid.remove(guid)
+            tcpEvidenceRevisions.remove(guid)
+            return null
+        }
+        return evidence
+    }
 
     fun startListenBroadcast() {
         if (broadcastRegistered) return
@@ -97,6 +123,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         tcpDisplayFlushJob?.cancel()
         tcpDisplayRows.clear()
         tcpEvidenceByGuid.clear()
+        tcpEvidenceRevisions.clear()
         realPingScheduleJob?.cancel()
         // Do not send a global native Cancel from an obsolete ViewModel: a new
         // activity may already own the native service with a newer run token.
@@ -113,6 +140,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeServer(guid: String) {
+        tcpEvidenceByGuid.remove(guid)
+        tcpEvidenceRevisions.remove(guid)
         serverList.remove(guid)
         MmkvManager.removeServer(guid)
         val index = getPosition(guid)
@@ -149,6 +178,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         serversCache.clear()
         for (guid in serverList) {
             val config = MmkvManager.decodeServerConfig(guid) ?: continue
+            if (tcpEvidenceByGuid.containsKey(guid) &&
+                tcpEvidenceRevisions[guid] != profileDigest(config)) {
+                tcpEvidenceByGuid.remove(guid)
+                tcpEvidenceRevisions.remove(guid)
+            }
             if (subscriptionId.isNotEmpty() && subscriptionId != config.subscriptionId) {
                 continue
             }
@@ -196,16 +230,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val delay = evidence.delayMs
                     withContext(Dispatchers.Main) {
                         // Share forgetGuid's lock through the final persistent write.
-                        val published = testRuns.publishIfCurrent(runId, guid) {
-                            if (MmkvManager.decodeServerConfig(guid) == null) false
+                        testRuns.publishIfCurrent(runId, guid) {
+                            val current = MmkvManager.decodeServerConfig(guid)
+                            if (current == null) false
                             else {
                                 MmkvManager.encodeServerTestDelayMillis(guid, delay)
+                                tcpEvidenceByGuid[guid] = evidence
+                                tcpEvidenceRevisions[guid] = profileDigest(current)
+                                if (probeFilterActive()) {
+                                    updateCache()
+                                    updateListAction.value = -1
+                                } else {
+                                    queueTcpDisplayUpdate(runId, guid)
+                                }
                                 true
                             }
-                        }
-                        if (published) {
-                            tcpEvidenceByGuid[guid] = evidence
-                            queueTcpDisplayUpdate(runId, guid)
                         }
                     }
                 }
@@ -363,7 +402,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             true
                         }
                     }
-                    if (published) updateListAction.value = getPosition(result.guid)
+                    if (published) {
+                        if (probeFilterActive()) {
+                            updateCache()
+                            updateListAction.value = -1
+                        } else {
+                            updateListAction.value = getPosition(result.guid)
+                        }
+                    }
                 }
             }
         }

@@ -26,6 +26,12 @@ class TcpEvidenceContract(unittest.TestCase):
         self.assertNotIn("error.message", adapter)
         self.assertNotIn("printStackTrace()", (ROOT / "kotlin/com/v2ray/ang/util/TcpProbeEvidence.kt").read_text())
 
+    def test_profile_edits_invalidate_only_matching_stale_evidence(self):
+        vm = VM.read_text()
+        self.assertIn('tcpEvidenceRevisions[guid] != profileDigest(config)', vm)
+        self.assertIn('tcpEvidenceByGuid.remove(guid)', vm)
+        self.assertIn('tcpEvidenceRevisions.remove(guid)', vm)
+
     def test_english_persian_labels_match(self):
         labels = []
         for lang in ("values", "values-fa"):

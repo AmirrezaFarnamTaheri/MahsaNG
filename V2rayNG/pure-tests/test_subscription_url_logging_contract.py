@@ -3,7 +3,7 @@ import pathlib
 import re
 
 URL_INTERPOLATION = re.compile(r'Log\.\w+\s*\([^)]*\$(?:\{url\}|url\b)')
-THROWABLE_LOG = re.compile(r'Log\.\w+\s*\([^)]*,\s*[^,)]+,\s*(?:e|error|exception)\s*\)')
+THROWABLE_LOG = re.compile(r'Log\.\w+\s*\(\s*ANG_PACKAGE\s*,\s*(?:"(?:\\.|[^"\\])*"|[^,()]+)\s*,\s*[^)\n]+\)')
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "app" / "src" / "main"
@@ -30,6 +30,9 @@ class SubscriptionUrlLoggingContractTest(unittest.TestCase):
         for unsafe in (
             'Log.w(ANG_PACKAGE, "request failed", e)',
             'Log.e(ANG_PACKAGE, "request failed", error)',
+            'Log.w(ANG_PACKAGE, "request failed", e.cause)',
+            'Log.w(ANG_PACKAGE, "request failed", cause)',
+            'Log.w(ANG_PACKAGE, "request failed", exception.cause)',
         ):
             self.assertRegex(unsafe, THROWABLE_LOG)
 

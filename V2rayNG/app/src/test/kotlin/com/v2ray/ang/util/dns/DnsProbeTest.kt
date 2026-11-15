@@ -72,6 +72,41 @@ class DnsProbeTest {
         }
     }
 
+    @Test fun truncatedFinalTcpReplyCannotBecomeSuccessfulComparisonEvidence() {
+        val host = InetAddress.getByName("127.0.0.1")
+        DatagramSocket(0, host).use { udp ->
+            ServerSocket(udp.localPort, 2, host).use { tcp ->
+                udp.soTimeout = 2000
+                tcp.soTimeout = 2000
+                val udpWorker = Thread {
+                    val bytes = ByteArray(2048)
+                    val packet = DatagramPacket(bytes, bytes.size)
+                    udp.receive(packet)
+                    val answer = reply(bytes.copyOf(packet.length), truncated = true)
+                    udp.send(DatagramPacket(answer, answer.size, packet.address, packet.port))
+                }.apply { isDaemon = true; start() }
+                val tcpWorker = Thread {
+                    tcp.accept().use { socket ->
+                        val input = DataInputStream(socket.getInputStream())
+                        val query = ByteArray(input.readUnsignedShort()).also { input.readFully(it) }
+                        val incomplete = reply(query).also {
+                            it[2] = (it[2].toInt() or 0x02).toByte()
+                        }
+                        DataOutputStream(socket.getOutputStream()).apply {
+                            writeShort(incomplete.size); write(incomplete); flush()
+                        }
+                    }
+                }.apply { isDaemon = true; start() }
+                val observed = DnsProbe { 0x1234 }.query("127.0.0.1:${udp.localPort}",
+                    "www.example.com", DnsType.A, 1000)
+                assertEquals("TRUNCATED_RESPONSE", observed.status)
+                assertFalse(observed.succeeded)
+                assertEquals(0, DnsScanAnalysis.summarize(listOf(observed)).validResponses)
+                udpWorker.join(2000); tcpWorker.join(2000)
+            }
+        }
+    }
+
     @Test fun resolverInputIsNumericAndCannotTriggerHiddenDnsLookup() {
         assertEquals(53, DnsResolverInput.parse("1.1.1.1").port)
         assertEquals(5353, DnsResolverInput.parse("[2001:db8::1]:5353").port)

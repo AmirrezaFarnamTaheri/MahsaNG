@@ -12,7 +12,9 @@ internal enum class DnsType(val code: Int) {
     }
 }
 
-internal data class DnsRecord(val name: String, val type: DnsType, val ttl: Long, val value: String)
+/** Display strings may be shortened; comparison must use the full wire value. */
+internal data class DnsRecord(val name: String, val type: DnsType, val ttl: Long, val value: String,
+    val comparisonValue: String = value)
 internal data class DnsMessage(
     val rcode: Int,
     val truncated: Boolean,
@@ -86,6 +88,7 @@ internal object DnsWire {
         var pos = questionEnd + 4
         val records = ArrayList<DnsRecord>(minOf(answers, 32))
         var edns = false
+        var extendedRcode = 0
         for (section in 0..2) {
             val count = when (section) { 0 -> answers; 1 -> authorities; else -> extras }
             repeat(count) {
@@ -98,19 +101,24 @@ internal object DnsWire {
                 val begin = next + 10
                 requireBytes(packet, begin, length)
                 val end = begin + length
-                if (section == 2 && type == 41) edns = true
+                if (section == 2 && type == 41) {
+                    edns = true
+                    extendedRcode = ((ttl ushr 24) and 255).toInt()
+                }
                 if (section == 0 && clazz == 1) {
                     val known = DnsType.fromCode(type)
                     if (known != null) {
                         val value = readRecordValue(packet, begin, end, known)
-                        if (value != null) records.add(DnsRecord(owner, known, ttl, value))
+                        if (value != null) {
+                            records.add(DnsRecord(owner, known, ttl, value.value, value.comparison))
+                        }
                     }
                 }
                 pos = end
             }
         }
         return DnsMessage(
-            rcode = flags and 15,
+            rcode = (flags and 15) or (extendedRcode shl 4),
             truncated = (flags and 0x0200) != 0,
             authoritative = (flags and 0x0400) != 0,
             recursionAvailable = (flags and 0x0080) != 0,
@@ -122,39 +130,49 @@ internal object DnsWire {
         )
     }
 
-    private fun readRecordValue(packet: ByteArray, start: Int, end: Int, type: DnsType): String? = when (type) {
-        DnsType.A -> if (end - start == 4) InetAddress.getByAddress(packet.copyOfRange(start, end)).hostAddress else throw DnsWireException("MALFORMED_A")
-        DnsType.AAAA -> if (end - start == 16) InetAddress.getByAddress(packet.copyOfRange(start, end)).hostAddress else throw DnsWireException("MALFORMED_AAAA")
+    private data class RData(val value: String, val comparison: String = value)
+
+    private fun readRecordValue(packet: ByteArray, start: Int, end: Int, type: DnsType): RData? = when (type) {
+        DnsType.A -> if (end - start == 4) RData(InetAddress.getByAddress(packet.copyOfRange(start, end)).hostAddress) else throw DnsWireException("MALFORMED_A")
+        DnsType.AAAA -> if (end - start == 16) RData(InetAddress.getByAddress(packet.copyOfRange(start, end)).hostAddress) else throw DnsWireException("MALFORMED_AAAA")
         DnsType.NS, DnsType.CNAME -> {
             val (name, next) = readName(packet, start)
             if (next > end) throw DnsWireException("INVALID_RDATA")
-            name
+            RData(name)
         }
         DnsType.MX -> {
             if (end - start < 3) throw DnsWireException("INVALID_RDATA")
             val (host, next) = readName(packet, start + 2)
             if (next > end) throw DnsWireException("INVALID_RDATA")
-            "${u16(packet, start)} $host"
+            RData("${u16(packet, start)} $host")
         }
         DnsType.TXT -> {
             val strings = mutableListOf<String>()
+            val canonical = StringBuilder()
             var pos = start
             while (pos < end) {
                 val length = packet[pos].toInt() and 255
                 pos++
                 if (pos + length > end) throw DnsWireException("INVALID_RDATA")
-                val txt = String(packet, pos, length, StandardCharsets.UTF_8)
-                strings.add(txt.take(256))
+                // Length-prefixed raw bytes distinguish ["ab","cd"] from ["ab cd"],
+                // preserve invalid UTF-8, and do not lose differences past 512 chars.
+                canonical.append(length.toString(16).padStart(2, '0')).append(':')
+                repeat(length) { offset ->
+                    canonical.append((packet[pos + offset].toInt() and 255).toString(16).padStart(2, '0'))
+                }
+                strings.add(String(packet, pos, length, StandardCharsets.UTF_8).take(256))
                 pos += length
             }
-            strings.joinToString(" ").take(512)
+            RData(strings.joinToString(" ").take(512), canonical.toString())
         }
         DnsType.SOA -> {
             val (primary, afterPrimary) = readName(packet, start)
             if (afterPrimary > end) throw DnsWireException("INVALID_RDATA")
             val (mailbox, afterMailbox) = readName(packet, afterPrimary)
             if (afterMailbox > end || afterMailbox + 20 != end) throw DnsWireException("INVALID_RDATA")
-            "$primary $mailbox serial=${u32(packet, afterMailbox)} refresh=${u32(packet, afterMailbox + 4)}"
+            RData("$primary $mailbox serial=${u32(packet, afterMailbox)} " +
+                "refresh=${u32(packet, afterMailbox + 4)} retry=${u32(packet, afterMailbox + 8)} " +
+                "expire=${u32(packet, afterMailbox + 12)} minimum=${u32(packet, afterMailbox + 16)}")
         }
     }
 

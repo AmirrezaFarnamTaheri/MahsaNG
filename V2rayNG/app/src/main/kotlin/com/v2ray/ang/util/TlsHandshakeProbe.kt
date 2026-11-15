@@ -32,8 +32,10 @@ internal object TlsHandshakeProbe {
         var connectTime: Long? = null
         try {
             Socket().use { plain ->
+                // Host resolution happens before the socket-connect stopwatch.
+                val endpoint = InetSocketAddress(domain, port)
                 val connectStarted = System.nanoTime()
-                plain.connect(InetSocketAddress(domain, port), timeoutMs)
+                plain.connect(endpoint, timeoutMs)
                 connectTime = elapsed(connectStarted)
                 plain.soTimeout = timeoutMs
                 val factory = SSLSocketFactory.getDefault() as SSLSocketFactory

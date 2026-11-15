@@ -141,7 +141,8 @@ internal class DnsProbe(private val transactionId: () -> Int = { SecureRandom().
             if (!decoded.questionName.equals(java.net.IDN.toASCII(normalizedDomain, java.net.IDN.USE_STD3_ASCII_RULES), ignoreCase = true) || decoded.questionType != type.code) {
                 throw DnsWireException("QUESTION_MISMATCH")
             }
-            status = when (decoded.rcode) {
+            // A parseable answer with TC=1 is still incomplete, including over TCP.
+            status = if (decoded.truncated) "TRUNCATED_RESPONSE" else when (decoded.rcode) {
                 0 -> if (decoded.records.isEmpty()) "NO_ANSWER" else "OK"
                 3 -> "NXDOMAIN"
                 2 -> "SERVFAIL"

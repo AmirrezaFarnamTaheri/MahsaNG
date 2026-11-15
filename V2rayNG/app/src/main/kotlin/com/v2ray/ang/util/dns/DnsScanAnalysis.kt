@@ -54,7 +54,7 @@ internal object DnsScanAnalysis {
         answer.rcode,
         answer.records.map { record ->
             Record(record.name.trimEnd('.').lowercase(Locale.ROOT), record.type,
-                if (record.type == DnsType.TXT) record.value
+                if (record.type == DnsType.TXT) record.comparisonValue
                 else record.value.lowercase(Locale.ROOT))
         }.distinct().sortedWith(compareBy({ it.owner }, { it.type.code }, { it.value }))
     )

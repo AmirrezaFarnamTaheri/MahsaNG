@@ -40,6 +40,7 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
     private var session: AdvancedTcpRetrySession? = null
     private var networkObserver: RunNetworkObserver? = null
     private var preparation: Job? = null
+    private var lastAppliedReportSequence = 0L
 
     /** Snapshot the selected scope once on IO, never the mutable Activity cache. */
     fun prepare(subscriptionId: String, keywordFilter: String,
@@ -48,6 +49,7 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
         stopInternal(publishStop = false)
         val id = UUID.randomUUID().toString()
         currentRunId = id
+        lastAppliedReportSequence = 0L
         state.value = AdvancedRetryScreenState(AdvancedRetryScreenPhase.PREPARING)
         preparation = viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -86,6 +88,15 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
         }
     }
 
+    /** Any changed budget input revokes an in-flight preview or READY. */
+    fun invalidatePrepared() {
+        if (state.value?.phase in setOf(AdvancedRetryScreenPhase.PREPARING,
+                AdvancedRetryScreenPhase.READY)) {
+            stopInternal(publishStop = false)
+            state.value = AdvancedRetryScreenState(AdvancedRetryScreenPhase.IDLE)
+        }
+    }
+
     /** Must be called only after explicit human review of the maximum-attempt budget. */
     fun startPrepared(): Boolean {
         val ready = prepared ?: return false
@@ -116,7 +127,8 @@ internal class AdvancedTcpRetryViewModel(application: Application) : AndroidView
             currentRevision = lookupRevision, networkStillCurrent = networkStillCurrent,
             onReport = { report ->
                 viewModelScope.launch(Dispatchers.Main.immediate) {
-                    if (currentRunId == id) {
+                    if (currentRunId == id && report.sequence > lastAppliedReportSequence) {
+                        lastAppliedReportSequence = report.sequence
                         if (report.snapshot.phase == RetryRunPhase.FINISHED ||
                             report.snapshot.phase == RetryRunPhase.STOPPED) {
                             if (networkObserver === observer) {

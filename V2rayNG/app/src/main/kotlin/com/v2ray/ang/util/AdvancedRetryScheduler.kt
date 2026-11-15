@@ -109,9 +109,12 @@ internal class AdvancedRetryScheduler(
 
     /** False for unknown, duplicate, obsolete and stopped claims. */
     @Synchronized
-    fun complete(task: AdvancedRetryTask, outcome: AdvancedRetryAttemptOutcome): Boolean {
+    fun complete(task: AdvancedRetryTask, outcome: AdvancedRetryAttemptOutcome,
+        beforeRelease: () -> Unit = {}): Boolean {
         if (state != RetryRunPhase.RUNNING && state != RetryRunPhase.PAUSED) return false
         if (task.runId != runId || inFlight[task.ticket] != task) return false
+        // The retry is not claimable before the ledger has accepted its predecessor.
+        beforeRelease()
         inFlight.remove(task.ticket)
         completed++
         when (outcome) {

@@ -1,8 +1,11 @@
 package com.v2ray.ang.ui
 
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.View
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -99,6 +102,20 @@ class AdvancedTcpRetryActivity : BaseActivity() {
         content.addView(status)
         setContentView(ScrollView(this).apply { addView(content) })
         model.state.observe(this) { render(it) }
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) { model.invalidatePrepared() }
+        }
+        listOf(attempts, passes, concurrency, timeout).forEach {
+            it.addTextChangedListener(watcher)
+        }
+        modes.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                model.invalidatePrepared()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
     }
 
     private fun prepare() {
@@ -188,6 +205,11 @@ class AdvancedTcpRetryActivity : BaseActivity() {
             }
             else -> getString(R.string.advanced_retry_stopped)
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) model.stop()
     }
 
     override fun onSupportNavigateUp(): Boolean {

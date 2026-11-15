@@ -18,6 +18,26 @@ class AdvancedTcpRetrySessionTest {
     private val target = AdvancedRetryTarget("guid", "rev", "example.invalid", 443)
     private val settings = AdvancedRetrySettings(2, 3, 1)
 
+    @Test fun eachProgressReportGetsAnIncreasingUniqueSequence() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val observed = java.util.Collections.synchronizedList(mutableListOf<Long>())
+        try {
+            val session = AdvancedTcpRetrySession(scope, "ordered", listOf(target),
+                AdvancedRetrySettings(1, 1, 1), RetryPassMode.ALL_EVERY_PASS,
+                1000, { "rev" }, { true },
+                onReport = { observed.add(it.sequence) },
+                testConnect = { _, _ -> 20L })
+            session.start()
+            withTimeout(5000) {
+                while (session.snapshot().snapshot.phase != RetryRunPhase.FINISHED) delay(20)
+            }
+            val sequence = synchronized(observed) { observed.toList() }
+            assertTrue(sequence.isNotEmpty())
+            assertEquals(sequence.size, sequence.distinct().size)
+            assertTrue(sequence.all { it > 0 })
+        } finally { scope.cancel() }
+    }
+
     @Test fun realWorkerLoopCompletesThreePassesWithOwnedTickets() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val latest = AtomicReference<AdvancedTcpRetryReport?>()

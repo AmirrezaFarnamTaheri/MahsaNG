@@ -55,15 +55,32 @@ class AdvancedTcpRetryContractTest(unittest.TestCase):
         self.assertNotIn("AdvancedRetryTarget(guid, gson.toJson(config)", viewmodel)
         self.assertIn("currentRevision = lookupRevision", viewmodel)
 
+    def test_stopping_activity_and_editing_preview_are_safe(self):
+        ui = (MAIN / "ui" / "AdvancedTcpRetryActivity.kt").read_text()
+        viewmodel = (MAIN / "viewmodel" / "AdvancedTcpRetryViewModel.kt").read_text()
+        self.assertIn("if (!isChangingConfigurations) model.stop()", ui)
+        self.assertIn("model.invalidatePrepared()", ui)
+        self.assertIn("fun invalidatePrepared()", viewmodel)
+        self.assertIn("report.sequence > lastAppliedReportSequence", viewmodel)
+
+    def test_retry_socket_guard_and_atomic_ledger(self):
+        session = (MAIN / "util" / "AdvancedTcpRetrySession.kt").read_text()
+        scheduler = (MAIN / "util" / "AdvancedRetryScheduler.kt").read_text()
+        self.assertIn("check(!stopped)", session)
+        self.assertIn("stopped = true", session)
+        self.assertIn("beforeRelease()", scheduler)
+        self.assertIn("check(ledger.record(", session)
+
     def test_network_handover_guard_is_registered_and_released(self):
         observer = (MAIN / "util" / "RunNetworkObserver.kt").read_text()
         viewmodel = (MAIN / "viewmodel" / "AdvancedTcpRetryViewModel.kt").read_text()
         self.assertIn("registerDefaultNetworkCallback(observer)", observer)
-        self.assertIn("registerNetworkCallback(request, observer)", observer)
+        self.assertNotIn("registerNetworkCallback(request, observer)", observer)
+        self.assertIn("Build.VERSION.SDK_INT >= Build.VERSION_CODES.N", observer)
         self.assertIn("gate.onAvailable(network)", observer)
         self.assertIn("gate.onLost(network)", observer)
         self.assertIn("gate.invalidate()", observer)
-        self.assertIn("unregisterNetworkCallback(callback)", observer)
+        self.assertIn("unregisterNetworkCallback(leasedCallback)", observer)
         self.assertIn("RunNetworkObserver.register(app)", viewmodel)
         self.assertIn("networkStillCurrent = { observer.isCurrent() }", viewmodel)
         self.assertIn("networkObserver?.close()", viewmodel)

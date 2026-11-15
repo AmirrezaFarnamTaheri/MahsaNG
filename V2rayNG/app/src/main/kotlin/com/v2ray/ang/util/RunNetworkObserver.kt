@@ -3,8 +3,6 @@ package com.v2ray.ang.util
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.os.Build
 import java.io.Closeable
 
@@ -25,7 +23,7 @@ internal class RunNetworkObserver private constructor(
     @Volatile private var closed = false
 
     fun isCurrent(): Boolean {
-        if (closed || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        if (closed || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
         val current = runCatching { connectivity?.activeNetwork }.getOrNull()
         return gate.accepts(current)
     }
@@ -48,7 +46,9 @@ internal class RunNetworkObserver private constructor(
     companion object {
         fun register(context: Context): RunNetworkObserver {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            val baseline = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // On Android 6, generic callbacks include unrelated networks.
+            // Only default-network callbacks (API 24+) support reliable epochs.
+            val baseline = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 runCatching { cm?.activeNetwork }.getOrNull()
             } else null
             val gate = NetworkHandoverGate(baseline)
@@ -68,15 +68,7 @@ internal class RunNetworkObserver private constructor(
                 }
             }
             val registered = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    cm.registerDefaultNetworkCallback(observer)
-                } else {
-                    // Android 6: broader callbacks can only invalidate, not revive a run.
-                    val request = NetworkRequest.Builder()
-                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        .build()
-                    cm.registerNetworkCallback(request, observer)
-                }
+                cm.registerDefaultNetworkCallback(observer)
                 true
             }.getOrDefault(false)
             if (!registered) gate.invalidate()

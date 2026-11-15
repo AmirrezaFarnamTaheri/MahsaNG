@@ -7,6 +7,39 @@ class AdvancedRetrySchedulerTest {
     private fun target(id: String) = AdvancedRetryTarget(id, "rev-$id", "example.invalid", 443)
     private fun work(s: AdvancedRetryScheduler) = (s.next() as AdvancedRetryPoll.Work).task
 
+    @Test fun retryCannotBeClaimedUntilPredecessorEvidenceIsAccepted() {
+        val scheduler = AdvancedRetryScheduler("atomic", listOf(target("a")),
+            AdvancedRetrySettings(2, 1, 2), RetryPassMode.ALL_EVERY_PASS)
+        val first = work(scheduler)
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        val recorder = kotlin.concurrent.thread(isDaemon = true) {
+            finished.set(scheduler.complete(first, AdvancedRetryAttemptOutcome.FAIL) {
+                entered.countDown()
+                check(release.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            })
+        }
+        try {
+            assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            val nextAttempt = java.util.concurrent.atomic.AtomicReference<AdvancedRetryPoll?>()
+            val requester = kotlin.concurrent.thread(isDaemon = true) {
+                nextAttempt.set(scheduler.next())
+            }
+            try {
+                Thread.sleep(30)
+                assertNull("Retry cannot appear before evidence is recorded", nextAttempt.get())
+            } finally { release.countDown() }
+            recorder.join(2000)
+            requester.join(2000)
+            assertTrue(finished.get())
+            assertEquals(2, (nextAttempt.get() as AdvancedRetryPoll.Work).task.attempt)
+        } finally {
+            release.countDown()
+            recorder.join(2000)
+        }
+    }
+
     @Test fun waitsForEveryInflightClaimBeforeStartingNextPass() {
         val run = AdvancedRetryScheduler("batch", listOf(target("a"), target("b")),
             AdvancedRetrySettings(2, 3, 2), RetryPassMode.ALL_EVERY_PASS)

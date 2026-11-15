@@ -18,6 +18,7 @@ internal data class AdvancedTcpRetryReport(
     val previewLastThreePasses: Int = 0,
     val previewThreeOfFive: Int = 0,
     val previewLastThreeAttempts: Int = 0,
+    val sequence: Long = 0L,
 )
 
 /**
@@ -46,7 +47,9 @@ internal class AdvancedTcpRetrySession(
     )
     private val socketLock = Any()
     private val ownedSockets = mutableSetOf<Socket>()
+    private var stopped = false
     private val lastReportNs = AtomicLong(0L)
+    private val reportSequence = AtomicLong(0L)
     private var job: Job? = null
 
     init { require(timeoutMs in 500..10_000) }
@@ -63,17 +66,18 @@ internal class AdvancedTcpRetrySession(
                             when (val poll = scheduler.next()) {
                                 is AdvancedRetryPoll.Work -> {
                                     val outcome = measure(poll.task)
-                                    if (isActive && scheduler.complete(poll.task, outcome)) {
-                                        ledger.record(
-                                            runId, poll.task.target.guid,
-                                            poll.task.target.revision, poll.task.pass,
-                                            poll.task.attempt,
-                                            when (outcome) {
-                                                AdvancedRetryAttemptOutcome.SUCCESS -> RetryObservation.SUCCESS
-                                                AdvancedRetryAttemptOutcome.FAIL -> RetryObservation.FAIL
-                                                AdvancedRetryAttemptOutcome.UNKNOWN -> RetryObservation.UNKNOWN
-                                            },
-                                        )
+                                    if (isActive && scheduler.complete(poll.task, outcome) {
+                                            check(ledger.record(
+                                                runId, poll.task.target.guid,
+                                                poll.task.target.revision, poll.task.pass,
+                                                poll.task.attempt,
+                                                when (outcome) {
+                                                    AdvancedRetryAttemptOutcome.SUCCESS -> RetryObservation.SUCCESS
+                                                    AdvancedRetryAttemptOutcome.FAIL -> RetryObservation.FAIL
+                                                    AdvancedRetryAttemptOutcome.UNKNOWN -> RetryObservation.UNKNOWN
+                                                },
+                                            )) { "Rejected in-order retry evidence" }
+                                        }) {
                                         publishProgressThrottled()
                                     }
                                 }
@@ -106,7 +110,12 @@ internal class AdvancedTcpRetrySession(
             val elapsed = testConnect?.invoke(target, timeoutMs)
                 ?: SocketConnectTimer.measure(
                     target.host, target.port, timeoutMs, Socket(),
-                    onRegister = { socket -> synchronized(socketLock) { ownedSockets.add(socket) } },
+                    onRegister = { socket ->
+                        synchronized(socketLock) {
+                            check(!stopped) { "Retry run stopped" }
+                            ownedSockets.add(socket)
+                        }
+                    },
                     onUnregister = { socket -> synchronized(socketLock) { ownedSockets.remove(socket) } },
                 )
             if (!networkStillCurrent() || currentRevision(target.guid) != target.revision) {
@@ -127,7 +136,7 @@ internal class AdvancedTcpRetrySession(
 
     private fun report(lastPasses: Int = 0, threeOfFive: Int = 0, lastAttempts: Int = 0) =
         AdvancedTcpRetryReport(runId, scheduler.snapshot(), scheduler.settings.passes,
-            lastPasses, threeOfFive, lastAttempts)
+            lastPasses, threeOfFive, lastAttempts, reportSequence.incrementAndGet())
 
     private fun publishProgressThrottled() {
         val now = System.nanoTime()
@@ -155,7 +164,10 @@ internal class AdvancedTcpRetrySession(
         if (!scheduler.stop()) return false
         ledger.stop()
         job?.cancel()
-        val sockets = synchronized(socketLock) { ownedSockets.toList() }
+        val sockets = synchronized(socketLock) {
+            stopped = true
+            ownedSockets.toList()
+        }
         sockets.forEach { runCatching { it.close() } }
         onReport(report())
         return true

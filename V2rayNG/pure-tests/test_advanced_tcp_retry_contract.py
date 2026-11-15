@@ -68,6 +68,9 @@ class AdvancedTcpRetryContractTest(unittest.TestCase):
         scheduler = (MAIN / "util" / "AdvancedRetryScheduler.kt").read_text()
         self.assertIn("check(!stopped)", session)
         self.assertIn("stopped = true", session)
+        section = session.split("fun stop(): Boolean", 1)[1]
+        self.assertLess(section.index("stopped = true"),
+                        section.index("scheduler.stop()"))
         self.assertIn("beforeRelease()", scheduler)
         self.assertIn("check(ledger.record(", session)
 

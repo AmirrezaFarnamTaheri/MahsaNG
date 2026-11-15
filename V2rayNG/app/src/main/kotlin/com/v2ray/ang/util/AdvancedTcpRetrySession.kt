@@ -161,13 +161,15 @@ internal class AdvancedTcpRetrySession(
     }
 
     fun stop(): Boolean {
-        if (!scheduler.stop()) return false
-        ledger.stop()
-        job?.cancel()
+        // Claim the socket-registration lock before stopping the scheduler.
+        // A new socket can neither escape the snapshot nor start after Stop.
         val sockets = synchronized(socketLock) {
             stopped = true
             ownedSockets.toList()
         }
+        if (!scheduler.stop()) return false
+        ledger.stop()
+        job?.cancel()
         sockets.forEach { runCatching { it.close() } }
         onReport(report())
         return true

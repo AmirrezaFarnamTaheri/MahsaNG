@@ -40,6 +40,22 @@ class ContextualHelpContractTest(unittest.TestCase):
             all_topics.append(set(arrays))
         self.assertEqual(all_topics[0], all_topics[1])
 
+    def test_dns_and_https_menu_topics_are_in_offline_index_in_both_languages(self):
+        source = (UI / "ContextualHelp.kt").read_text(encoding="utf-8")
+        for item, topic in (
+            ("dns_diagnostics", "help_dns_diagnostics"),
+            ("https_evidence", "help_https_evidence"),
+        ):
+            self.assertIn(f"R.id.{item} to HelpTopic(", source)
+            self.assertIn(f"R.array.{topic}", source)
+            self.assertIn(f"R.id.{item},", source)
+            for lang in ("values", "values-fa"):
+                xml = ET.parse(ROOT / "res" / lang / "contextual_help.xml")
+                nodes = [node for node in xml.findall(".//string-array")
+                         if node.attrib["name"] == topic]
+                self.assertEqual(1, len(nodes), f"{lang}/{topic}")
+                self.assertEqual(5, len(list(nodes[0])))
+
     def test_every_drawer_destination_exposes_toolbar_help(self):
         for activity in (
             "SubSettingActivity", "SettingsActivity",

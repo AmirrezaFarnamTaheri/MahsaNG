@@ -114,4 +114,18 @@
         <item>How to interpret: Successful TCP connects prove only socket reachability. Cancellation, changed networks, and stale profiles are unknown.</item>
         <item>Risks and recovery: More passes use battery and data. No profiles are deleted, and stored delay values are not modified.</item>
     </string-array>
+    <string-array name="help_dns_diagnostics">
+        <item>Purpose: Diagnose DNS response codes, record answers and timings, or compare selected domains and resolvers on an explicitly chosen test route.</item>
+        <item>Before you start: Enter trusted numeric resolver addresses. App-network queries may traverse the active VPN; the local SOCKS5 option needs a running local proxy and does not automatically prove the selected profile DNS route.</item>
+        <item>How to use: Select domains, A/AAAA or other supported record types and resolvers, confirm the bounded query budget, then start. Stop and filter the completed observations as needed.</item>
+        <item>How to interpret: RCODE, TTL, UDP-to-TCP fallback, timeouts and answer differences describe the observed queries. Different resolver answers alone are not evidence of DNS leaks.</item>
+        <item>Risks and recovery: DNS queries disclose the requested names to the chosen resolver and consume data. This diagnostic never changes saved DNS settings or profiles; check the selected route and retry after network changes.</item>
+    </string-array>
+    <string-array name="help_https_evidence">
+        <item>Purpose: Inspect HTTP status and verified TLS certificate details through the app route or a configured local HTTP proxy, plus an optional TLS-only handshake.</item>
+        <item>Before you start: Use a valid hostname and timeout. The through-proxy option requires an active local proxy port; direct means no local proxy, not necessarily outside the device VPN.</item>
+        <item>How to use: Choose exactly one test method and inspect its response, TLS version, cipher, certificate and timing when available. Use Stop to discard late observations.</item>
+        <item>How to interpret: A successful local-proxy request verifies only that request and route at that moment, not general connectivity. An app-route response alone cannot prove a VPN bypass.</item>
+        <item>Risks and recovery: Tests consume network data and can reveal the target hostname to the chosen path; socket operations may last until timeout. TLS certificate and hostname validation remain enabled and saved profiles are unchanged.</item>
+    </string-array>
 </resources>

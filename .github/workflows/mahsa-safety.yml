@@ -2,7 +2,8 @@ name: MahsaNG safety checks
 
 on:
   pull_request:
-    branches: [master, 'roadmap/**', 'fix/**']
+    # Validate stacked feature PRs without duplicate push-triggered jobs.
+    branches: [master, 'roadmap/**', 'fix/**', 'feat/**']
   push:
     branches:
       - 'fix/failed-deletion-observation-id-*'
@@ -32,6 +33,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Install pinned test-only YAML parser
+        run: python3 -m pip install --disable-pip-version-check --no-input PyYAML==6.0.2
       - name: Verify restored resources and localized strings
         run: python3 -m unittest discover -s V2rayNG/pure-tests -p 'test_*.py'
       - name: Reject logs in V2rayConfigUtil configuration generator

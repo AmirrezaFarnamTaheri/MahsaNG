@@ -239,10 +239,15 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
+        menuInflater.inflate(R.menu.menu_contextual_help, menu)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
+        R.id.action_contextual_help -> {
+            ContextualHelp.showIndex(this)
+            true
+        }
         R.id.import_qrcode -> {
             importQRcode(true)
             true
@@ -326,6 +331,12 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             true
         }
 
+        R.id.advanced_tcp_retry -> {
+            startActivity(Intent(this, AdvancedTcpRetryActivity::class.java)
+                .putExtra(AdvancedTcpRetryActivity.EXTRA_SUBSCRIPTION, mainViewModel.subscriptionId)
+                .putExtra(AdvancedTcpRetryActivity.EXTRA_KEYWORD, mainViewModel.keywordFilter))
+            true
+        }
         R.id.service_restart -> {
             restartV2Ray()
             true
@@ -336,6 +347,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                     .setPositiveButton(android.R.string.ok) { _, _ ->
                         MmkvManager.removeAllServer()
                         mainViewModel.reloadServerList()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setNeutralButton(R.string.help_action) { _, _ ->
+                        ContextualHelp.show(this@MainActivity, R.id.del_all_config)
                     }
                     .show()
             true
@@ -367,6 +382,9 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                             }
                         }
                         .setNegativeButton(android.R.string.cancel, null)
+                        .setNeutralButton(R.string.help_action) { _, _ ->
+                            ContextualHelp.show(this@MainActivity, R.id.del_duplicate_config)
+                        }
                         .show()
                 }
             }
@@ -395,6 +413,9 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                             }
                         }
                         .setNegativeButton(android.R.string.cancel, null)
+                        .setNeutralButton(R.string.help_action) { _, _ ->
+                            ContextualHelp.show(this@MainActivity, R.id.del_invalid_config)
+                        }
                         .show()
                 }
             }

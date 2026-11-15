@@ -80,6 +80,9 @@
             android:name=".ui.HttpsEvidenceActivity" />
         <activity
             android:exported="false"
+            android:name=".ui.AdvancedTcpRetryActivity" />
+        <activity
+            android:exported="false"
             android:name=".ui.PerAppProxyActivity" />
         <activity
             android:exported="false"

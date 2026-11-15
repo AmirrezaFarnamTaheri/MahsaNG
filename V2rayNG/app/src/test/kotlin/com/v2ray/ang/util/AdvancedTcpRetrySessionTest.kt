@@ -38,6 +38,40 @@ class AdvancedTcpRetrySessionTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun concurrentAllFailedRetriesPreserveThreePassFailureStreakPreview() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val latest = AtomicReference<AdvancedTcpRetryReport?>()
+        val second = target.copy(guid = "other-guid", revision = "other-rev")
+        val total = java.util.concurrent.atomic.AtomicInteger(0)
+        try {
+            val session = AdvancedTcpRetrySession(scope, "failure-streak",
+                listOf(target, second), AdvancedRetrySettings(3, 3, 2),
+                RetryPassMode.ALL_EVERY_PASS, 1000,
+                currentRevision = { guid -> if (guid == "guid") "rev" else "other-rev" },
+                networkStillCurrent = { true },
+                onReport = { latest.set(it) },
+                testConnect = { candidate, _ ->
+                    // Two workers interleave separate profiles and retries.
+                    if (candidate.guid == "guid") Thread.sleep(2)
+                    total.incrementAndGet()
+                    -1L
+                },
+            )
+            session.start()
+            withTimeout(7000) {
+                while (latest.get()?.snapshot?.phase != RetryRunPhase.FINISHED) delay(15)
+            }
+            val finished = requireNotNull(latest.get())
+            assertEquals(18, total.get()) // 2 profiles * 3 passes * 3 attempts
+            assertEquals(18L, finished.snapshot.failedAttempts)
+            assertEquals(2, finished.previewLastThreePasses)
+            assertEquals(2, finished.previewLastThreeAttempts)
+            assertEquals(0, finished.previewThreeOfFive)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     @Test fun realWorkerLoopCompletesThreePassesWithOwnedTickets() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val latest = AtomicReference<AdvancedTcpRetryReport?>()

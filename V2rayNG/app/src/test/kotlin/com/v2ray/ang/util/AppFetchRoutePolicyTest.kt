@@ -26,10 +26,28 @@ class AppFetchRoutePolicyTest {
         }
     }
 
-    @Test fun disconnectedManualImportRetainsBootstrapRoute() {
+    @Test fun disconnectedManualImportRequiresConsentBeforeDirectAccess() {
+        assertEquals(
+            AppFetchRoutePolicy.Route.Blocked,
+            AppFetchRoutePolicy.choose(false, null, AppFetchRoutePolicy.Trigger.USER),
+        )
         assertEquals(
             AppFetchRoutePolicy.Route.Direct,
-            AppFetchRoutePolicy.choose(false, null, AppFetchRoutePolicy.Trigger.USER),
+            AppFetchRoutePolicy.choose(false, null, AppFetchRoutePolicy.Trigger.USER, directConfirmed = true),
+        )
+    }
+
+    @Test fun directConsentCannotOverrideAnActiveProxyRoute() {
+        assertEquals(
+            AppFetchRoutePolicy.Route.ViaProxy(10809),
+            AppFetchRoutePolicy.choose(true, 10809, AppFetchRoutePolicy.Trigger.USER, directConfirmed = true),
+        )
+    }
+
+    @Test fun directConsentCannotEnableUnattendedBackgroundFetches() {
+        assertEquals(
+            AppFetchRoutePolicy.Route.Blocked,
+            AppFetchRoutePolicy.choose(false, null, AppFetchRoutePolicy.Trigger.BACKGROUND, directConfirmed = true),
         )
     }
 

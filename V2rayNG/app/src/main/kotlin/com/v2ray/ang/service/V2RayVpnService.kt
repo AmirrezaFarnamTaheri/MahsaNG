@@ -147,14 +147,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
         if (this::mInterface.isInitialized) {
             runCatching { mInterface.close() }
         }
-        // Another instance can already own the shared native manager. Do not
-        // shut down its core or notification from a stale onDestroy callback.
-        val activeOwner = V2RayServiceManager.serviceControl?.get()
-        if (activeOwner == null || activeOwner === this) {
-            // CoreStopGate makes this idempotent after stopV2Ray()/onRevoke().
-            V2RayServiceManager.stopV2rayPoint()
-            V2RayServiceManager.cancelNotification()
-        }
+        // CoreStopGate makes repeated shutdown idempotent. The manager checks
+        // ownership and initiates stop/foreground cleanup under one monitor.
+        V2RayServiceManager.stopV2rayPointIfOwner(this, cancelForeground = true)
         super.onDestroy()
     }
 
@@ -391,12 +386,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
             Log.d(packageName, e.toString())
         }
 
-        // Revoke/stop can race with a replacement service taking ownership.
-        // Always release this instance's tunnel resources, but never stop its successor.
-        val activeOwner = V2RayServiceManager.serviceControl?.get()
-        if (activeOwner == null || activeOwner === this) {
-            V2RayServiceManager.stopV2rayPoint()
-        }
+        // Always release this instance's TUN/process resources, but atomically
+        // refuse global shutdown when a new service has taken ownership.
+        V2RayServiceManager.stopV2rayPointIfOwner(this)
 
         if (isForced) {
             //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped

@@ -23,7 +23,7 @@ class ResidualHardeningContractTest(unittest.TestCase):
         self.assertIn("val serverList = readServerIndex() ?: return", code)
         self.assertIn("val oldIndex = readServerIndex() ?: return false", code)
         self.assertIn("val currentGuids = readServerIndex() ?: return 0", code)
-        self.assertIn("val initial = readServerIndex() ?: return false", code)
+        self.assertIn("val initial = readServerIndex()?.toList() ?: return false", code)
 
     def test_delete_all_is_dispatched_off_main_thread(self):
         code = (KOTLIN / "ui/MainActivity.kt").read_text()

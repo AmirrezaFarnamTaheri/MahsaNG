@@ -84,7 +84,11 @@ internal object TargetDiscoveryPlanner {
             raw.substring(1, raw.length - 1)
         } else raw
         require(value.contains(':') && ipv6Chars.matches(value) && '%' !in value)
-        val address = InetAddress.getByName(value)
+        // InetAddress throws UnknownHostException for malformed IPv6-looking
+        // input such as "192.0.2.1:443". Treat it as invalid planning input,
+        // not as a DNS/network probe failure.
+        val address = runCatching { InetAddress.getByName(value) }
+            .getOrElse { throw IllegalArgumentException("Invalid IPv6 literal") }
         require(address is Inet6Address)
         return address.hostAddress
     }

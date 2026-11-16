@@ -68,6 +68,7 @@ object V2RayServiceManager {
 
     @Volatile
     var serviceControl: SoftReference<ServiceControl>? = null
+        @Synchronized
         set(value) {
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
@@ -231,6 +232,20 @@ object V2RayServiceManager {
             currentConfig = null
             MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
         }
+    }
+
+    /**
+     * Atomically authorize a service's shutdown against the current manager owner.
+     * This and serviceControl's setter synchronize on V2RayServiceManager.
+     * A stale service must not stop its replacement's native core or notification.
+     */
+    @Synchronized
+    fun stopV2rayPointIfOwner(requester: ServiceControl, cancelForeground: Boolean = false): Boolean {
+        val activeOwner = serviceControl?.get()
+        if (activeOwner != null && activeOwner !== requester) return false
+        stopV2rayPoint()
+        if (cancelForeground) cancelNotificationFor(requester.getService())
+        return true
     }
 
     @Synchronized

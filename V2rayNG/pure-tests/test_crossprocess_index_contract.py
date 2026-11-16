@@ -41,6 +41,18 @@ class CrossProcessIndexContract(unittest.TestCase):
         self.assertIn('if (key.isNotBlank() && index == angConfig.index)', source)
         self.assertIn('if (guid.isBlank()) return ""', source)
 
+    def test_import_selection_is_serialized_with_index_revision(self):
+        mmkv = MMKV.read_text()
+        imports = (ROOT / "app/src/main/kotlin/com/v2ray/ang/util/AngConfigManager.kt").read_text()
+        self.assertIn("fun selectExistingServer(guid: String): Boolean", mmkv)
+        section = mmkv.split("fun selectExistingServer(guid: String): Boolean", 1)[1].split("fun ", 1)[0]
+        self.assertIn("withIndexLease(false)", section)
+        self.assertIn("guid !in readServerIndex()", section)
+        self.assertIn("main.encode(KEY_SELECTED_SERVER, guid)", section)
+        self.assertNotIn("mainStorage?.encode(KEY_SELECTED_SERVER", imports)
+        self.assertIn("MmkvManager.selectExistingServer(guid)", imports)
+        self.assertIn("MmkvManager.selectExistingServer(key)", imports)
+
     def test_busy_clear_all_is_visible_as_failure_not_false_success(self):
         source = MMKV.read_text()
         self.assertIn("fun removeAllServer(): Boolean", source)

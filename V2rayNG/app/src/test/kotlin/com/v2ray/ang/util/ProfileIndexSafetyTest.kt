@@ -21,6 +21,14 @@ class ProfileIndexSafetyTest {
         assertNull(ProfileIndexSafety.decode("[bad]") { nullEntry })
     }
 
+    @Test fun selectedProfileMustRemainInTheAuthoritativeIndex() {
+        val index = listOf("active", "other")
+        assertTrue(ProfileIndexSafety.canSelect(index, "active"))
+        assertFalse(ProfileIndexSafety.canSelect(index, "deleted"))
+        assertFalse(ProfileIndexSafety.canSelect(index, ""))
+        assertFalse(ProfileIndexSafety.canSelect(index, " "))
+    }
+
     @Test fun validIndexPreservesOriginalOrderWithoutMutatingParserOutput() {
         val original = mutableListOf("b", "a", "hidden")
         val decoded = requireNotNull(ProfileIndexSafety.decode("[valid]") { original })

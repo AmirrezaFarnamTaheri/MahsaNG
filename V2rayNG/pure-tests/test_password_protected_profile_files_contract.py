@@ -32,6 +32,11 @@ class ProtectedProfileFilesContractTest(unittest.TestCase):
         self.assertIn("input.read(", screen)
         self.assertIn("bytes.fill(0)", screen)
 
+    def test_export_count_matches_actual_distinct_links_saved(self):
+        manager = (BASE / "util/AngConfigManager.kt").read_text()
+        self.assertIn("val normalized = ProfileLinkBundle.parse(links.joinToString", manager)
+        self.assertIn("PortableLinkExport(normalized.joinToString", manager)
+
     def test_localized_help_and_menu_wiring(self):
         menu = (ROOT / "res/menu/menu_main.xml").read_text()
         main = (BASE / "ui/MainActivity.kt").read_text()

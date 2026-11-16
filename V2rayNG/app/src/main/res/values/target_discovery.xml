@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="target_discovery_title">IP / SNI target discovery</string>
+    <string name="target_discovery_route_warning">Target-first diagnostic on the app network (which may traverse the active VPN). A TCP open proves only socket reachability. A TLS-verified handshake proves the SNI certificate and hostname for that connection, not an Xray profile or DNS leak safety. Domain names are resolved on this route. CIDR and range scans include all addresses. At most 128 targets; no automatic retries.</string>
+    <string name="target_discovery_targets">Targets (IP, hostname, IPv4 CIDR or inclusive range)</string>
+    <string name="target_discovery_targets_hint">198.51.100.5, example.org, 203.0.113.0/30</string>
+    <string name="target_discovery_port">Destination TCP port</string>
+    <string name="target_discovery_timeout">Timeout per target (300–10000 ms)</string>
+    <string name="target_discovery_tls">Validate TLS certificate and SNI hostname</string>
+    <string name="target_discovery_sni">Explicit SNI (required for IP TLS; blank uses hostname for domain targets)</string>
+    <string name="target_discovery_plan">Review scan budget</string>
+    <string name="target_discovery_stop">Stop scan</string>
+    <string name="target_discovery_share">Share report</string>
+    <string name="target_discovery_success_only">Show successful checks only</string>
+    <string name="target_discovery_confirm_title">Confirm target scan</string>
+    <string name="target_discovery_confirm">Scan %1$d targets with at most %2$d sockets, %3$d ms timeout per target, in %4$s mode? These app-network requests may traverse an active VPN. No VPN profile or tunnel state will be changed.</string>
+    <string name="target_discovery_tls_mode">verified TLS</string>
+    <string name="target_discovery_tcp_mode">TCP only</string>
+    <string name="target_discovery_run">Start scan</string>
+    <string name="target_discovery_invalid">Invalid target plan, port, timeout or SNI. Use explicit IPv4, single IPv6, DNS hostnames, IPv4 CIDR or full-address IPv4 ranges. At most 128 targets; broad ranges are rejected, never truncated. TLS on literal IPs needs an explicit domain SNI.</string>
+    <string name="target_discovery_network_unavailable">Cannot verify the current default-network session. No sockets were opened. This diagnostic needs Android 7 or later with an available default network.</string>
+    <string name="target_discovery_progress">Completed %1$d of %2$d targets; %3$d successful checks.</string>
+    <string name="target_discovery_route_label">Route: app network; may traverse a device VPN. Not a proxy or DNS leak test.</string>
+    <string name="target_discovery_network_changed">Network changed during the scan; it was stopped. Measurements are historical, not current-route proof.</string>
+    <string name="target_discovery_stopped">Scan stopped. Unfinished targets are unknown, not failures.</string>
+    <string name="target_discovery_no_results">No matching completed observations.</string>
+    <string name="target_discovery_result">%1$s:%2$d [%3$s]\n%4$s | TCP %5$s ms | TLS %6$s ms | SNI: %7$s</string>
+    <string name="target_discovery_none">not provided</string>
+    <string name="target_discovery_share_warning">The report contains the tested IP addresses, hostnames, SNI names, statuses and times. The selected sharing app will receive that information. Continue?</string>
+</resources>

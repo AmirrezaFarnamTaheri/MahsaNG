@@ -41,6 +41,17 @@ object MmkvManager {
 
     fun decodeServerList(): MutableList<String> = readServerIndex() ?: mutableListOf()
 
+    /** Nonblocking native MMKV lease shared by app and VPN processes. */
+    private inline fun <T> withIndexLease(unavailable: T, action: () -> T): T {
+        val main = mainStorage ?: return unavailable
+        return ProfileIndexMutationGate.execute(
+            unavailable = unavailable,
+            tryAcquire = { main.tryLock() },
+            release = { main.unlock() },
+            action = action,
+        )
+    }
+
     fun decodeServerConfig(guid: String): ServerConfig? {
         if (guid.isBlank()) {
             return null
@@ -54,6 +65,7 @@ object MmkvManager {
 
     @Synchronized
     fun encodeServerConfig(guid: String, config: ServerConfig): String {
+        return withIndexLease("") {
         // Resolve the authoritative index before touching a payload. An invalid
         // index must not become a new, empty profile collection on first import.
         val serverList = readServerIndex() ?: return ""
@@ -78,10 +90,22 @@ object MmkvManager {
             }
         }
         return key
+    
+        }}
+
+    /** Selection must remain indexed under the same native lease. */
+    @Synchronized
+    fun selectExistingServer(guid: String): Boolean {
+        return withIndexLease(false) {
+            if (!ProfileIndexSafety.canSelect(readServerIndex(), guid)) return false
+            val main = mainStorage ?: return false
+            main.encode(KEY_SELECTED_SERVER, guid)
+        }
     }
 
     @Synchronized
     fun removeServer(guid: String) {
+        withIndexLease(Unit) {
         if (guid.isBlank()) return
         val main = mainStorage ?: return
         val serverList = readServerIndex() ?: return
@@ -93,7 +117,8 @@ object MmkvManager {
         }
         serverStorage?.remove(guid)
         serverAffStorage?.remove(guid)
-    }
+    
+        }}
 
     /**
      * Reorder by GUIDs from the currently visible list, not filtered UI positions.
@@ -101,11 +126,13 @@ object MmkvManager {
      */
     @Synchronized
     fun swapServerPositions(firstGuid: String, secondGuid: String): Boolean {
+        return withIndexLease(false) {
         val current = readServerIndex() ?: return false
         val reordered = ProfileIndexSwap.swap(current, firstGuid, secondGuid) ?: return false
         if (reordered == current) return true
         return mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(reordered)) == true
-    }
+    
+        }}
 
     /**
      * Stage new payloads first, atomically publish the serialized GUID index, and
@@ -117,6 +144,7 @@ object MmkvManager {
         subid: String,
         stagedProfiles: Map<String, ServerConfig>,
     ): Boolean {
+        return withIndexLease(false) {
         if (subid.isBlank() || stagedProfiles.isEmpty()) return false
         val main = mainStorage ?: return false
         val payloads = serverStorage ?: return false
@@ -194,11 +222,15 @@ object MmkvManager {
         } catch (_: Exception) {
             false
         }
-    }
+    
+        }}
 
     /** Remove one subscription with a single index update under the writer gate. */
     @Synchronized
-    fun removeServerViaSubid(subid: String): Boolean {
+    fun removeServerViaSubid(subid: String): Boolean =
+        withIndexLease(false) { removeServerViaSubidLocked(subid) }
+
+    private fun removeServerViaSubidLocked(subid: String): Boolean {
         if (subid.isBlank()) return false
         val indexed = readServerIndex() ?: return false
         val payloads = serverStorage ?: return false
@@ -309,6 +341,7 @@ object MmkvManager {
         visibleGuids: Collection<String>,
         nowMillis: Long = System.currentTimeMillis(),
     ): Boolean {
+        return withIndexLease(false) {
         if (preview.guid !in visibleGuids || readServerIndex()?.contains(preview.guid) != true) {
             return false
         }
@@ -319,7 +352,8 @@ object MmkvManager {
             )
         ) return false
         return mainStorage?.encode(KEY_SELECTED_SERVER, preview.guid) == true
-    }
+    
+        }}
 
     fun clearAllTestDelayResults() {
         serverAffStorage?.allKeys()?.forEach { key ->
@@ -389,17 +423,22 @@ object MmkvManager {
 
     @Synchronized
     fun removeSubscription(subid: String) {
+        withIndexLease(Unit) {
         // Do not orphan a subscription's profiles if index commit fails.
-        if (removeServerViaSubid(subid)) {
+        if (removeServerViaSubidLocked(subid)) {
             subStorage?.remove(subid)
         }
-    }
+    
+        }}
 
     @Synchronized
-    fun removeAllServer() {
-        mainStorage?.clearAll()
-        serverStorage?.clearAll()
-        serverAffStorage?.clearAll()
+    fun removeAllServer(): Boolean {
+        return withIndexLease(false) {
+            mainStorage?.clearAll()
+            serverStorage?.clearAll()
+            serverAffStorage?.clearAll()
+            true
+        }
     }
 
     /**
@@ -427,6 +466,7 @@ object MmkvManager {
      */
     @Synchronized
     internal fun removeConfirmedFailedServers(confirmed: Collection<FailedServerEvidence>): Int {
+        return withIndexLease(0) {
         if (confirmed.isEmpty()) return 0
         val main = mainStorage ?: return 0
         val currentGuids = readServerIndex() ?: return 0
@@ -451,7 +491,8 @@ object MmkvManager {
             serverAffStorage?.remove(guid)
         }
         return failedGuids.size
-    }
+    
+        }}
 
     /**
      * Preview duplicates only among the currently displayed GUIDs. A selected
@@ -476,6 +517,7 @@ object MmkvManager {
         confirmedCandidates: Collection<String>,
         visibleGuids: Collection<String>,
     ): Int {
+        return withIndexLease(0) {
         val allowed = confirmedCandidates.toSet()
         if (allowed.isEmpty()) return 0
         val main = mainStorage ?: return 0
@@ -493,7 +535,8 @@ object MmkvManager {
             serverAffStorage?.remove(guid)
         }
         return removable.size
-    }
+    
+        }}
 
     /**
      * Sort against one immutable result snapshot. A concurrent profile-index
@@ -502,6 +545,7 @@ object MmkvManager {
      */
     @Synchronized
     fun sortByTestResults(): Boolean {
+        return withIndexLease(false) {
         val initial = readServerIndex()?.toList() ?: return false
         val ordered = ProfileDelayOrder.order(initial) { guid ->
             runCatching { decodeServerAffiliationInfo(guid)?.testDelayMillis }.getOrNull()
@@ -510,5 +554,6 @@ object MmkvManager {
         val latest = readServerIndex() ?: return false
         if (latest != initial) return false
         return mainStorage?.encode(KEY_ANG_CONFIGS, Gson().toJson(ordered)) == true
-    }
+    
+        }}
 }

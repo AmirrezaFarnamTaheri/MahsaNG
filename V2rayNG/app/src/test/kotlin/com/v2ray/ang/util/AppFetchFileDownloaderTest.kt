@@ -20,10 +20,10 @@ class AppFetchFileDownloaderTest {
         dir.deleteRecursively()
     }
 
-    private class Response(code: Int, private val payload: ByteArray) :
+    private class Response(private val code: Int, private val payload: ByteArray) :
         HttpURLConnection(URL("https://example.test/asset")) {
         var disconnected = false
-        init { responseCode = code }
+        override fun getResponseCode(): Int = code
         override fun connect() = Unit
         override fun disconnect() { disconnected = true }
         override fun usingProxy(): Boolean = false

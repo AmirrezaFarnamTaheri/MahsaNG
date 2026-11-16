@@ -345,8 +345,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         R.id.del_all_config -> {
             AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
                     .setPositiveButton(android.R.string.ok) { _, _ ->
-                        MmkvManager.removeAllServer()
-                        mainViewModel.reloadServerList()
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.IO) { MmkvManager.removeAllServer() }
+                            mainViewModel.reloadServerList()
+                        }
                     }
                     .setNegativeButton(android.R.string.cancel, null)
                     .setNeutralButton(R.string.help_action) { _, _ ->

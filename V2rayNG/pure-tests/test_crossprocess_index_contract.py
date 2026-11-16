@@ -47,7 +47,7 @@ class CrossProcessIndexContract(unittest.TestCase):
         self.assertIn("fun selectExistingServer(guid: String): Boolean", mmkv)
         section = mmkv.split("fun selectExistingServer(guid: String): Boolean", 1)[1].split("fun ", 1)[0]
         self.assertIn("withIndexLease(false)", section)
-        self.assertIn("guid !in readServerIndex()", section)
+        self.assertIn("ProfileIndexSafety.canSelect(readServerIndex(), guid)", section)
         self.assertIn("main.encode(KEY_SELECTED_SERVER, guid)", section)
         self.assertNotIn("mainStorage?.encode(KEY_SELECTED_SERVER", imports)
         self.assertIn("MmkvManager.selectExistingServer(guid)", imports)

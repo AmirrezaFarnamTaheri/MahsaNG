@@ -98,7 +98,7 @@ object MmkvManager {
     @Synchronized
     fun selectExistingServer(guid: String): Boolean {
         return withIndexLease(false) {
-            if (guid.isBlank() || guid !in readServerIndex().orEmpty()) return false
+            if (!ProfileIndexSafety.canSelect(readServerIndex(), guid)) return false
             val main = mainStorage ?: return false
             main.encode(KEY_SELECTED_SERVER, guid)
         }

@@ -8,6 +8,10 @@ package com.v2ray.ang.util
  * could overwrite the user's last usable profile index.
  */
 internal object ProfileIndexSafety {
+    /** Never select a GUID without verifying its presence in the live index. */
+    fun canSelect(index: List<String>?, guid: String): Boolean =
+        guid.isNotBlank() && index?.contains(guid) == true
+
     fun decode(raw: String?, parse: (String) -> List<String>?): MutableList<String>? {
         if (raw == null) return mutableListOf()
         if (raw.isBlank()) return null

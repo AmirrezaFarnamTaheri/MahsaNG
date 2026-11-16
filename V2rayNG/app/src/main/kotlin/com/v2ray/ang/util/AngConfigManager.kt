@@ -196,7 +196,7 @@ object AngConfigManager {
             }
             val key = MmkvManager.encodeServerConfig(vmessBean.guid, config)
             if (key.isNotBlank() && index == angConfig.index) {
-                mainStorage?.encode(KEY_SELECTED_SERVER, key)
+                MmkvManager.selectExistingServer(key)
             }
         }
     }
@@ -494,7 +494,7 @@ object AngConfigManager {
                     ?.getServerPort() == removedSelectedServer.getProxyOutbound()
                     ?.getServerPort()
             ) {
-                mainStorage?.encode(KEY_SELECTED_SERVER, guid)
+                MmkvManager.selectExistingServer(guid)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -1364,7 +1364,7 @@ object AngConfigManager {
                 config.getProxyOutbound()?.getServerPort() ==
                     removedSelectedServer.getProxyOutbound()?.getServerPort()
             ) {
-                mainStorage?.encode(KEY_SELECTED_SERVER, guid)
+                MmkvManager.selectExistingServer(guid)
             }
             return guid
         } catch (e: Exception) {
@@ -1617,7 +1617,7 @@ object AngConfigManager {
                 config.getProxyOutbound()
                     ?.getServerPort() == removedSelectedServer.getProxyOutbound()?.getServerPort()
             ) {
-                mainStorage?.encode(KEY_SELECTED_SERVER, guid)
+                MmkvManager.selectExistingServer(guid)
             }
             return guid
         } catch (e: Exception) {

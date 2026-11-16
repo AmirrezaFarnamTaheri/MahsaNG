@@ -94,6 +94,16 @@ object MmkvManager {
         }
     }
 
+    /** Only accept a selection still present in the current authoritative index. */
+    @Synchronized
+    fun selectExistingServer(guid: String): Boolean {
+        return withIndexLease(false) {
+            if (guid.isBlank() || guid !in readServerIndex().orEmpty()) return false
+            val main = mainStorage ?: return false
+            main.encode(KEY_SELECTED_SERVER, guid)
+        }
+    }
+
     @Synchronized
     fun removeServer(guid: String) {
         withIndexLease(Unit) {

@@ -242,11 +242,91 @@ object MmkvManager {
         serverAffStorage?.encode(guid, Gson().toJson(aff))
     }
 
+    /**
+     * Persist a single native outbound HTTP-probe result only if its originating
+     * profile is still indexed and byte-equivalent after the test service ran.
+     * TCP reachability tests keep using encodeServerTestDelayMillis above.
+     */
+    @Synchronized
+    fun encodeServerRealPingEvidence(
+        guid: String,
+        delayMillis: Long,
+        expectedRevision: String,
+        runId: String,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Boolean {
+        if (guid.isBlank() || expectedRevision.isBlank() || runId.isBlank() ||
+            readServerIndex()?.contains(guid) != true
+        ) return false
+        val actualRevision = currentSmartProfileRevision(guid) ?: return false
+        if (actualRevision != expectedRevision) return false
+
+        val affiliation = decodeServerAffiliationInfo(guid) ?: ServerAffiliationInfo()
+        if (affiliation.realPingEvidence?.profileRevision == expectedRevision &&
+            affiliation.realPingEvidence?.latestRunId == runId
+        ) return false
+        val evidence = SmartConnectionRanking.record(
+            affiliation.realPingEvidence, actualRevision, runId, delayMillis, nowMillis,
+        ) ?: return false
+        affiliation.realPingEvidence = evidence
+        // Preserve the existing displayed last-test behavior, without making TCP
+        // observations appear eligible to the smart recommender.
+        affiliation.testDelayMillis = delayMillis
+        affiliation.observationId = UUID.randomUUID().toString()
+        return serverAffStorage?.encode(guid, Gson().toJson(affiliation)) == true
+    }
+
+    private fun currentSmartProfileRevision(guid: String): String? {
+        val config = decodeServerConfig(guid) ?: return null
+        return runCatching {
+            ProfileRevisionDigest.fromSerializedConfig(Gson().toJson(config))
+        }.getOrNull()
+    }
+
+    /** Preview one eligible recommendation from exactly the currently displayed GUIDs. */
+    @Synchronized
+    fun recommendSmartProfile(
+        visibleGuids: Collection<String>,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): SmartRecommendation? {
+        val indexed = readServerIndex()?.toHashSet() ?: return null
+        val candidates = visibleGuids.distinct().mapNotNull { guid ->
+            if (guid !in indexed) return@mapNotNull null
+            val revision = currentSmartProfileRevision(guid) ?: return@mapNotNull null
+            SmartConnectionRanking.Entry(
+                guid, revision, decodeServerAffiliationInfo(guid)?.realPingEvidence,
+            )
+        }
+        return SmartConnectionRanking.pick(
+            candidates, mainStorage?.decodeString(KEY_SELECTED_SERVER), nowMillis,
+        )
+    }
+
+    /** Revalidate the user-confirmed preview under the profile writer lock. */
+    @Synchronized
+    fun confirmSmartRecommendation(
+        preview: SmartRecommendation,
+        visibleGuids: Collection<String>,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Boolean {
+        if (preview.guid !in visibleGuids || readServerIndex()?.contains(preview.guid) != true) {
+            return false
+        }
+        val revision = currentSmartProfileRevision(preview.guid) ?: return false
+        if (!SmartConnectionRanking.matchesPreview(
+                preview, revision,
+                decodeServerAffiliationInfo(preview.guid)?.realPingEvidence, nowMillis,
+            )
+        ) return false
+        return mainStorage?.encode(KEY_SELECTED_SERVER, preview.guid) == true
+    }
+
     fun clearAllTestDelayResults() {
         serverAffStorage?.allKeys()?.forEach { key ->
             decodeServerAffiliationInfo(key)?.let { aff ->
                 aff.testDelayMillis = 0
                 aff.observationId = null
+                aff.realPingEvidence = null
                 serverAffStorage?.encode(key, Gson().toJson(aff))
             }
         }

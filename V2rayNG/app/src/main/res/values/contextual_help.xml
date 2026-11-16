@@ -128,4 +128,11 @@
         <item>How to interpret: A successful local-proxy request verifies only that request and route at that moment, not general connectivity. An app-route response alone cannot prove a VPN bypass.</item>
         <item>Risks and recovery: Tests consume network data and can reveal the target hostname to the chosen path; socket operations may last until timeout. TLS certificate and hostname validation remain enabled and saved profiles are unchanged.</item>
     </string-array>
+    <string-array name="help_smart_recommend">
+        <item>Purpose: Suggest an eligible visible profile from recent native outbound HTTP-ping tests, not direct TCP reachability.</item>
+        <item>Before you start: Disconnect the VPN and run Real ping all for the profiles you want to compare. Old or edited-profile results are excluded.</item>
+        <item>How to use: Choose Recommend from recent real ping, inspect the delay, recent successes and age, and confirm the profile selection. It will not connect automatically.</item>
+        <item>How to interpret: The ranking balances successful tests, latency and freshness. Near-tied results prefer the already selected profile. This does not verify VPN-wide forwarding, download speed or DNS leak safety.</item>
+        <item>Risks and recovery: Measurements consume data and can change with the network. Re-run after network handover or configuration edits. You can always select a different profile manually.</item>
+    </string-array>
 </resources>

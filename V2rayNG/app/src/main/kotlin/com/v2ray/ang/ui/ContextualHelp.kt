@@ -31,6 +31,7 @@ internal object ContextualHelp {
         R.id.export_all to HelpTopic(R.string.title_export_all, R.array.help_export),
         R.id.ping_all to HelpTopic(R.string.title_ping_all_server, R.array.help_tcp),
         R.id.real_ping_all to HelpTopic(R.string.title_real_ping_all_server, R.array.help_real_ping),
+        R.id.recommend_tested_server to HelpTopic(R.string.title_recommend_tested_server, R.array.help_smart_recommend),
         R.id.dns_diagnostics to HelpTopic(R.string.dns_diagnostics_title, R.array.help_dns_diagnostics),
         R.id.https_evidence to HelpTopic(R.string.https_evidence_title, R.array.help_https_evidence),
         R.id.advanced_tcp_retry to HelpTopic(R.string.advanced_retry_title, R.array.help_advanced_tcp_retry),
@@ -55,6 +56,7 @@ internal object ContextualHelp {
         R.id.import_qrcode, R.id.filter_config, R.id.service_restart,
         R.id.del_all_config, R.id.del_duplicate_config, R.id.del_invalid_config,
         R.id.export_all, R.id.ping_all, R.id.real_ping_all,
+        R.id.recommend_tested_server,
         R.id.dns_diagnostics, R.id.https_evidence, R.id.advanced_tcp_retry,
         R.id.sort_by_test_results, R.id.sub_update,
     )

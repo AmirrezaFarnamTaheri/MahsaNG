@@ -324,4 +324,13 @@
     <string name="app_fetch_direct_warning">پروکسی محلی فعالی پیدا نشد. این دریافت مستقیماً از شبکهٔ دستگاه انجام می‌شود و ممکن است نشانی درخواست را آشکار کند. ادامه می‌دهید؟</string>
     <string name="app_fetch_allow_direct">استفاده از اتصال مستقیم</string>
     <string name="app_fetch_proxy_unavailable">پروکسی محلی در دسترس نیست. دریافت مسدود شد.</string>
+
+    <!-- پیشنهاد بر اساس سنجش واقعی هسته، نه اتصال TCP -->
+    <string name="title_recommend_tested_server">پیشنهاد سرور بر اساس پینگ واقعی اخیر</string>
+    <string name="smart_recommend_running">برای انتخاب پیشنهاد، ابتدا وی‌پی‌ان را قطع کنید.</string>
+    <string name="smart_recommend_no_results">نتیجهٔ موفق و تازه‌ای از پینگ واقعی وجود ندارد. ابتدا «پینگ واقعی همه» را اجرا کنید.</string>
+    <string name="smart_recommend_preview">سرور: %1$s\nآزمایش HTTP خروجی: %2$d میلی‌ثانیه\nموفقیت‌های اخیر: %3$d از %4$d آزمایش\nزمان اندازه‌گیری: %5$d دقیقه پیش\n\nاین نتیجه، عبور تمام ترافیک وی‌پی‌ان، سرعت دانلود یا نبود نشت DNS را ثابت نمی‌کند. انتخاب سرور اتصال را خودکار آغاز نمی‌کند.</string>
+    <string name="smart_recommend_select">انتخاب سرور</string>
+    <string name="smart_recommend_changed">سرور یا نتیجهٔ آزمایش آن تغییر کرده است. پیشنهاد را دوباره اجرا کنید.</string>
+    <string name="smart_recommend_selected">سرور انتخاب شد؛ وی‌پی‌ان روشن نشده است.</string>
 </resources>

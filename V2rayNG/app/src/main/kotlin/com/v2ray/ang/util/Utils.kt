@@ -372,19 +372,44 @@ object Utils {
         return result
     }
 
+    /**
+     * Fetch one user-requested config or subscription through the explicitly selected
+     * route. App-owned requests do not automatically traverse Android's VPN TUN.
+     * A failed proxy request must never fall back to a direct socket.
+     */
     @Throws(IOException::class)
-    fun getUrlContentWithCustomUserAgent(urlStr: String?): String {
+    fun getUrlContentWithCustomUserAgent(
+        urlStr: String?,
+        route: AppFetchRoutePolicy.Route,
+    ): String {
         val url = URL(urlStr)
-        val conn = url.openConnection()
-        conn.setRequestProperty("Connection", "close")
-        conn.setRequestProperty("User-agent", "v2rayNG/${BuildConfig.VERSION_NAME}")
-        url.userInfo?.let {
-            conn.setRequestProperty("Authorization",
-                "Basic ${encode(urlDecode(it))}")
+        if (url.protocol != "https" && url.protocol != "http") {
+            throw IOException("Unsupported subscription URL scheme")
         }
-        conn.useCaches = false
-        return conn.inputStream.use {
-            it.bufferedReader().readText()
+        return AppFetchRoutePolicy.dispatch(
+            route = route,
+            direct = { fetchUrlContent(url, Proxy.NO_PROXY) },
+            viaProxy = { port ->
+                fetchUrlContent(url, Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", port)))
+            },
+        )
+    }
+
+    private fun fetchUrlContent(url: URL, proxy: Proxy): String {
+        val conn = url.openConnection(proxy) as HttpURLConnection
+        try {
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 30_000
+            conn.setRequestProperty("Connection", "close")
+            conn.setRequestProperty("User-agent", "v2rayNG/${BuildConfig.VERSION_NAME}")
+            url.userInfo?.let {
+                conn.setRequestProperty("Authorization",
+                    "Basic ${encode(urlDecode(it))}")
+            }
+            conn.useCaches = false
+            return conn.inputStream.use { it.bufferedReader().readText() }
+        } finally {
+            conn.disconnect()
         }
     }
 

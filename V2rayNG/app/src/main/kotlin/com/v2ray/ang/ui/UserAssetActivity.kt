@@ -14,31 +14,27 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.databinding.ActivitySubSettingBinding
 import com.v2ray.ang.databinding.ItemRecyclerUserAssetBinding
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.extension.toast
-import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.AppFetchFileDownloader
 import com.v2ray.ang.util.SafeAssetFilename
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.InetSocketAddress
-import java.net.Proxy
 import java.net.URL
 import java.text.DateFormat
 import java.util.*
 
 class UserAssetActivity : BaseActivity() {
     private lateinit var binding: ActivitySubSettingBinding
-    private val settingsStorage by lazy { MMKV.mmkvWithID(MmkvManager.ID_SETTING, MMKV.MULTI_PROCESS_MODE) }
 
     val extDir by lazy { File(Utils.userAssetPath(this)) }
     val geofiles = arrayOf("geosite.dat", "geoip.dat")
@@ -148,56 +144,26 @@ class UserAssetActivity : BaseActivity() {
     }
 
     private fun downloadGeoFiles() {
-        val httpPort = Utils.parseInt(settingsStorage?.decodeString(AppConfig.PREF_HTTP_PORT), AppConfig.PORT_HTTP.toInt())
-
-        toast(R.string.msg_downloading_content)
-        geofiles.forEach {
-            //toast(getString(R.string.msg_downloading_content) + it)
-            lifecycleScope.launch(Dispatchers.IO) {
-                val result = downloadGeo(it, 60000, httpPort)
-                launch(Dispatchers.Main) {
-                    if (result) {
-                        toast(getString(R.string.toast_success) + " " + it)
-                        binding.recyclerView.adapter?.notifyDataSetChanged()
-                    } else {
-                        toast(getString(R.string.toast_failure) + " " + it)
+        // Prefer a live local proxy; offline direct downloads require explicit consent.
+        AppFetchRouteChooser.choose(this, { false }) { route ->
+            toast(R.string.msg_downloading_content)
+            geofiles.forEach { name ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val saved = AppFetchFileDownloader.download(
+                        url = URL(AppConfig.geoUrl + name),
+                        target = File(extDir, name),
+                        route = route,
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (saved) {
+                            toast(getString(R.string.toast_success) + " " + name)
+                            binding.recyclerView.adapter?.notifyDataSetChanged()
+                        } else {
+                            toast(getString(R.string.toast_failure) + " " + name)
+                        }
                     }
                 }
             }
-        }
-    }
-
-    private fun downloadGeo(name: String, timeout: Int, httpPort: Int): Boolean {
-        val url = AppConfig.geoUrl + name
-        val targetTemp = File(extDir, name + "_temp")
-        val target = File(extDir, name)
-        var conn: HttpURLConnection? = null
-        //Log.d(AppConfig.ANG_PACKAGE, url)
-
-        try {
-            conn = URL(url).openConnection(
-                Proxy(
-                    Proxy.Type.HTTP,
-                    InetSocketAddress("127.0.0.1", httpPort)
-                )
-            ) as HttpURLConnection
-            conn.connectTimeout = timeout
-            conn.readTimeout = timeout
-            val inputStream = conn.inputStream
-            val responseCode = conn.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                FileOutputStream(targetTemp).use { output ->
-                    inputStream.copyTo(output)
-                }
-
-                targetTemp.renameTo(target)
-            }
-            return true
-        } catch (e: Exception) {
-            Log.e(AppConfig.ANG_PACKAGE, Log.getStackTraceString(e))
-            return false
-        } finally {
-            conn?.disconnect()
         }
     }
 

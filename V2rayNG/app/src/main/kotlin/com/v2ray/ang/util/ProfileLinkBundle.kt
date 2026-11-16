@@ -24,7 +24,7 @@ internal object ProfileLinkBundle {
             val entry = line.trim()
             if (entry.isBlank()) continue
             if (entry.toByteArray(Charsets.UTF_8).size > MAX_LINK_BYTES ||
-                entry.any { it.isWhitespace() || it.isISOControl() } ||
+                entry.any { it.isWhitespace() || Character.isISOControl(it) } ||
                 schemes.none { entry.startsWith(it) && entry.length > it.length }
             ) return null
             entries.add(entry)

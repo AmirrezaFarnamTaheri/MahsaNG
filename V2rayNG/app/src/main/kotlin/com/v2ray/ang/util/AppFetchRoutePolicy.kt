@@ -3,7 +3,7 @@ package com.v2ray.ang.util
 import java.io.IOException
 
 /** Where one app-owned HTTP request may leave the device. Never retry a failed proxy request directly. */
-internal object AppFetchRoutePolicy {
+object AppFetchRoutePolicy {
     enum class Trigger { USER, BACKGROUND }
 
     sealed interface Route {

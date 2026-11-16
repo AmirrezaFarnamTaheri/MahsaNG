@@ -194,11 +194,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private fun releaseUnderlyingNetworkCallback() {
         val callback = registeredUnderlyingNetworkCallback
         registeredUnderlyingNetworkCallback = null
-        // Invalidate already queued callbacks before unregistering.
-        postUnderlyingNetworkUpdate(underlyingNetworkOwner.stop())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && callback != null) {
-            runCatching { connectivity.unregisterNetworkCallback(callback) }
-                .onFailure { Log.w(TAG, "Unable to unregister Psiphon underlying network observer") }
+        // Invalidate queued callbacks on every API level, but only publish to
+        // the Android VPN underlay API where this observer is actually supported.
+        val stopUpdate = underlyingNetworkOwner.stop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            postUnderlyingNetworkUpdate(stopUpdate)
+            if (callback != null) {
+                runCatching { connectivity.unregisterNetworkCallback(callback) }
+                    .onFailure { Log.w(TAG, "Unable to unregister Psiphon underlying network observer") }
+            }
         }
     }
 

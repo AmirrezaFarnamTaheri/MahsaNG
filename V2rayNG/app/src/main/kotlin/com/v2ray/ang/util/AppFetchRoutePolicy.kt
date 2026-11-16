@@ -12,13 +12,21 @@ object AppFetchRoutePolicy {
         object Blocked : Route
     }
 
-    /** A user-triggered offline import can bootstrap without a tunnel. Background work cannot. */
-    fun choose(proxyExpected: Boolean, configuredHttpPort: Int?, trigger: Trigger): Route {
+    /**
+     * An offline direct fetch requires a separate, informed user action.
+     * A stale disconnected UI state alone does not authorize network access.
+     */
+    fun choose(
+        proxyExpected: Boolean,
+        configuredHttpPort: Int?,
+        trigger: Trigger,
+        directConfirmed: Boolean = false,
+    ): Route {
         if (proxyExpected) {
             val port = configuredHttpPort?.takeIf { it in 1..65535 }
             return if (port != null) Route.ViaProxy(port) else Route.Blocked
         }
-        return if (trigger == Trigger.USER) Route.Direct else Route.Blocked
+        return if (trigger == Trigger.USER && directConfirmed) Route.Direct else Route.Blocked
     }
 
     /** Deliberately makes only one connection attempt; a proxy error must propagate unchanged. */

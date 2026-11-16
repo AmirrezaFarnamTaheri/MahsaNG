@@ -557,87 +557,61 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
 
     /**
-     * import config from url
+     * Import a custom config URL through the active local proxy, or after the
+     * user explicitly approves direct bootstrap while no proxy is available.
      */
     fun importConfigCustomUrl(url: String?): Boolean {
-        try {
-            if (!Utils.isValidUrl(url)) {
-                toast(R.string.toast_invalid_url)
-                return false
-            }
-            // App-owned HTTP does not automatically enter the Android VPN.
-            // Snapshot the active proxy route before starting background I/O.
-            val fetchRoute = AppFetchRoutePolicy.choose(
-                proxyExpected = mainViewModel.isRunning.value == true,
-                configuredHttpPort = Utils.getConfiguredHttpPortOrNull(),
-                trigger = AppFetchRoutePolicy.Trigger.USER,
-            )
+        if (!Utils.isValidUrl(url)) {
+            toast(R.string.toast_invalid_url)
+            return false
+        }
+        AppFetchRouteChooser.choose(this, { mainViewModel.isRunning.value == true }) { route ->
             lifecycleScope.launch(Dispatchers.IO) {
                 val configText = try {
-                    Utils.getUrlContentWithCustomUserAgent(url, fetchRoute)
+                    Utils.getUrlContentWithCustomUserAgent(url, route)
                 } catch (_: Exception) {
-                    // Never log an exception that may expose credentials in the URL.
+                    // URLs may contain credentials. Do not log the exception or URL.
                     Log.w(ANG_PACKAGE, "Custom config URL request failed")
-                    ""
+                    null
                 }
-                launch(Dispatchers.Main) {
-                    importCustomizeConfig(configText)
+                withContext(Dispatchers.Main) {
+                    if (configText.isNullOrBlank()) toast(R.string.toast_failure)
+                    else importCustomizeConfig(configText)
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
         }
         return true
     }
 
-    /**
-     * import config from sub
-     */
-    fun importConfigViaSub()
-            : Boolean {
-        try {
+    /** Update enabled subscriptions without any implicit proxy-to-direct fallback. */
+    fun importConfigViaSub(): Boolean {
+        AppFetchRouteChooser.choose(this, { mainViewModel.isRunning.value == true }) { route ->
             toast(R.string.title_sub_update)
-            // A connected refresh must only use the local proxy. If that proxy
-            // fails, do not retry over the unprotected device connection.
-            val fetchRoute = AppFetchRoutePolicy.choose(
-                proxyExpected = mainViewModel.isRunning.value == true,
-                configuredHttpPort = Utils.getConfiguredHttpPortOrNull(),
-                trigger = AppFetchRoutePolicy.Trigger.USER,
-            )
-            MmkvManager.decodeSubscriptions().forEach {
-                if (TextUtils.isEmpty(it.first)
-                        || TextUtils.isEmpty(it.second.remarks)
-                        || TextUtils.isEmpty(it.second.url)
-                ) {
+            MmkvManager.decodeSubscriptions().forEach { subscription ->
+                val subId = subscription.first
+                val item = subscription.second
+                if (subId.isBlank() || item.remarks.isBlank() || item.url.isBlank() || !item.enabled) {
                     return@forEach
                 }
-                if (!it.second.enabled) {
-                    return@forEach
-                }
-                val url = Utils.idnToASCII(it.second.url)
-                if (!Utils.isValidUrl(url)) {
-                    return@forEach
-                }
+                val url = Utils.idnToASCII(item.url)
+                if (!Utils.isValidUrl(url)) return@forEach
+
                 // Subscription URLs may contain access tokens. Never write them to Logcat.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val configText = try {
-                        Utils.getUrlContentWithCustomUserAgent(url, fetchRoute)
+                        Utils.getUrlContentWithCustomUserAgent(url, route)
                     } catch (_: Exception) {
                         Log.w(ANG_PACKAGE, "Subscription request failed")
-                        launch(Dispatchers.Main) {
-                            toast("\"" + it.second.remarks + "\" " + getString(R.string.toast_failure))
+                        withContext(Dispatchers.Main) {
+                            toast("\"" + item.remarks + "\" " + getString(R.string.toast_failure))
                         }
                         return@launch
                     }
-                    launch(Dispatchers.Main) {
-                        importBatchConfig(configText, it.first)
+                    withContext(Dispatchers.Main) {
+                        importBatchConfig(configText, subId)
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.w(ANG_PACKAGE, "Subscription refresh could not start")
-            return false
         }
         return true
     }

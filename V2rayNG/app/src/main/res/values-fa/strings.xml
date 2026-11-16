@@ -320,4 +320,8 @@
     <string name="tcp_probe_quick">سریع: ۱ تلاش با مهلت اتصال ۱٫۵ ثانیه</string>
     <string name="tcp_probe_balanced">متعادل: حداکثر ۲ تلاش، هرکدام ۳ ثانیه؛ توقف پس از موفقیت</string>
     <string name="tcp_probe_diagnostic">تشخیصی: حداکثر ۳ تلاش، هرکدام ۵ ثانیه؛ توقف پس از موفقیت</string>
+    <string name="app_fetch_direct_title">اتصال مستقیم انجام شود؟</string>
+    <string name="app_fetch_direct_warning">پروکسی محلی فعالی پیدا نشد. این دریافت مستقیماً از شبکهٔ دستگاه انجام می‌شود و ممکن است نشانی درخواست را آشکار کند. ادامه می‌دهید؟</string>
+    <string name="app_fetch_allow_direct">استفاده از اتصال مستقیم</string>
+    <string name="app_fetch_proxy_unavailable">پروکسی محلی در دسترس نیست. دریافت مسدود شد.</string>
 </resources>

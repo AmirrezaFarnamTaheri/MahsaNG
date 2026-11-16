@@ -46,6 +46,7 @@ val productionHelpers = listOf(
     "StringWhitespace",
     "FragmentorSocketBinding",
     "ProfileDelayOrder",
+    "SmartConnectionRanking",
     "ProfileIndexSwap",
     "ProfileIndexSafety",
     "DuplicateProfileSelection",

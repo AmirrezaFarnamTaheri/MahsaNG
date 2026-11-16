@@ -506,4 +506,8 @@
     <string name="tcp_probe_quick">Quick: 1 attempt, 1.5 s connect timeout</string>
     <string name="tcp_probe_balanced">Balanced: up to 2 attempts, 3 s each; stop on success</string>
     <string name="tcp_probe_diagnostic">Diagnostic: up to 3 attempts, 5 s each; stop on success</string>
+    <string name="app_fetch_direct_title">Use direct connection?</string>
+    <string name="app_fetch_direct_warning">No active local proxy was detected. This download will use the device network directly and may reveal the requested URL. Continue?</string>
+    <string name="app_fetch_allow_direct">Use direct connection</string>
+    <string name="app_fetch_proxy_unavailable">Local proxy unavailable. Download blocked.</string>
 </resources>

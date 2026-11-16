@@ -280,12 +280,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         realPingScheduleJob = viewModelScope.launch(Dispatchers.Default) {
             for (guid in guids) {
                 if (!isActive || !testRuns.accepts(runId, guid)) break
+                // A native test may spend time generating configuration. Carry the
+                // exact saved profile revision across the test-service boundary.
+                val before = MmkvManager.decodeServerConfig(guid) ?: continue
+                val revision = profileDigest(before)
                 val config = V2rayConfigUtil.getV2rayConfig(getApplication(), guid)
-                if (config.status && isActive && testRuns.accepts(runId, guid)) {
+                val unchanged = MmkvManager.decodeServerConfig(guid)
+                    ?.let { profileDigest(it) } == revision
+                if (config.status && unchanged && isActive && testRuns.accepts(runId, guid)) {
                     MessageUtil.sendMsg2TestService(
                         getApplication(),
                         AppConfig.MSG_MEASURE_CONFIG,
-                        ConfigTestRequest(guid, config.content, runId),
+                        ConfigTestRequest(guid, config.content, runId, revision),
                     )
                 }
             }
@@ -396,11 +402,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> {
                     val result = intent.getSerializableExtra("content") as? ConfigTestResult ?: return
                     val published = testRuns.publishIfCurrent(result.runId, result.guid) {
-                        if (MmkvManager.decodeServerConfig(result.guid) == null) false
-                        else {
-                            MmkvManager.encodeServerTestDelayMillis(result.guid, result.delayMillis)
-                            true
-                        }
+                        MmkvManager.encodeServerRealPingEvidence(
+                            result.guid, result.delayMillis,
+                            result.profileRevision, result.runId,
+                        )
                     }
                     if (published) {
                         if (probeFilterActive()) {

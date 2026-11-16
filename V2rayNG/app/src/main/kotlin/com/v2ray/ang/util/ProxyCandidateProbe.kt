@@ -8,7 +8,6 @@ import java.net.NoRouteToHostException
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
@@ -67,7 +66,7 @@ internal object ProxyCandidateProbe {
                     // The explicit remote IP (not SNI) is the CONNECT authority.
                     val request = "CONNECT $authority HTTP/1.1\r\n" +
                         "Host: $authority\r\n" +
-                        "Proxy-Connection: close\r\n\r\n"
+                        "Proxy-Connection: keep-alive\r\n\r\n"
                     socket.getOutputStream().write(request.toByteArray(Charsets.US_ASCII))
                     socket.getOutputStream().flush()
                     val responseCode = readConnectCode(socket)
@@ -85,7 +84,8 @@ internal object ProxyCandidateProbe {
                                 .use { tls ->
                                     tls.soTimeout = timeoutMs
                                     val parameters = tls.sslParameters
-                                    parameters.serverNames = listOf(SNIHostName(serverName))
+                                    // The layered socket's explicit DNS hostname supplies
+                                    // SNI on supported Android runtimes. Keep API 21 support.
                                     parameters.endpointIdentificationAlgorithm = "HTTPS"
                                     tls.sslParameters = parameters
                                     val tlsStart = System.nanoTime()

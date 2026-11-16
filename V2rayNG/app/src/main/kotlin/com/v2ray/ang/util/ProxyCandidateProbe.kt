@@ -135,7 +135,7 @@ internal object ProxyCandidateProbe {
             response.append(char)
             suffix = (suffix + char).takeLast(4)
             if (suffix == "\r\n\r\n") {
-                val firstLine = response.substringBefore("\r\n")
+                val firstLine = response.toString().substringBefore("\r\n")
                 return responseLine.matchEntire(firstLine)?.groupValues?.get(1)?.toIntOrNull()
                     ?: throw InvalidProxyReply()
             }

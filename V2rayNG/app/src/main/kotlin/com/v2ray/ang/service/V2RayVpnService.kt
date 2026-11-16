@@ -391,7 +391,12 @@ class V2RayVpnService : VpnService(), ServiceControl {
             Log.d(packageName, e.toString())
         }
 
-        V2RayServiceManager.stopV2rayPoint()
+        // Revoke/stop can race with a replacement service taking ownership.
+        // Always release this instance's tunnel resources, but never stop its successor.
+        val activeOwner = V2RayServiceManager.serviceControl?.get()
+        if (activeOwner == null || activeOwner === this) {
+            V2RayServiceManager.stopV2rayPoint()
+        }
 
         if (isForced) {
             //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped

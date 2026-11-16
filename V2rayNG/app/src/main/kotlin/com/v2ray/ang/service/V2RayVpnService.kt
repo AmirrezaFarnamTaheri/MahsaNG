@@ -142,8 +142,20 @@ class V2RayVpnService : VpnService(), ServiceControl {
         releaseUnderlyingNetworkCallback()
         tunProcesses.stop()?.destroy()
         fdScope.cancel()
+        // Android may destroy the service without an explicit stop or revoke.
+        // Always release the TUN, even when startup never completed.
+        if (this::mInterface.isInitialized) {
+            runCatching { mInterface.close() }
+        }
+        // Another instance can already own the shared native manager. Do not
+        // shut down its core or notification from a stale onDestroy callback.
+        val activeOwner = V2RayServiceManager.serviceControl?.get()
+        if (activeOwner == null || activeOwner === this) {
+            // CoreStopGate makes this idempotent after stopV2Ray()/onRevoke().
+            V2RayServiceManager.stopV2rayPoint()
+            V2RayServiceManager.cancelNotification()
+        }
         super.onDestroy()
-        V2RayServiceManager.cancelNotification()
     }
 
     private fun setup() {
@@ -321,10 +333,6 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
     }
 
-    /**
-     * Pass the TUN FD only to the native child that was actually adopted.
-     * A preceding child's retry worker must never publish into its replacement.
-     */
     private fun sendFd(generation: Long, child: Process) {
         if (!tunProcesses.owns(generation, child)) return
         val fd = mInterface.fileDescriptor

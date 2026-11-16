@@ -2,6 +2,7 @@ package com.v2ray.ang.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.v2ray.ang.util.TargetDiscoveryResult
+import com.v2ray.ang.util.TargetProbeRoute
 
 /**
  * Ephemeral scan evidence survives rotation but never backs up or auto-restarts.
@@ -17,6 +18,9 @@ internal class TargetDiscoveryViewModel : ViewModel() {
     var lastStartMillis = 0L
     var verifiedOnly = false
     var lastModeTls = false
+    var requestedPasses = 1
+    var lastRoute = TargetProbeRoute.APP_NETWORK
+    var proxyUnavailable = false
 
     fun interrupt() {
         generation++

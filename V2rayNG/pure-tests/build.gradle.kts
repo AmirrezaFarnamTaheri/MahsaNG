@@ -25,6 +25,8 @@ val productionHelpers = listOf(
     "BoundedProbeQueue",
     "TargetDiscoveryPlanner",
     "TargetDiscoveryProbe",
+    "ProxyCandidateProbe",
+    "CandidateStability",
     "AdvancedRetryReview",
     "AdvancedRetryScheduler",
     "AdvancedTcpRetrySession",

@@ -105,6 +105,10 @@
         android:title="@string/title_real_ping_all_server"
         app:showAsAction="never" />
     <item
+        android:id="@+id/recommend_tested_server"
+        android:title="@string/title_recommend_tested_server"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/advanced_tcp_retry"
         android:title="@string/advanced_retry_title"
         app:showAsAction="never" />

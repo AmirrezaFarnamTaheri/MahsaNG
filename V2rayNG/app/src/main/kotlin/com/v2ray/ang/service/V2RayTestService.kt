@@ -47,7 +47,7 @@ class V2RayTestService : Service() {
                         MessageUtil.sendMsg2UI(
                             this@V2RayTestService,
                             MSG_MEASURE_CONFIG_SUCCESS,
-                            ConfigTestResult(request.guid, delay, request.runId),
+                            ConfigTestResult(request.guid, delay, request.runId, request.profileRevision),
                         )
                     }
                 }

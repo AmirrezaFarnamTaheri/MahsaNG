@@ -331,6 +331,59 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             true
         }
 
+        R.id.recommend_tested_server -> {
+            // Only the displayed subscription/keyword/filter scope is eligible.
+            // Do not silently switch or restart an already-running VPN.
+            if (mainViewModel.isRunning.value == true) {
+                toast(R.string.smart_recommend_running)
+            } else {
+                val visibleGuids = mainViewModel.serversCache.map { it.guid }
+                lifecycleScope.launch {
+                    val preview = withContext(Dispatchers.IO) {
+                        MmkvManager.recommendSmartProfile(visibleGuids)
+                    }
+                    if (mainViewModel.isRunning.value == true) {
+                        toast(R.string.smart_recommend_running)
+                    } else if (preview == null) {
+                        toast(R.string.smart_recommend_no_results)
+                    } else {
+                        val remark = withContext(Dispatchers.IO) {
+                            MmkvManager.decodeServerConfig(preview.guid)?.remarks
+                        }
+                        if (remark == null) {
+                            toast(R.string.smart_recommend_changed)
+                        } else {
+                            val minutesOld = ((System.currentTimeMillis() -
+                                preview.observedAtMillis) / 60_000L).coerceAtLeast(0L)
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle(R.string.title_recommend_tested_server)
+                                .setMessage(getString(
+                                    R.string.smart_recommend_preview,
+                                    remark.take(120), preview.delayMillis,
+                                    preview.successes, preview.samples, minutesOld,
+                                ))
+                                .setPositiveButton(R.string.smart_recommend_select) { _, _ ->
+                                    // Recheck both tunnel state and evidence at confirmation.
+                                    if (mainViewModel.isRunning.value == true) {
+                                        toast(R.string.smart_recommend_running)
+                                    } else {
+                                        val stillVisible = mainViewModel.serversCache.map { it.guid }
+                                        if (MmkvManager.confirmSmartRecommendation(preview, stillVisible)) {
+                                            mainViewModel.reloadServerList()
+                                            toast(R.string.smart_recommend_selected)
+                                        } else {
+                                            toast(R.string.smart_recommend_changed)
+                                        }
+                                    }
+                                }
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            true
+        }
         R.id.advanced_tcp_retry -> {
             startActivity(Intent(this, AdvancedTcpRetryActivity::class.java)
                 .putExtra(AdvancedTcpRetryActivity.EXTRA_SUBSCRIPTION, mainViewModel.subscriptionId)

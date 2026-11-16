@@ -55,6 +55,7 @@ val productionHelpers = listOf(
     "PasswordProtectedLinkArchive",
     "ProfileIndexSwap",
     "ProfileIndexSafety",
+    "ProfileIndexMutationGate",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
     "DnsWire",

@@ -22,8 +22,13 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
     }
 
     override fun onDestroy() {
+        // A newer VPN or proxy service may already own the shared native core.
+        // Destroying this stale instance must not disconnect the new owner.
+        val activeOwner = V2RayServiceManager.serviceControl?.get()
+        if (activeOwner == null || activeOwner === this) {
+            V2RayServiceManager.stopV2rayPoint()
+        }
         super.onDestroy()
-        V2RayServiceManager.stopV2rayPoint()
     }
 
     override fun getService(): Service {

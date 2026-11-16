@@ -34,7 +34,9 @@ class ResidualHardeningContractTest(unittest.TestCase):
     def test_subscription_is_not_removed_before_profile_index_commit(self):
         code = (KOTLIN / "util/MmkvManager.kt").read_text()
         remove = code.split("fun removeSubscription(subid: String)", 1)[1].split("fun removeAllServer()", 1)[0]
-        self.assertIn("if (removeServerViaSubid(subid))", remove)
+        self.assertIn("withIndexLease(Unit)", remove)
+        self.assertIn("removeServerViaSubidLocked(subid)", remove)
+        self.assertNotIn("if (removeServerViaSubid(subid))", remove)
         self.assertIn("subStorage?.remove(subid)", remove)
 
 

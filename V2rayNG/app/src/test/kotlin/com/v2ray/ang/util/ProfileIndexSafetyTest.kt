@@ -28,4 +28,12 @@ class ProfileIndexSafetyTest {
         decoded.remove("a")
         assertEquals(listOf("b", "a", "hidden"), original)
     }
+    @Test fun canSelectOnlyCurrentlyIndexedNonblankGuids() {
+        val index = listOf("active", "other")
+        assertTrue(ProfileIndexSafety.canSelect(index, "active"))
+        assertFalse(ProfileIndexSafety.canSelect(index, "deleted"))
+        assertFalse(ProfileIndexSafety.canSelect(index, ""))
+        assertFalse(ProfileIndexSafety.canSelect(null, "active"))
+    }
+
 }

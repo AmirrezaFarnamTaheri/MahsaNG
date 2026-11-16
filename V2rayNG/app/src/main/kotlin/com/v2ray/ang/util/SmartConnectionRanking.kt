@@ -66,8 +66,8 @@ object SmartConnectionRanking {
         }
         val good = delayMillis in 1..MAX_DELAY_MILLIS
         val count = min(MAX_SAMPLES, (reuse?.samples ?: 0) + 1)
-        val bits = (((reuse?.successBits ?: 0) shl 1) or if (good) 1 else 0) and
-            ((1 shl count) - 1)
+        val goodBit = if (good) 1 else 0
+        val bits = (((reuse?.successBits ?: 0) shl 1) or goodBit) and ((1 shl count) - 1)
         return SmartRealPingEvidence(
             profileRevision = profileRevision,
             latestRunId = runId,

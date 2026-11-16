@@ -48,6 +48,7 @@ val productionHelpers = listOf(
     "ProfileDelayOrder",
     "ProfileIndexSwap",
     "ProfileIndexSafety",
+    "ProfileIndexMutationGate",
     "DuplicateProfileSelection",
     "TlsCertificatePolicy",
     "DnsWire",

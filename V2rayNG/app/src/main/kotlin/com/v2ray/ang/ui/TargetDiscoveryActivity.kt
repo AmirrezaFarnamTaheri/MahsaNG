@@ -324,16 +324,48 @@ class TargetDiscoveryActivity : BaseActivity() {
         shareButton.isEnabled = !model.running && model.observations.isNotEmpty()
         val rows = model.observations.toList()
         val ok = rows.count { it.succeeded }
+        val summaries = CandidateStability.summarize(
+            rows, model.requestedPasses, System.currentTimeMillis(),
+        )
         status.text = buildString {
             append(getString(R.string.target_discovery_progress, rows.size, model.total, ok))
             append("\n")
-            append(getString(R.string.target_discovery_route_label))
-            if (model.networkChanged) append("\n").append(getString(R.string.target_discovery_network_changed))
-            else if (model.stopped) append("\n").append(getString(R.string.target_discovery_stopped))
+            append(getString(if (model.lastRoute == TargetProbeRoute.LOCAL_HTTP_CONNECT)
+                R.string.target_discovery_proxy_route_label
+                else R.string.target_discovery_route_label))
+            append("\n")
+            append(getString(R.string.target_discovery_stable_summary,
+                summaries.count { it.stableProxyTls }, summaries.size))
+            if (model.networkChanged) append("\n")
+                .append(getString(R.string.target_discovery_network_changed))
+            else if (model.proxyUnavailable) append("\n")
+                .append(getString(R.string.target_discovery_proxy_unavailable))
+            else if (model.stopped) append("\n")
+                .append(getString(R.string.target_discovery_stopped))
         }
         val shown = if (model.verifiedOnly) rows.filter { it.succeeded } else rows
         evidence.text = if (shown.isEmpty()) getString(R.string.target_discovery_no_results)
-        else shown.joinToString("\n\n") { item -> rowText(item) }
+        else buildString {
+            append(getString(R.string.target_discovery_candidate_summary_heading))
+            append("\n")
+            val visibleSummaries = CandidateStability.summarize(
+                shown, model.requestedPasses, System.currentTimeMillis(),
+            )
+            for (summary in visibleSummaries) {
+                append(getString(R.string.target_discovery_candidate_summary_row,
+                    summary.target.host, summary.target.port,
+                    summary.successes, summary.attempts, summary.expectedPasses,
+                    summary.verifiedTls,
+                    summary.medianMs?.toString() ?: "-",
+                    if (summary.stableProxyTls)
+                        getString(R.string.target_discovery_stable_yes)
+                    else getString(R.string.target_discovery_stable_no)))
+                append("\n")
+            }
+            append("\n").append(getString(R.string.target_discovery_observations_heading))
+            append("\n")
+            append(shown.joinToString("\n\n") { item -> rowText(item) })
+        }
     }
 
     private fun rowText(item: TargetDiscoveryResult): String =
@@ -344,6 +376,9 @@ class TargetDiscoveryActivity : BaseActivity() {
             item.tcpElapsedMs?.toString() ?: "-",
             item.tlsElapsedMs?.toString() ?: "-",
             item.target.sni ?: getString(R.string.target_discovery_none),
+        ) + "\n" + getString(
+            R.string.target_discovery_candidate_provenance,
+            item.passIndex, item.route.name,
         )
 
     private fun shareReport() {
@@ -353,21 +388,42 @@ class TargetDiscoveryActivity : BaseActivity() {
             .setMessage(R.string.target_discovery_share_warning)
             .setPositiveButton(R.string.target_discovery_share) { _, _ ->
                 val report = buildString {
-                    append("MahsaNG target-first scan: APP_NETWORK\n")
-                    append("App network may traverse an active VPN; not an Xray-profile or DNS-leak test.\n")
+                    append("MahsaNG target-first candidate scan\n")
+                    append("Route: ").append(model.lastRoute.name).append("\n")
+                    append("Local HTTP CONNECT is a configured proxy listener, not device-wide VPN proof.\n")
                     append("Run started (epoch ms): ").append(model.lastStartMillis).append("\n")
                     append("Mode: ").append(if (model.lastModeTls) "TLS_HOSTNAME_VERIFIED" else "TCP_ONLY").append("\n")
+                    append("Requested passes per target: ").append(model.requestedPasses).append("\n")
                     append("Completed: ").append(model.observations.size).append("/")
                         .append(model.total).append("\n")
                     append("Interrupted: ").append(model.stopped).append("\n")
-                    append("Network changed: ").append(model.networkChanged).append("\n\n")
-                    for (item in model.observations.take(TargetDiscoveryPlanner.MAX_TARGETS)) {
+                    append("Network changed: ").append(model.networkChanged).append("\n")
+                    append("Proxy listener unavailable: ").append(model.proxyUnavailable).append("\n")
+                    val summaries = CandidateStability.summarize(
+                        model.observations, model.requestedPasses, System.currentTimeMillis()
+                    )
+                    append("Candidate stability (proxy TLS only):\n")
+                    summaries.forEach { summary ->
+                        append(summary.target.host).append(":").append(summary.target.port)
+                            .append(" | route=").append(summary.route.name)
+                            .append(" | success=").append(summary.successes)
+                            .append("/").append(summary.attempts)
+                            .append("/").append(summary.expectedPasses)
+                            .append(" | tlsVerified=").append(summary.verifiedTls)
+                            .append(" | medianMs=").append(summary.medianMs ?: "N/A")
+                            .append(" | stableProxyTls=").append(summary.stableProxyTls)
+                            .append("\n")
+                    }
+                    append("\n")
+                    for (item in model.observations.take(CandidateProbeRunPlan.MAX_ATTEMPTS)) {
                         append(item.target.host).append(":").append(item.target.port)
                             .append(" | source=").append(item.target.source.name)
                             .append(" | sni=").append(item.target.sni ?: "NONE")
                             .append(" | status=").append(item.status.name)
                             .append(" | tcpMs=").append(item.tcpElapsedMs ?: "N/A")
                             .append(" | tlsMs=").append(item.tlsElapsedMs ?: "N/A")
+                            .append(" | route=").append(item.route.name)
+                            .append(" | pass=").append(item.passIndex)
                             .append(" | observedAt=").append(item.endedAtMillis)
                             .append("\n")
                     }
@@ -386,6 +442,8 @@ class TargetDiscoveryActivity : BaseActivity() {
         outState.putString("target_discovery_targets", targetsInput.text.toString())
         outState.putString("target_discovery_port", portInput.text.toString())
         outState.putString("target_discovery_timeout", timeoutInput.text.toString())
+        outState.putString("target_discovery_passes", passesInput.text.toString())
+        outState.putBoolean("target_discovery_proxy", localProxyCheckbox.isChecked)
         outState.putString("target_discovery_sni", sniInput.text.toString())
         outState.putBoolean("target_discovery_tls", tlsCheckbox.isChecked)
         outState.putBoolean("target_discovery_was_running", model.running)

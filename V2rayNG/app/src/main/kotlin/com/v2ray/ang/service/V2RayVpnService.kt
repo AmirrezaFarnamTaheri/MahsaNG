@@ -142,8 +142,20 @@ class V2RayVpnService : VpnService(), ServiceControl {
         releaseUnderlyingNetworkCallback()
         tunProcesses.stop()?.destroy()
         fdScope.cancel()
+        // Android may destroy the service without an explicit stop or revoke.
+        // Always release the TUN, even when startup never completed.
+        if (this::mInterface.isInitialized) {
+            runCatching { mInterface.close() }
+        }
+        // Another instance can already own the shared native manager. Do not
+        // shut down its core or notification from a stale onDestroy callback.
+        val activeOwner = V2RayServiceManager.serviceControl?.get()
+        if (activeOwner == null || activeOwner === this) {
+            // CoreStopGate makes this idempotent after stopV2Ray()/onRevoke().
+            V2RayServiceManager.stopV2rayPoint()
+            V2RayServiceManager.cancelNotification()
+        }
         super.onDestroy()
-        V2RayServiceManager.cancelNotification()
     }
 
     private fun setup() {

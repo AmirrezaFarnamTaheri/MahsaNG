@@ -348,10 +348,9 @@ class TargetDiscoveryActivity : BaseActivity() {
         else buildString {
             append(getString(R.string.target_discovery_candidate_summary_heading))
             append("\n")
-            val visibleSummaries = CandidateStability.summarize(
-                shown, model.requestedPasses, System.currentTimeMillis(),
-            )
-            for (summary in visibleSummaries) {
+            // The successful-only filter hides individual failed rows, never
+            // rewrites the stability denominator or erases failed passes.
+            for (summary in summaries) {
                 append(getString(R.string.target_discovery_candidate_summary_row,
                     summary.target.host, summary.target.port,
                     summary.successes, summary.attempts, summary.expectedPasses,

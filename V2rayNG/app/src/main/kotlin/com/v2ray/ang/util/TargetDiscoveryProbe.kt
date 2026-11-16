@@ -46,8 +46,12 @@ internal class TargetSocketLease {
     }
 }
 
+internal enum class TargetProbeRoute { APP_NETWORK, LOCAL_HTTP_CONNECT }
+
 internal enum class TargetProbeStatus {
-    TCP_OPEN, TLS_VERIFIED, CANCELLED, TIMEOUT, REFUSED, DNS_FAILED,
+    TCP_OPEN, TLS_VERIFIED, PROXY_CONNECT_ESTABLISHED,
+    PROXY_AUTH_REQUIRED, PROXY_CONNECT_REJECTED, PROXY_PROTOCOL_ERROR,
+    PROXY_LISTENER_UNAVAILABLE, CANCELLED, TIMEOUT, REFUSED, DNS_FAILED,
     NO_ROUTE, TLS_CERTIFICATE_UNVERIFIED, TLS_HANDSHAKE_FAILED, NETWORK_ERROR, UNKNOWN_ERROR,
 }
 
@@ -58,9 +62,15 @@ internal data class TargetDiscoveryResult(
     val tlsElapsedMs: Long?,
     val startedAtMillis: Long,
     val endedAtMillis: Long,
+    val route: TargetProbeRoute = TargetProbeRoute.APP_NETWORK,
+    val passIndex: Int = 1,
 ) {
     val succeeded: Boolean
-        get() = status == TargetProbeStatus.TCP_OPEN || status == TargetProbeStatus.TLS_VERIFIED
+        get() = status == TargetProbeStatus.TCP_OPEN ||
+            status == TargetProbeStatus.TLS_VERIFIED ||
+            status == TargetProbeStatus.PROXY_CONNECT_ESTABLISHED
+
+    val verifiedTls: Boolean get() = status == TargetProbeStatus.TLS_VERIFIED
 }
 
 /**

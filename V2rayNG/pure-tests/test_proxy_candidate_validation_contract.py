@@ -34,7 +34,9 @@ class ProxyCandidateValidationContractTest(unittest.TestCase):
     def test_attempts_use_one_bounded_queue_and_current_network_lease(self):
         ui = UI.read_text()
         self.assertIn("CandidateProbeRunPlan.create(", ui)
-        self.assertIn("BoundedProbeQueue(attempts, concurrency = 6)", ui)
+        # One worker owns a target through all passes; never scan its repeats concurrently.
+        self.assertIn("BoundedProbeQueue(baseAttempts, concurrency = 6)", ui)
+        self.assertIn("for (passIndex in 1..passes)", ui)
         self.assertIn("RunNetworkObserver.register(this)", ui)
         self.assertIn("observer.isCurrent()", ui)
         self.assertIn("owner.stop()", ui)

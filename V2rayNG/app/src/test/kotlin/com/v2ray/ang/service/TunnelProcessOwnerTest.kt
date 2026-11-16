@@ -6,6 +6,38 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TunnelProcessOwnerTest {
+    private data class Child(val label: String)
+
+    @Test fun fdHandoffCanOnlyBePublishedByTheExactOwnedChild() {
+        val owner = TunnelProcessOwner<Child>(maxRestarts = 2)
+        val (generation, _) = owner.begin()
+        val first = Child("same")
+        val other = Child("same")
+        assertTrue(owner.adopt(generation, first))
+        assertTrue(owner.owns(generation, first))
+        // Identity matters: two processes with the same attributes are not interchangeable.
+        assertFalse(owner.owns(generation, other))
+        assertTrue(owner.departed(generation, first))
+        assertTrue(owner.adopt(generation, other))
+        assertFalse(owner.owns(generation, first))
+        assertTrue(owner.owns(generation, other))
+    }
+
+    @Test fun fdHandoffIsRejectedForStoppedOrReplacedGeneration() {
+        val owner = TunnelProcessOwner<Any>()
+        val (firstGeneration, _) = owner.begin()
+        val first = Any()
+        assertTrue(owner.adopt(firstGeneration, first))
+        val (newGeneration, oldChild) = owner.begin()
+        assertEquals(first, oldChild)
+        assertFalse(owner.owns(firstGeneration, first))
+        val second = Any()
+        assertTrue(owner.adopt(newGeneration, second))
+        assertTrue(owner.owns(newGeneration, second))
+        assertEquals(second, owner.stop())
+        assertFalse(owner.owns(newGeneration, second))
+    }
+
     @Test fun previousWatcherCannotRestartAfterNewSessionBegins() {
         val owner = TunnelProcessOwner<Any>()
         val (firstId, prior) = owner.begin()

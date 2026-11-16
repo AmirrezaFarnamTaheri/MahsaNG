@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="target_discovery_title">پویش هدف‌های IP و SNI</string>
+    <string name="target_discovery_route_warning">این ابزار هدف‌های مشخص را از مسیر شبکه برنامه بررسی می‌کند؛ این مسیر ممکن است از وی‌پی‌ان فعال عبور کند. موفقیت TCP فقط دسترسی سوکت را نشان می‌دهد. موفقیت TLS گواهی و نام میزبان SNI همان اتصال را تأیید می‌کند، نه کارکرد کانفیگ Xray یا نبود نشت DNS. نام دامنه در همین مسیر حل می‌شود. همه نشانی‌های بازه بررسی می‌شوند. حداکثر ۱۲۸ هدف و بدون تلاش دوباره خودکار.</string>
+    <string name="target_discovery_targets">هدف‌ها (IP، دامنه، CIDR نسخه ۴ یا بازه کامل)</string>
+    <string name="target_discovery_targets_hint">198.51.100.5, example.org, 203.0.113.0/30</string>
+    <string name="target_discovery_port">درگاه TCP مقصد</string>
+    <string name="target_discovery_timeout">مهلت هر هدف (۳۰۰ تا ۱۰۰۰۰ میلی‌ثانیه)</string>
+    <string name="target_discovery_tls">تأیید گواهی TLS و نام میزبان SNI</string>
+    <string name="target_discovery_sni">نام SNI مشخص (برای IP الزامی؛ برای دامنه پیش‌فرض همان نام دامنه است)</string>
+    <string name="target_discovery_plan">بررسی بودجه پویش</string>
+    <string name="target_discovery_stop">توقف پویش</string>
+    <string name="target_discovery_share">اشتراک‌گذاری گزارش</string>
+    <string name="target_discovery_success_only">فقط بررسی‌های موفق</string>
+    <string name="target_discovery_confirm_title">تأیید پویش هدف‌ها</string>
+    <string name="target_discovery_confirm">بررسی %1$d هدف با حداکثر %2$d سوکت هم‌زمان و مهلت %3$d میلی‌ثانیه برای هر هدف، در حالت %4$s؟ درخواست‌ها ممکن است از وی‌پی‌ان فعال عبور کنند. کانفیگ یا وضعیت تونل تغییر نمی‌کند.</string>
+    <string name="target_discovery_tls_mode">TLS تأییدشده</string>
+    <string name="target_discovery_tcp_mode">فقط TCP</string>
+    <string name="target_discovery_run">شروع پویش</string>
+    <string name="target_discovery_invalid">هدف، درگاه، مهلت یا SNI معتبر نیست. از IPv4، IPv6 تکی، دامنه، CIDR نسخه ۴ یا بازه کامل IPv4 استفاده کنید. بیش از ۱۲۸ هدف رد می‌شود و بازه بزرگ کوتاه نخواهد شد. برای آزمایش TLS روی IP، نام دامنه SNI را صریحاً وارد کنید.</string>
+    <string name="target_discovery_network_unavailable">نشست شبکه پیش‌فرض قابل بررسی نیست. هیچ سوکتی باز نشد. این ابزار به اندروید ۷ یا جدیدتر و شبکه پیش‌فرض فعال نیاز دارد.</string>
+    <string name="target_discovery_progress">%1$d هدف از %2$d بررسی شد؛ %3$d بررسی موفق.</string>
+    <string name="target_discovery_route_label">مسیر: شبکه برنامه، احتمالاً از وی‌پی‌ان دستگاه؛ نه آزمایش پراکسی یا نشت DNS.</string>
+    <string name="target_discovery_network_changed">شبکه هنگام پویش تغییر کرد و پویش متوقف شد. مشاهده‌ها تاریخی‌اند و نشانه سلامت مسیر جدید نیستند.</string>
+    <string name="target_discovery_stopped">پویش متوقف شد؛ هدف‌های ناتمام نامعلوم‌اند، نه ناموفق.</string>
+    <string name="target_discovery_no_results">مشاهده تکمیل‌شده‌ای با این فیلتر وجود ندارد.</string>
+    <string name="target_discovery_result">%1$s:%2$d [%3$s]\n%4$s | TCP %5$s ms | TLS %6$s ms | SNI: %7$s</string>
+    <string name="target_discovery_none">وارد نشده</string>
+    <string name="target_discovery_share_warning">این گزارش شامل IPها، دامنه‌ها، نام SNI، نتیجه‌ها و زمان‌هاست. برنامه انتخابی برای اشتراک‌گذاری به این اطلاعات دسترسی خواهد داشت. ادامه می‌دهید؟</string>
+</resources>

@@ -197,7 +197,7 @@ class TargetDiscoveryActivity : BaseActivity() {
             .setTitle(R.string.target_discovery_confirm_title)
             .setMessage(getString(
                 R.string.target_discovery_candidate_confirm,
-                planned.size, passes, attempts.size, minOf(6, attempts.size), timeoutMs,
+                planned.size, passes, attempts.size, minOf(6, planned.size), timeoutMs,
                 getString(if (tlsCheckbox.isChecked) R.string.target_discovery_tls_mode
                 else R.string.target_discovery_tcp_mode),
                 getString(if (route == TargetProbeRoute.LOCAL_HTTP_CONNECT)

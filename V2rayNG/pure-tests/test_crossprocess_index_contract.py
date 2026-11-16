@@ -33,6 +33,14 @@ class CrossProcessIndexContract(unittest.TestCase):
         self.assertIn("subStorage?.remove(subid)", block)
         self.assertNotIn("if (removeServerViaSubid(subid))", block)
 
+    def test_import_fails_closed_when_crossprocess_lease_is_busy(self):
+        source = (ROOT / "app/src/main/kotlin/com/v2ray/ang/util/AngConfigManager.kt").read_text()
+        self.assertIn('if (guid.isBlank()) return -1', source)
+        self.assertIn('if (key.isBlank()) return count', source)
+        self.assertIn('if (key.isBlank()) return 0', source)
+        self.assertIn('if (key.isNotBlank() && index == angConfig.index)', source)
+        self.assertIn('if (guid.isBlank()) return ""', source)
+
     def test_busy_clear_all_is_visible_as_failure_not_false_success(self):
         source = MMKV.read_text()
         self.assertIn("fun removeAllServer(): Boolean", source)

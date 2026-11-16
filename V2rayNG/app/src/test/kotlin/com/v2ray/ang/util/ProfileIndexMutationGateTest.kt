@@ -43,12 +43,14 @@ class ProfileIndexMutationGateTest {
 
     @Test fun nonlocalReturnStillReleasesNativeLease() {
         var unlocked = false
-        fun run(): String = ProfileIndexMutationGate.execute(
-            unavailable = "BUSY",
-            tryAcquire = { true },
-            release = { unlocked = true },
-        ) {
-            return "COMMITTED" // Nonlocal Kotlin return from an inline critical section.
+        fun run(): String {
+            return ProfileIndexMutationGate.execute(
+                unavailable = "BUSY",
+                tryAcquire = { true },
+                release = { unlocked = true },
+            ) {
+                return "COMMITTED" // Nonlocal Kotlin return from an inline critical section.
+            }
         }
         assertEquals("COMMITTED", run())
         assertTrue(unlocked)

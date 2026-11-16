@@ -62,6 +62,7 @@ val productionHelpers = listOf(
     "TcpProbeEvidence",
     "SafeProbeFailure",
     "AppFetchRoutePolicy",
+    "AppFetchFileDownloader",
 )
 
 sourceSets {

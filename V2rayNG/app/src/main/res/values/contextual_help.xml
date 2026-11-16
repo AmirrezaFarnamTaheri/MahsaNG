@@ -142,4 +142,11 @@
         <item>How to interpret: TCP_OPEN means app-route TCP reachability, PROXY_CONNECT_ESTABLISHED means only that a local HTTP proxy accepted CONNECT, and TLS_VERIFIED means platform certificate and hostname validation completed on that specific route. Repeatable proxy TLS needs at least two complete successful passes. Missing passes are unknown, not failures.</item>
         <item>Risks and recovery: Tests consume data, may disclose the target/SNI through the chosen network path, and do not prove device-wide VPN routing, traffic-leak safety or throughput. No profiles change. Export only after reviewing the sharing warning; reset by running another explicit scan.</item>
     </string-array>
+    <string-array name="help_protected_profile_files">
+        <item>Purpose: Save and restore link-exportable proxy profiles in a password-encrypted file. This portable link archive is NOT a full database, subscription, custom JSON or settings backup.</item>
+        <item>Before you start: Use a unique password with at least 12 characters and save it securely. The export screen counts excluded/custom profiles. Keep files in trusted Android document-provider storage.</item>
+        <item>How to use: Select Save, choose a file location, then enter and repeat your password. To restore, select Import, choose an encrypted file, and enter its password. The app validates the entire archive and allowlisted link format before invoking the normal profile importer.</item>
+        <item>How to interpret: The import result lists accepted versus total decrypted links; unsupported protocol fields may be rejected. The tool never auto-imports subscription URLs, changes VPN mode, connects to an endpoint, or makes a plaintext clipboard copy.</item>
+        <item>Risks and recovery: Forgetting the password makes recovery impossible. Damaged or wrong-password files are rejected. Partial import may happen if an individual supported-scheme link fails full protocol validation. Review imported profiles before connecting. Cancelled save may leave an empty file selected by the document provider.</item>
+    </string-array>
 </resources>

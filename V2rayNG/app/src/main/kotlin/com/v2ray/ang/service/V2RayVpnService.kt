@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.net.*
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -16,6 +18,7 @@ import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ERoutingMode
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.UnderlyingNetworkOwner
 import com.v2ray.ang.util.MyContextWrapper
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.*
@@ -58,21 +61,63 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
     private val connectivity by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
 
-    @delegate:RequiresApi(Build.VERSION_CODES.P)
-    private val defaultNetworkCallback by lazy {
-        object : ConnectivityManager.NetworkCallback() {
+    private val owner = UnderlyingNetworkOwner<Network>()
+    private val networkHandler = Handler(Looper.getMainLooper())
+    private var registeredNetworkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /**
+     * Binder callbacks can arrive late or out of order. Queue only a versioned
+     * selection and revalidate on the main thread before updating the VPN.
+     */
+    private fun postUnderlyingNetworkUpdate(update: UnderlyingNetworkOwner.Update<Network>?) {
+        if (update == null) return
+        networkHandler.post {
+            owner.publishIfCurrent(update) { network ->
+                runCatching {
+                    setUnderlyingNetworks(network?.let { arrayOf(it) })
+                }.onFailure {
+                    Log.w(packageName, "Could not publish underlying network")
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    private fun registerUnderlyingNetworkCallback() {
+        releaseUnderlyingNetworkCallback()
+        val epoch = owner.begin()
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                setUnderlyingNetworks(arrayOf(network))
+                postUnderlyingNetworkUpdate(owner.onAvailable(epoch, network))
             }
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                // it's a good idea to refresh capabilities
-                setUnderlyingNetworks(arrayOf(network))
+                // Capabilities from an old upstream must not replace the new one.
+                postUnderlyingNetworkUpdate(owner.onCapabilitiesChanged(epoch, network))
             }
 
             override fun onLost(network: Network) {
-                setUnderlyingNetworks(null)
+                postUnderlyingNetworkUpdate(owner.onLost(epoch, network))
             }
+        }
+        registeredNetworkCallback = callback
+        try {
+            connectivity.requestNetwork(defaultNetworkRequest, callback)
+        } catch (_: Exception) {
+            registeredNetworkCallback = null
+            postUnderlyingNetworkUpdate(owner.stop())
+            Log.w(packageName, "Unable to register underlying network observer")
+        }
+    }
+
+    @Synchronized
+    private fun releaseUnderlyingNetworkCallback() {
+        val callback = registeredNetworkCallback
+        registeredNetworkCallback = null
+        // Invalidate queued notifications before unregistering the callback.
+        postUnderlyingNetworkUpdate(owner.stop())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && callback != null) {
+            runCatching { connectivity.unregisterNetworkCallback(callback) }
         }
     }
 
@@ -94,6 +139,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 //    }
 
     override fun onDestroy() {
+        releaseUnderlyingNetworkCallback()
         tunProcesses.stop()?.destroy()
         fdScope.cancel()
         super.onDestroy()
@@ -196,11 +242,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                connectivity.requestNetwork(defaultNetworkRequest, defaultNetworkCallback)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            registerUnderlyingNetworkCallback()
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -317,13 +359,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 //        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
 //        saveVpnNetworkInfo(configName, info)
         val stoppedChild = tunProcesses.stop()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                connectivity.unregisterNetworkCallback(defaultNetworkCallback)
-            } catch (ignored: Exception) {
-                // ignored
-            }
-        }
+        releaseUnderlyingNetworkCallback()
 
         try {
             Log.d(packageName, "tun2socks destroy")

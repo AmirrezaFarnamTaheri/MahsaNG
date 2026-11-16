@@ -251,7 +251,11 @@ class TargetDiscoveryActivity : BaseActivity() {
         job = lifecycleScope.launch {
             try {
                 coroutineScope {
-                    val queue = BoundedProbeQueue(attempts, concurrency = 6)
+                    // One unique target is claimed per worker. Its passes happen
+                    // sequentially, avoiding concurrent measurements of the same
+                    // candidate masquerading as independent stability evidence.
+                    val baseAttempts = attempts.filter { it.passIndex == 1 }
+                    val queue = BoundedProbeQueue(baseAttempts, concurrency = 6)
                     repeat(queue.workerCount) {
                         launch(Dispatchers.IO) {
                             while (isActive && owner.isActive()) {
@@ -262,26 +266,35 @@ class TargetDiscoveryActivity : BaseActivity() {
                                     break
                                 }
                                 val attempt = queue.claim() ?: break
-                                val observation = when (route) {
-                                    TargetProbeRoute.APP_NETWORK ->
-                                        TargetDiscoveryProbe.inspect(attempt.target, timeoutMs, owner)
-                                    TargetProbeRoute.LOCAL_HTTP_CONNECT ->
-                                        ProxyCandidateProbe.inspect(attempt.target, timeoutMs,
-                                            requireNotNull(proxyPort), owner)
-                                }.copy(passIndex = attempt.passIndex)
-                                withContext(Dispatchers.Main) {
-                                    if (token == model.generation && model.running && owner.isActive()) {
-                                        if (!observer.isCurrent()) {
-                                            stopRun(networkChanged = true)
-                                        } else if (observation.status == TargetProbeStatus.PROXY_LISTENER_UNAVAILABLE) {
-                                            model.proxyUnavailable = true
-                                            stopRun(networkChanged = false)
-                                        } else if (observation.status != TargetProbeStatus.CANCELLED) {
-                                            model.observations.add(observation)
-                                            val now = SystemClock.elapsedRealtime()
-                                            if (now - lastRenderMs >= 150 || model.observations.size == model.total) {
-                                                lastRenderMs = now
-                                                render()
+                                for (passIndex in 1..passes) {
+                                    if (!isActive || !owner.isActive()) break
+                                    if (!observer.isCurrent()) {
+                                        withContext(Dispatchers.Main) {
+                                            if (token == model.generation) stopRun(networkChanged = true)
+                                        }
+                                        break
+                                    }
+                                    val observation = when (route) {
+                                        TargetProbeRoute.APP_NETWORK ->
+                                            TargetDiscoveryProbe.inspect(attempt.target, timeoutMs, owner)
+                                        TargetProbeRoute.LOCAL_HTTP_CONNECT ->
+                                            ProxyCandidateProbe.inspect(attempt.target, timeoutMs,
+                                                requireNotNull(proxyPort), owner)
+                                    }.copy(passIndex = passIndex)
+                                    withContext(Dispatchers.Main) {
+                                        if (token == model.generation && model.running && owner.isActive()) {
+                                            if (!observer.isCurrent()) {
+                                                stopRun(networkChanged = true)
+                                            } else if (observation.status == TargetProbeStatus.PROXY_LISTENER_UNAVAILABLE) {
+                                                model.proxyUnavailable = true
+                                                stopRun(networkChanged = false)
+                                            } else if (observation.status != TargetProbeStatus.CANCELLED) {
+                                                model.observations.add(observation)
+                                                val now = SystemClock.elapsedRealtime()
+                                                if (now - lastRenderMs >= 150 || model.observations.size == model.total) {
+                                                    lastRenderMs = now
+                                                    render()
+                                                }
                                             }
                                         }
                                     }

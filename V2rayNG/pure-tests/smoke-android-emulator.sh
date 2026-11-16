@@ -62,4 +62,7 @@ fi
 
 # Check the *installed* manifest, not merely the source file.
 adb shell dumpsys package "$package_id" | grep -F 'PsiphonVpnService'
+# Exercise real native MMKV inter-process exclusion using debug-only receivers.
+# A warm main activity alone cannot prove the shared profile index lease.
+bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-mmkv-crossprocess-emulator.sh" "$package_id"
 echo "Emulator smoke passed: $package_id running with PID $pid"

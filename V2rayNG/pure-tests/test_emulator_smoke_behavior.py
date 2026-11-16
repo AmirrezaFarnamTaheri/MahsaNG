@@ -17,6 +17,13 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             apk_dir = root / "V2rayNG/app/build/outputs/apk/dev/debug"
             apk_dir.mkdir(parents=True)
             (apk_dir / "v2rayNG-dev_x86_64.apk").write_bytes(b"test APK")
+            # This test checks MainActivity foreground behavior with fake ADB.
+            # The native IPC contention itself runs only on the real CI emulator.
+            qa_dir = root / "V2rayNG/pure-tests"
+            qa_dir.mkdir(parents=True, exist_ok=True)
+            (qa_dir / "test-mmkv-crossprocess-emulator.sh").write_text(
+                "#!/bin/bash\necho fake-native-qa-invoked\n", encoding="utf-8"
+            )
             adb = binaries / "adb"
             adb.write_text("""#!/usr/bin/env python3
 import os
@@ -76,6 +83,7 @@ sys.exit(0)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse(denied)
         self.assertIn("Emulator smoke passed", result.stdout)
+        self.assertIn("fake-native-qa-invoked", result.stdout)
         self.assertIn("shell pm revoke com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS", calls)
         self.assertIn("shell pm set-permission-flags com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS user-set user-fixed", calls)
         self.assertLess(calls.index("shell pm set-permission-flags"), calls.index("shell am start"))
@@ -91,6 +99,7 @@ sys.exit(0)
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(denied)
         self.assertIn("MainActivity was not resumed", result.stderr)
+        self.assertNotIn("fake-native-qa-invoked", result.stdout)
 
 
 if __name__ == "__main__":

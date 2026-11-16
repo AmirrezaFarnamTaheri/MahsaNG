@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.net.*
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.StrictMode
 import android.util.Log
@@ -27,6 +29,7 @@ import com.v2ray.ang.gfwknocker.my_preference_storage
 import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.MmkvManager
 import com.v2ray.ang.util.MyContextWrapper
+import com.v2ray.ang.util.UnderlyingNetworkOwner
 import com.v2ray.ang.util.Utils
 import org.json.JSONArray
 import org.json.JSONObject
@@ -135,20 +138,67 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     }
 
-    @delegate:RequiresApi(Build.VERSION_CODES.P)
-    private val defaultNetworkCallback by lazy {
-        object : ConnectivityManager.NetworkCallback() {
+    // The Psiphon service is isolated in its own Android process. Keep its
+    // network-owner epoch local to this service instance, just as Xray does.
+    private val underlyingNetworkOwner = UnderlyingNetworkOwner<Network>()
+    private val underlyingNetworkHandler = Handler(Looper.getMainLooper())
+    private var registeredUnderlyingNetworkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /**
+     * Network callbacks may be delivered late, or queued while another
+     * underlying network replaces the old one. Never publish stale events.
+     */
+    private fun postUnderlyingNetworkUpdate(update: UnderlyingNetworkOwner.Update<Network>?) {
+        if (update == null) return
+        underlyingNetworkHandler.post {
+            underlyingNetworkOwner.publishIfCurrent(update) { network ->
+                runCatching {
+                    setUnderlyingNetworks(network?.let { arrayOf(it) })
+                }.onFailure {
+                    Log.w(TAG, "Unable to publish the current underlying network")
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    private fun registerUnderlyingNetworkCallback() {
+        releaseUnderlyingNetworkCallback()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+
+        val epoch = underlyingNetworkOwner.begin()
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                setUnderlyingNetworks(arrayOf(network))
+                postUnderlyingNetworkUpdate(underlyingNetworkOwner.onAvailable(epoch, network))
             }
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                setUnderlyingNetworks(arrayOf(network))
+                postUnderlyingNetworkUpdate(underlyingNetworkOwner.onCapabilitiesChanged(epoch, network))
             }
 
             override fun onLost(network: Network) {
-                setUnderlyingNetworks(null)
+                postUnderlyingNetworkUpdate(underlyingNetworkOwner.onLost(epoch, network))
             }
+        }
+        registeredUnderlyingNetworkCallback = callback
+        try {
+            connectivity.requestNetwork(defaultNetworkRequest, callback)
+        } catch (_: Exception) {
+            registeredUnderlyingNetworkCallback = null
+            postUnderlyingNetworkUpdate(underlyingNetworkOwner.stop())
+            Log.w(TAG, "Unable to register Psiphon underlying network observer")
+        }
+    }
+
+    @Synchronized
+    private fun releaseUnderlyingNetworkCallback() {
+        val callback = registeredUnderlyingNetworkCallback
+        registeredUnderlyingNetworkCallback = null
+        // Invalidate already queued callbacks before unregistering.
+        postUnderlyingNetworkUpdate(underlyingNetworkOwner.stop())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && callback != null) {
+            runCatching { connectivity.unregisterNetworkCallback(callback) }
+                .onFailure { Log.w(TAG, "Unable to unregister Psiphon underlying network observer") }
         }
     }
 
@@ -383,14 +433,6 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         } catch (ignored: Exception) {
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                connectivity.requestNetwork(defaultNetworkRequest, defaultNetworkCallback)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
@@ -399,6 +441,8 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         if (mInterface == null) {
             throw Exception("VpnService.Builder.establish() returned null — VPN permission not granted?")
         }
+        // Only start observing the underlay once Android has established our TUN.
+        registerUnderlyingNetworkCallback()
         isRunning.set(true)
         // TUN creation is not a connected tunnel; publish running state only
         // after Psiphon's SOCKS callback and tun2socks startup.
@@ -596,12 +640,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         runCatching { mystrg.put_value("is_psiphon_running", "n") }
             .onFailure { Log.w(TAG, "Could not persist tunnel stopped state") }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                connectivity.unregisterNetworkCallback(defaultNetworkCallback)
-            } catch (ignored: Exception) {
-            }
-        }
+        releaseUnderlyingNetworkCallback()
 
         // A missing JNI module throws LinkageError, not Exception: continue
         // closing the TUN and upstream proxy even when native termination fails.

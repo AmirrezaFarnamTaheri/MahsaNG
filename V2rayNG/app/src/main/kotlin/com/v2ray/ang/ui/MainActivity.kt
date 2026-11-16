@@ -565,11 +565,19 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 toast(R.string.toast_invalid_url)
                 return false
             }
+            // App-owned HTTP does not automatically enter the Android VPN.
+            // Snapshot the active proxy route before starting background I/O.
+            val fetchRoute = AppFetchRoutePolicy.choose(
+                proxyExpected = mainViewModel.isRunning.value == true,
+                configuredHttpPort = Utils.getConfiguredHttpPortOrNull(),
+                trigger = AppFetchRoutePolicy.Trigger.USER,
+            )
             lifecycleScope.launch(Dispatchers.IO) {
                 val configText = try {
-                    Utils.getUrlContentWithCustomUserAgent(url)
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                    Utils.getUrlContentWithCustomUserAgent(url, fetchRoute)
+                } catch (_: Exception) {
+                    // Never log an exception that may expose credentials in the URL.
+                    Log.w(ANG_PACKAGE, "Custom config URL request failed")
                     ""
                 }
                 launch(Dispatchers.Main) {
@@ -590,6 +598,13 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             : Boolean {
         try {
             toast(R.string.title_sub_update)
+            // A connected refresh must only use the local proxy. If that proxy
+            // fails, do not retry over the unprotected device connection.
+            val fetchRoute = AppFetchRoutePolicy.choose(
+                proxyExpected = mainViewModel.isRunning.value == true,
+                configuredHttpPort = Utils.getConfiguredHttpPortOrNull(),
+                trigger = AppFetchRoutePolicy.Trigger.USER,
+            )
             MmkvManager.decodeSubscriptions().forEach {
                 if (TextUtils.isEmpty(it.first)
                         || TextUtils.isEmpty(it.second.remarks)
@@ -607,8 +622,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 // Subscription URLs may contain access tokens. Never write them to Logcat.
                 lifecycleScope.launch(Dispatchers.IO) {
                     val configText = try {
-                        Utils.getUrlContentWithCustomUserAgent(url)
-                    } catch (e: Exception) {
+                        Utils.getUrlContentWithCustomUserAgent(url, fetchRoute)
+                    } catch (_: Exception) {
                         Log.w(ANG_PACKAGE, "Subscription request failed")
                         launch(Dispatchers.Main) {
                             toast("\"" + it.second.remarks + "\" " + getString(R.string.toast_failure))

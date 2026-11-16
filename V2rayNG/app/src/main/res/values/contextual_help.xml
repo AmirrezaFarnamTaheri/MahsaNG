@@ -135,4 +135,11 @@
         <item>How to interpret: The ranking balances successful tests, latency and freshness. Near-tied results prefer the already selected profile. This does not verify VPN-wide forwarding, download speed or DNS leak safety.</item>
         <item>Risks and recovery: Measurements consume data and can change with the network. Re-run after network handover or configuration edits. You can always select a different profile manually.</item>
     </string-array>
+    <string-array name="help_target_discovery">
+        <item>Purpose: Scan explicitly entered IPs or hostnames, expand small IPv4 ranges/CIDRs, and optionally validate TLS certificates with an explicitly named SNI. This is not the QR scanner or a VPN-profile validator.</item>
+        <item>Before you start: Use targets you are authorized to test. Maximum 128 total addresses, six sockets at once, and a bounded timeout. A literal IP has no default SNI. On an IP TLS test enter the expected DNS hostname; the app route may traverse your active VPN.</item>
+        <item>How to use: Enter targets separated by commas or whitespace, choose one TCP port and timeout, optionally enable TLS and enter SNI, review the scan budget, then Start. Stop closes pending sockets. The report can be shared only after an explicit warning.</item>
+        <item>How to interpret: TCP_OPEN means socket access only; TLS_VERIFIED means system-trusted certificate and hostname verification for that SNI. Neither is proof that an Xray profile works, traffic passes the VPN, or DNS cannot leak. A network change stops the run.</item>
+        <item>Risks and recovery: Probes may disclose target hostnames to DNS and consume network data. Scan only approved targets. Unfinished or interrupted targets are unknown; old results may not describe the current network. Results stay in memory, are not imported into subscriptions and are not automatically retried.</item>
+    </string-array>
 </resources>

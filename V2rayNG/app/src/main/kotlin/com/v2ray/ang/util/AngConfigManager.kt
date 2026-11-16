@@ -905,8 +905,10 @@ object AngConfigManager {
         val links = unique.mapNotNull { guid ->
             runCatching { shareConfig(guid) }.getOrNull()?.takeIf(String::isNotBlank)
         }
-        val contents = ProfileLinkBundle.encode(links) ?: return null
-        return PortableLinkExport(contents, links.size, unique.size - links.size)
+        val normalized = ProfileLinkBundle.parse(links.joinToString("\n")) ?: return null
+        return PortableLinkExport(
+            normalized.joinToString("\n"), normalized.size, unique.size - normalized.size
+        )
     }
 
     fun shareNonCustomConfigsToClipboard(context: Context, serverList: List<String>): Int {

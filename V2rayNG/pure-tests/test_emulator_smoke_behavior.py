@@ -22,7 +22,7 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             qa_dir = root / "V2rayNG/pure-tests"
             qa_dir.mkdir(parents=True, exist_ok=True)
             (qa_dir / "test-mmkv-crossprocess-emulator.sh").write_text(
-                "#!/bin/bash\\necho fake-native-qa-invoked\\n", encoding="utf-8"
+                "#!/bin/bash\necho fake-native-qa-invoked\n", encoding="utf-8"
             )
             adb = binaries / "adb"
             adb.write_text("""#!/usr/bin/env python3

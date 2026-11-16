@@ -37,6 +37,10 @@ internal class TunnelProcessOwner<T : Any>(private val maxRestarts: Int = 5) {
 
     @Synchronized fun isCurrent(token: Long): Boolean = running && token == generation
 
+    /** The exact active native child must own FD handoff and its retry exhaustion. */
+    @Synchronized fun owns(token: Long, child: T): Boolean =
+        isCurrent(token) && active === child
+
     /** Prevent all subsequent adoption/restarts and return the child to terminate. */
     @Synchronized fun stop(): T? {
         generation++

@@ -325,7 +325,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
                 }
             }, "tun2socks-watch").start()
 
-            sendFd(generation)
+            sendFd(generation, child)
         } catch (e: Exception) {
             Log.e(packageName, "tun2socks start failed: $e")
             // A failed current-generation restart must not leave a live VPN without a bridge.
@@ -333,27 +333,38 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
     }
 
-    private fun sendFd(generation: Long) {
-        if (!tunProcesses.isCurrent(generation)) return
+    private fun sendFd(generation: Long, child: Process) {
+        if (!tunProcesses.owns(generation, child)) return
         val fd = mInterface.fileDescriptor
         val path = File(applicationContext.filesDir, "sock_path").absolutePath
 
         fdScope.launch {
             for (tries in 0..5) {
-                if (!isActive || !tunProcesses.isCurrent(generation)) return@launch
+                if (!isActive || !tunProcesses.owns(generation, child)) return@launch
                 delay(50L shl tries)
-                if (!isActive || !tunProcesses.isCurrent(generation)) return@launch
+                if (!isActive || !tunProcesses.owns(generation, child)) return@launch
                 try {
                     LocalSocket().use { socket ->
                         socket.connect(
                             LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM)
                         )
+                        // Socket file paths can be reused by a restarted child.
+                        if (!tunProcesses.owns(generation, child)) return@launch
                         socket.setFileDescriptorsForSend(arrayOf(fd))
                         socket.outputStream.write(42)
                     }
                     return@launch
                 } catch (e: Exception) {
                     Log.d(packageName, "sendFd retry $tries failed: $e")
+                }
+            }
+
+            // Without the FD, tun2socks cannot forward device packets. Do not
+            // leave an apparently connected VPN that silently blackholes them.
+            if (isActive && tunProcesses.owns(generation, child)) {
+                Log.e(packageName, "tun2socks FD handoff exhausted; stopping VPN")
+                withContext(Dispatchers.Main) {
+                    if (tunProcesses.owns(generation, child)) stopV2Ray()
                 }
             }
         }

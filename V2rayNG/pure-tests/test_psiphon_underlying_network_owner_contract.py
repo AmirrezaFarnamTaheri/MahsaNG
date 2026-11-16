@@ -44,6 +44,19 @@ class PsiphonUnderlyingNetworkOwnerContractTest(unittest.TestCase):
         )
         self.assertNotIn("private val defaultNetworkCallback by lazy", self.source)
 
+    def test_api_21_does_not_post_unsupported_underlying_network_calls(self):
+        release = self.source.split("private fun releaseUnderlyingNetworkCallback()", 1)[1].split(
+            "// =========================================================================", 1
+        )[0]
+        # MahsaNG's minSdk is 21; VpnService.setUnderlyingNetworks needs API 22.
+        # No callback is registered below API 28, so there is nothing to publish.
+        self.assertRegex(
+            release,
+            r"val stopUpdate = underlyingNetworkOwner\.stop\(\)\s+"
+            r"if \(Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.P\) \{\s*"
+            r"postUnderlyingNetworkUpdate\(stopUpdate\)",
+        )
+
     def test_teardown_invalidates_epoch_before_unregistering_callback(self):
         release = self.source.split("private fun releaseUnderlyingNetworkCallback()", 1)[1].split(
             "// =========================================================================", 1

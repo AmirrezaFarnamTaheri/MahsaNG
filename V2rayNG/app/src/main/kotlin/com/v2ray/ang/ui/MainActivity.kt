@@ -321,6 +321,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             mainViewModel.testAllRealPing()
             true
         }
+        R.id.target_discovery_scan -> {
+            startActivity(Intent(this, TargetDiscoveryActivity::class.java))
+            true
+        }
         R.id.dns_diagnostics -> {
             startActivity(Intent(this, DnsDiagnosticsActivity::class.java))
             true

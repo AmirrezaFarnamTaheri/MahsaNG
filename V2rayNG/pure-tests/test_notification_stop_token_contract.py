@@ -57,6 +57,26 @@ class NotificationStopCommandContract(unittest.TestCase):
         self.assertLess(notification.index("stopV2RayIntent.data = Uri.parse("),
                         notification.index("PendingIntent.getBroadcast("))
 
+    def test_rejected_stale_stop_cannot_destroy_unowned_upstream_proxy(self):
+        source = (ROOT / "PsiphonVpnService.kt").read_text(encoding="utf-8")
+        start = source.split("override fun onStartCommand(", 1)[1].split(
+            "override fun onBind(", 1
+        )[0]
+        destroy = source.split("override fun onDestroy()", 1)[1].split(
+            "override fun onStartCommand(", 1
+        )[0]
+        self.assertIn("private val startCommandAccepted = AtomicBoolean(false)", source)
+        self.assertIn("startCommandAccepted.set(true)", start)
+        self.assertLess(start.index("if (intent?.action == ACTION_STOP)"),
+                        start.index("startCommandAccepted.set(true)"))
+        self.assertLess(start.index("startCommandAccepted.set(true)"),
+                        start.index("VpnService.prepare(this)"))
+        # Android may start a fresh service only to deliver an old PendingIntent.
+        # Destroying that never-started service must not stop another Xray owner.
+        self.assertIn(
+            "if (startCommandAccepted.get()) stopAll(isForced = false)", destroy
+        )
+
     def test_legacy_ui_stop_broadcast_is_preserved_until_shared_intent_migration(self):
         text = (ROOT / "V2RayServiceManager.kt").read_text(encoding="utf-8")
         stop_branch = text.split("AppConfig.MSG_STATE_STOP -> {", 1)[1].split(

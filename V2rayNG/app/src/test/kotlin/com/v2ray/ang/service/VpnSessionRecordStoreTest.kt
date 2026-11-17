@@ -56,7 +56,7 @@ class VpnSessionRecordStoreTest {
         val raw = requireNotNull(VpnSessionRecordCodec.encode(VpnSessionFence.empty()))
         for (invalid in listOf("", "not-json", "v0" + raw.drop(2), raw + "|extra",
             raw.replace("IDLE", "ACTIVE"), raw.replace("|0|", "|-1|"),
-            raw.replace("|0|", "|00|"), raw + " ", raw.replace("XRAY", "UNKNOWN")
+            raw.replace("|0|", "|00|"), raw + " ", raw.replace("IDLE", "UNKNOWN_PHASE")
         )) assertNull("accepted: $invalid", VpnSessionRecordCodec.decode(invalid))
         val active = requireNotNull(VpnSessionFence.begin(VpnSessionFence.empty(), first, VpnSessionMode.XRAY_VPN))
         val withRole = requireNotNull(VpnSessionFence.attach(active, first, active.generation, VpnSessionRole.XRAY))

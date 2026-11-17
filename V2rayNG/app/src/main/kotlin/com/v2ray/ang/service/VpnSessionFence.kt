@@ -105,6 +105,9 @@ internal object VpnSessionFence {
         return if (members.isEmpty()) idle(state.generation) else state.copy(members = members)
     }
 
+    /** Strict persisted record verification; never decode malformed state as IDLE. */
+    fun isValidSnapshot(state: VpnSessionSnapshot): Boolean = valid(state)
+
     /** Checks lifetime membership, NOT OS packet ownership or authentication. */
     fun canAct(state: VpnSessionSnapshot, sessionId: String, generation: Long,
                role: VpnSessionRole): Boolean =

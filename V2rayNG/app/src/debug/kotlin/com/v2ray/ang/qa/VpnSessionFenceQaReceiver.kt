@@ -13,6 +13,8 @@ import com.v2ray.ang.service.VpnSessionRecordCodec
 import com.v2ray.ang.service.VpnSessionRecordResult
 import com.v2ray.ang.service.VpnSessionRecordStore
 import com.v2ray.ang.service.VpnSessionRole
+import com.v2ray.ang.service.VpnStopCommandCodec
+import com.v2ray.ang.service.VpnStopCommandGate
 
 /**
  * Debug-only DUMP-restricted Android cross-process state-transition probe.
@@ -78,6 +80,42 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                         val result = if (role == null) VpnSessionRecordResult.Rejected
                             else store.apply { VpnSessionFence.attach(it, id, generation, role) }
                         Log.i(TAG, "$token $actor ATTACH ${status(result)}")
+                    }
+                    "CMD_REQUEST" -> {
+                        // This is QA-only simulated controller delivery. In
+                        // production, STOPPING must be persisted *before* IPC.
+                        val command = VpnStopCommandCodec.decode(intent.getStringExtra("wire").orEmpty())
+                        val result = if (command == null) VpnSessionRecordResult.Rejected
+                            else store.apply { VpnStopCommandGate.requestStop(it, command) }
+                        Log.i(TAG, "$token $actor CMD_REQUEST ${status(result)}")
+                    }
+                    "CMD_CHECK" -> {
+                        // This read-only transaction checks membership and
+                        // generation under the native multi-process lease.
+                        val command = VpnStopCommandCodec.decode(intent.getStringExtra("wire").orEmpty())
+                        val role = VpnSessionRole.values().firstOrNull {
+                            it.name == intent.getStringExtra("role")
+                        }
+                        val result = if (command == null || role == null) VpnSessionRecordResult.Rejected
+                            else store.apply {
+                                if (VpnStopCommandGate.mayStopNative(it, command, role)) it else null
+                            }
+                        Log.i(TAG, "$token $actor CMD_CHECK ${status(result)}")
+                    }
+                    "CMD_SIM_ACK" -> {
+                        // A shell-supplied boolean is *not* a native shutdown
+                        // receipt. Only exercising the policy's fail-closed
+                        // transition in two real Android QA processes.
+                        val command = VpnStopCommandCodec.decode(intent.getStringExtra("wire").orEmpty())
+                        val role = VpnSessionRole.values().firstOrNull {
+                            it.name == intent.getStringExtra("role")
+                        }
+                        val complete = intent.getBooleanExtra("complete", false)
+                        val result = if (command == null || role == null) VpnSessionRecordResult.Rejected
+                            else store.apply {
+                                VpnStopCommandGate.acknowledgeStopped(it, command, role, complete)
+                            }
+                        Log.i(TAG, "$token $actor CMD_SIM_ACK ${status(result)}")
                     }
                     "STOP" -> {
                         val result = store.apply { VpnSessionFence.stop(it, id, generation) }

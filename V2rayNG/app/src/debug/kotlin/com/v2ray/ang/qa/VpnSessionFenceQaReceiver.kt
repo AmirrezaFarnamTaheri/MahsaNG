@@ -102,6 +102,21 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                             }
                         Log.i(TAG, "$token $actor CMD_CHECK ${status(result)}")
                     }
+                    "CMD_ROLE_LEFT" -> {
+                        // After the other participant has completed teardown,
+                        // this process must still see its own outstanding role.
+                        val command = VpnStopCommandCodec.decode(intent.getStringExtra("wire").orEmpty())
+                        val role = VpnSessionRole.values().firstOrNull {
+                            it.name == intent.getStringExtra("role")
+                        }
+                        val result = if (command == null || role == null) VpnSessionRecordResult.Rejected
+                            else store.apply { state ->
+                                if (VpnStopCommandGate.mayStopNative(state, command, role) &&
+                                    state.members == setOf(role)
+                                ) state else null
+                            }
+                        Log.i(TAG, "$token $actor CMD_ROLE_LEFT ${status(result)}")
+                    }
                     "CMD_SIM_ACK" -> {
                         // A shell-supplied boolean is *not* a native shutdown
                         // receipt. Only exercising the policy's fail-closed

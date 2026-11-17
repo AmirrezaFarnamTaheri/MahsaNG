@@ -31,7 +31,7 @@ class VpnStopCommandGateTest {
 
     @Test fun malformedVersionMissingIdAndNonCanonicalGenerationFailClosed() {
         val good = "v1.$first.1"
-        for (wire in listOf("", "v2.$first.1", good + ".tail", good + " ",
+        for (wire in listOf("", "v2.$first.1", "v1|$first|1", good + ".tail", good + " ",
             "v1.short.1", "v1.$first.0", "v1.$first.-1",
             "v1.$first.01", "v1.$first.+1", "v1.$first.1.0",
             "v1.$first.9223372036854775808", "v1.$first. 1",

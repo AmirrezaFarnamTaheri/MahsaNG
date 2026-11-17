@@ -101,6 +101,12 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                     "PROBE" -> {
                         Log.i(TAG, "$token $actor PROBE ${status(store.apply { it })}")
                     }
+                    "PROBE_CORRUPT" -> {
+                        // Distinct event name prevents a preceding native-lock
+                        // denial from satisfying the corrupted-record assertion.
+                        Log.i(TAG, "$token $actor PROBE_CORRUPT ${status(store.apply { it })}")
+                    }
+
                     "HOLD" -> {
                         if (actor != "OWNER") return@Thread
                         if (!io.tryLock()) {

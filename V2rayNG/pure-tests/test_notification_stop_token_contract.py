@@ -20,6 +20,8 @@ class NotificationStopCommandContract(unittest.TestCase):
         )[0]
         self.assertIn("notificationStopTokenGate.accepts(", stop)
         self.assertIn("intent.data?.scheme", stop)
+        self.assertIn("return if (startCommandAccepted.get()) START_STICKY else START_NOT_STICKY", stop)
+
         self.assertLess(stop.index("notificationStopTokenGate.accepts("),
                         stop.index("stopAll()"))
         notification = text.split("private fun startForegroundNotification()", 1)[1].split(

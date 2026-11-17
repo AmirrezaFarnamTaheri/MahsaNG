@@ -27,7 +27,7 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             # In this fake-ADB harness the new native session QA is stubbed,
             # just like MMKV contention. Real two-process behavior runs on CI.
             (qa_dir / "test-vpn-session-crossprocess-emulator.sh").write_text(
-                "#!/bin/bash\\necho fake-session-qa-invoked\\n", encoding="utf-8"
+                "#!/bin/bash\necho fake-session-qa-invoked\n", encoding="utf-8"
             )
             adb = binaries / "adb"
             adb.write_text("""#!/usr/bin/env python3

@@ -57,6 +57,10 @@ class StopCommandGateContract(unittest.TestCase):
         self.assertIn("test-vpn-stop-command-emulator.sh", smoke)
         self.assertIn("adb shell pidof", script)
         self.assertIn("adb shell am broadcast", script)
+        # The wire is passed through adb shell and cannot contain shell pipes.
+        self.assertIn('current_wire="v1.$first.1"', script)
+        self.assertIn('wrong_wire="v1.$second.1"', script)
+        self.assertNotIn('current_wire="v1|', script)
         self.assertIn("qa_lock_owner", script)
         self.assertIn("qa_lock_contender", script)
         self.assertIn('token="', script)

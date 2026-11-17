@@ -36,6 +36,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -83,6 +84,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         private const val NOTIFICATION_CHANNEL_ID = "PSIPHON_CH_ID"
 
         const val ACTION_STOP = "com.v2ray.ang.action.STOP_PSIPHON"
+        private const val NOTIFICATION_STOP_SCHEME = "mahsang-psiphon-notification-stop"
 
         val isPsiphonRunning = AtomicBoolean(false)
         val psiphon_http_port = AtomicInteger(0)
@@ -121,6 +123,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private val startGate = PsiphonStartGate()
     private val routeGate = PsiphonRouteGate()
     private val teardownStarted = AtomicBoolean(false)
+    private val startCommandAccepted = AtomicBoolean(false)
+    private val notificationStopTokenGate = NotificationStopTokenGate()
+    private val notificationStopToken = UUID.randomUUID().toString()
     private val psiphonSocksPort = AtomicInteger(0)
 
     private val psiphonHttpPort = AtomicInteger(0)
@@ -212,6 +217,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
     override fun onCreate() {
         super.onCreate()
+        check(notificationStopTokenGate.arm(notificationStopToken)) { "Invalid notification stop identity" }
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
         val filter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
@@ -226,17 +232,29 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
 
     override fun onDestroy() {
+        notificationStopTokenGate.invalidate()
         if (stopReceiverRegistered) {
             runCatching { unregisterReceiver(stopReceiver) }
             stopReceiverRegistered = false
         }
         // VpnService may be destroyed without ACTION_STOP or onRevoke.
-        stopAll(isForced = false)
+        // A stale notification can create and destroy a service that has
+        // never started a tunnel; it must not stop another session's proxy.
+        if (startCommandAccepted.get()) stopAll(isForced = false)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            // An old PendingIntent may be delivered after Android replaces the
+            // service instance. Only the current notification may stop it.
+            val stopData = intent.data
+            if (stopData?.scheme != NOTIFICATION_STOP_SCHEME ||
+                !notificationStopTokenGate.accepts(stopData?.lastPathSegment)
+            ) {
+                Log.w(TAG, "Ignoring stale Psiphon notification stop")
+                return if (startCommandAccepted.get() && !teardownStarted.get()) START_STICKY else START_NOT_STICKY
+            }
             stopAll()
             return START_NOT_STICKY
         }
@@ -244,6 +262,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             stopSelf()
             return START_NOT_STICKY
         }
+        startCommandAccepted.set(true)
         if (VpnService.prepare(this) != null) {
             Log.w(TAG, "VPN authorization unavailable; refusing to start")
             stopAll()
@@ -584,6 +603,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         val stopIntent = Intent(this, PsiphonVpnService::class.java).apply {
             action = ACTION_STOP
         }
+        // Intent.data participates in PendingIntent identity; extras alone
+        // would update an old token under FLAG_UPDATE_CURRENT.
+        stopIntent.data = Uri.parse("$NOTIFICATION_STOP_SCHEME://session/$notificationStopToken")
         val stopPendingIntent = PendingIntent.getService(
             this, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -636,6 +658,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             startGate.stop()
             routeGate.stop()
         }
+        notificationStopTokenGate.invalidate()
         isRunning.set(false)
         isPsiphonRunning.set(false)
         psiphonSocksPort.set(0)

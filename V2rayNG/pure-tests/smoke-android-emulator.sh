@@ -68,4 +68,7 @@ bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-mmkv-crossprocess-emulator.
 # An independent debug-only MMKV store exercises the actual session CAS
 # across the two Android QA processes. This is not a live VPN tunnel test.
 bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-vpn-session-crossprocess-emulator.sh" "$package_id"
+# Verify stop-envelope delivery/ack policy in two genuine Android QA processes.
+# Positive 'complete' is simulated: this does NOT test real native shutdown.
+bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-vpn-stop-command-emulator.sh" "$package_id"
 echo "Emulator smoke passed: $package_id running with PID $pid"

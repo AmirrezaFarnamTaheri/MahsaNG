@@ -9,8 +9,8 @@ tag="MahsaSessionFenceQA"
 token="STOPCMDQA$(date +%s)$$"
 first="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 second="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-current_wire="v1|$first|1"
-wrong_wire="v1|$second|1"
+current_wire="v1.$first.1"
+wrong_wire="v1.$second.1"
 
 on_error() {
   local code=$?

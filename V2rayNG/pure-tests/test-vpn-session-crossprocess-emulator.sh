@@ -99,12 +99,11 @@ wait "$owner_shell"
 send_contender --es op PROBE
 wait_for "CONTENDER PROBE ACCEPTED"
 
-# A malformed QA record must never become an implicit empty session.
-# Use a new correlation token so a previous lock-denial cannot satisfy this gate.
-token="SESSIONQABAD$(date +%s)$"
+# Corruption must fail closed; keep one validated correlation token and
+# use a distinct event so earlier lock-denial cannot satisfy this assertion.
 send_owner --es op CORRUPT
 wait_for "OWNER CORRUPT ACCEPTED"
-send_contender --es op PROBE
-wait_for "CONTENDER PROBE UNAVAILABLE"
+send_contender --es op PROBE_CORRUPT
+wait_for "CONTENDER PROBE_CORRUPT UNAVAILABLE"
 
 echo "Android session fencing QA passed: two processes, native exclusion, stale token and corruption refusal"

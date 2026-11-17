@@ -32,7 +32,7 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             # Stop-envelope QA is simulated here; CI uses real Android
             # receivers to exercise native MMKV process isolation.
             (qa_dir / "test-vpn-stop-command-emulator.sh").write_text(
-                "#!/bin/bash\\necho fake-stop-command-qa-invoked\\n", encoding="utf-8"
+                "#!/bin/bash\necho fake-stop-command-qa-invoked\n", encoding="utf-8"
             )
             adb = binaries / "adb"
             adb.write_text("""#!/usr/bin/env python3

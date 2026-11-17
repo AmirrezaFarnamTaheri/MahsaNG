@@ -250,7 +250,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             // service instance. Only the current notification may stop it.
             val stopData = intent.data
             if (stopData?.scheme != NOTIFICATION_STOP_SCHEME ||
-                !notificationStopTokenGate.accepts(stopData.lastPathSegment)
+                !notificationStopTokenGate.accepts(stopData?.lastPathSegment)
             ) {
                 Log.w(TAG, "Ignoring stale Psiphon notification stop")
                 return if (startCommandAccepted.get()) START_STICKY else START_NOT_STICKY

@@ -24,18 +24,18 @@ class VpnStopCommandGateTest {
     @Test fun wireRoundTripIsExactAndCanonical() {
         val command = VpnStopCommand(first, 12L)
         val wire = requireNotNull(VpnStopCommandCodec.encode(command))
-        assertEquals("v1|$first|12", wire)
+        assertEquals("v1.$first.12", wire)
         assertEquals(command, VpnStopCommandCodec.decode(wire))
         assertEquals(wire, VpnStopCommandCodec.encode(VpnStopCommandCodec.decode(wire)!!))
     }
 
     @Test fun malformedVersionMissingIdAndNonCanonicalGenerationFailClosed() {
-        val good = "v1|$first|1"
-        for (wire in listOf("", "v2|$first|1", good + "|tail", good + " ",
-            "v1|short|1", "v1|$first|0", "v1|$first|-1",
-            "v1|$first|01", "v1|$first|+1", "v1|$first|1.0",
-            "v1|$first|9223372036854775808", "v1|$first| 1",
-            "v1|$first|1\n"
+        val good = "v1.$first.1"
+        for (wire in listOf("", "v2.$first.1", good + ".tail", good + " ",
+            "v1.short.1", "v1.$first.0", "v1.$first.-1",
+            "v1.$first.01", "v1.$first.+1", "v1.$first.1.0",
+            "v1.$first.9223372036854775808", "v1.$first. 1",
+            "v1.$first.1\n"
         )) {
             assertNull("accepted malformed stop: $wire", VpnStopCommandCodec.decode(wire))
         }
@@ -187,7 +187,7 @@ class VpnStopCommandGateTest {
     @Test fun malformedPersistedDataCannotAuthorizeStopOrRelease() {
         class BadStore : VpnSessionRecordIO {
             override fun tryLock() = true
-            override fun read(): String = "v1|broken|..."
+            override fun read(): String = "v1.broken...."
             override fun write(value: String): Boolean = error("Must never write")
             override fun unlock() = Unit
         }

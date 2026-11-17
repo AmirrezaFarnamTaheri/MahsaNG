@@ -123,6 +123,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private val startGate = PsiphonStartGate()
     private val routeGate = PsiphonRouteGate()
     private val teardownStarted = AtomicBoolean(false)
+    private val startCommandAccepted = AtomicBoolean(false)
     private val notificationStopTokenGate = NotificationStopTokenGate()
     private val notificationStopToken = UUID.randomUUID().toString()
     private val psiphonSocksPort = AtomicInteger(0)
@@ -237,7 +238,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             stopReceiverRegistered = false
         }
         // VpnService may be destroyed without ACTION_STOP or onRevoke.
-        stopAll(isForced = false)
+        // A stale notification can create and destroy a service that has
+        // never started a tunnel; it must not stop another session's proxy.
+        if (startCommandAccepted.get()) stopAll(isForced = false)
         super.onDestroy()
     }
 
@@ -250,7 +253,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                 !notificationStopTokenGate.accepts(stopData.lastPathSegment)
             ) {
                 Log.w(TAG, "Ignoring stale Psiphon notification stop")
-                return START_NOT_STICKY
+                return if (startCommandAccepted.get()) START_STICKY else START_NOT_STICKY
             }
             stopAll()
             return START_NOT_STICKY
@@ -259,6 +262,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             stopSelf()
             return START_NOT_STICKY
         }
+        startCommandAccepted.set(true)
         if (VpnService.prepare(this) != null) {
             Log.w(TAG, "VPN authorization unavailable; refusing to start")
             stopAll()

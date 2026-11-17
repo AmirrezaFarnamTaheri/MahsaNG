@@ -73,6 +73,11 @@ class VpnSessionCrossProcessContractTest(unittest.TestCase):
                       "CONTENDER CHECK STARTING PASS", "OWNER HOLD LOCKED",
                       "CONTENDER PROBE UNAVAILABLE", "OWNER CORRUPT ACCEPTED"):
             self.assertIn(event, script)
+        # All steps share one validated token; independent event names, not
+        # a malformed replacement token, distinguish the corruption check.
+        self.assertEqual(1, script.count('token="'))
+        self.assertIn("CONTENDER PROBE_CORRUPT UNAVAILABLE", script)
+        self.assertNotIn("SESSIONQABAD", script)
         self.assertIn("adb shell am broadcast", script)
         self.assertIn("adb shell pidof", script)
         self.assertIn("wait_for", script)

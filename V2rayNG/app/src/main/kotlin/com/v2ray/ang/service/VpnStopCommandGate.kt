@@ -13,12 +13,12 @@ internal object VpnStopCommandCodec {
 
     fun encode(command: VpnStopCommand): String? {
         if (!idFormat.matches(command.sessionId) || command.generation <= 0L) return null
-        return "$VERSION|${command.sessionId}|${command.generation}"
+        return "$VERSION.${command.sessionId}.${command.generation}"
     }
 
     fun decode(raw: String): VpnStopCommand? {
         if (raw.length !in 1..120) return null
-        val fields = raw.split('|')
+        val fields = raw.split('.')
         if (fields.size != 3 || fields[0] != VERSION) return null
         val generation = fields[2].toLongOrNull() ?: return null
         val command = VpnStopCommand(fields[1], generation)

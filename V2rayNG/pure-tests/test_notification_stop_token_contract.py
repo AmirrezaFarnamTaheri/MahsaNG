@@ -19,7 +19,7 @@ class NotificationStopCommandContract(unittest.TestCase):
             "if (teardownStarted.get())", 1
         )[0]
         self.assertIn("notificationStopTokenGate.accepts(", stop)
-        self.assertIn("intent.data?.scheme", stop)
+        self.assertIn("stopData?.scheme", stop)
         self.assertIn("return if (startCommandAccepted.get()) START_STICKY else START_NOT_STICKY", stop)
 
         self.assertLess(stop.index("notificationStopTokenGate.accepts("),

@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.Uri
 import android.net.VpnService
 import android.graphics.Color
 import android.os.Build
@@ -35,21 +34,18 @@ import libv2ray.V2RayVPNServiceSupportsSet
 import rx.Observable
 import rx.Subscription
 import java.lang.ref.SoftReference
-import java.util.UUID
 import kotlin.math.min
 
 object V2RayServiceManager {
     private const val NOTIFICATION_ID = 1
     private const val NOTIFICATION_PENDING_INTENT_CONTENT = 0
     private const val NOTIFICATION_PENDING_INTENT_STOP_V2RAY = 1
-    private const val NOTIFICATION_STOP_SCHEME = "mahsang-xray-notification-stop"
     private const val NOTIFICATION_ICON_THRESHOLD = 3000
 
     @Volatile
     var TLS_serv: backServ? = null
 
     private val coreStopGate = CoreStopGate()
-    private val notificationStopTokenGate = NotificationStopTokenGate()
     // Native cleanup must finish even after an Android Service has been stopped.
     private val nativeCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // Live delay JNI is blocking: invalidating the owner drops old results even
@@ -74,7 +70,6 @@ object V2RayServiceManager {
     var serviceControl: SoftReference<ServiceControl>? = null
         @Synchronized
         set(value) {
-            if (field?.get() !== value?.get()) notificationStopTokenGate.invalidate()
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
             Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), "")
@@ -255,7 +250,6 @@ object V2RayServiceManager {
 
     @Synchronized
     fun stopV2rayPoint() {
-        notificationStopTokenGate.invalidate()
         invalidateLiveDelay()
         // Idempotent while an earlier stopLoop remains in flight.
         val stopToken = coreStopGate.beginStop() ?: return
@@ -322,15 +316,7 @@ object V2RayServiceManager {
                     // nothing to do
                 }
                 AppConfig.MSG_STATE_STOP -> {
-                    // A stale notification must never disconnect a replacement
-                    // service; retain the legacy data-less UI Stop route.
-                    synchronized(V2RayServiceManager) {
-                        val requestData = intent?.data
-                        if (requestData?.scheme == NOTIFICATION_STOP_SCHEME &&
-                            !notificationStopTokenGate.accepts(requestData.lastPathSegment)
-                        ) return@synchronized
-                        V2RayServiceManager.serviceControl?.get()?.stopService()
-                    }
+                    serviceControl.stopService()
                 }
                 AppConfig.MSG_STATE_RESTART -> {
                     startV2rayPoint()
@@ -412,10 +398,7 @@ object V2RayServiceManager {
                 PendingIntent.FLAG_UPDATE_CURRENT
             })
 
-        val stopToken = UUID.randomUUID().toString()
-        check(notificationStopTokenGate.arm(stopToken)) { "Invalid notification stop identity" }
         val stopV2RayIntent = Intent(AppConfig.BROADCAST_ACTION_SERVICE)
-        stopV2RayIntent.data = Uri.parse("$NOTIFICATION_STOP_SCHEME://session/$stopToken")
         stopV2RayIntent.`package` = ANG_PACKAGE
         stopV2RayIntent.putExtra("key", AppConfig.MSG_STATE_STOP)
 

@@ -180,7 +180,7 @@ class VpnStopCommandGateTest {
         }
         assertTrue(firstAck is VpnSessionRecordResult.Applied)
         assertEquals(2, io.writes)
-        assertEquals(2, VpnSessionRecordCodec.decode(io.raw!!)?.members?.size?.plus(1))
+        assertEquals(setOf(VpnSessionRole.PSIPHON), VpnSessionRecordCodec.decode(io.raw!!)?.members)
         assertTrue(io.unlocks >= 3)
     }
 

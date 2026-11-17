@@ -20,7 +20,7 @@ notification Stop action.
    roles. The legacy proxy-only mode must be explicitly modeled before
    migration (the current policy has only VPN modes).
 3. The controller encodes `VpnStopCommand(sessionId, generation)` with the
-   canonical `v1|ID|GENERATION` codec and atomically applies
+   canonical, ADB-safe `v1.ID.GENERATION` codec and atomically applies
    `VpnStopCommandGate.requestStop()` inside
    `VpnSessionRecordStore.apply()` **before** dispatching any Stop intent.
    Missing or corrupt records and stale/ambiguous commands fail closed.

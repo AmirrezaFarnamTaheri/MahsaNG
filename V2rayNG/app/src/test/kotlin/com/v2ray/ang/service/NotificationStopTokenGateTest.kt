@@ -46,7 +46,7 @@ class NotificationStopTokenGateTest {
 
     @Test fun invalidTokensAndAccidentalReuseFailClosed() {
         val gate = NotificationStopTokenGate()
-        for (invalid in listOf("", "short", first.uppercase(), first + "/other",
+        for (invalid in listOf("", "short", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".uppercase(), first + "/other",
             "11111111-1111-0111-8111-111111111111",
             "11111111-1111-4111-0111-111111111111")
         ) {

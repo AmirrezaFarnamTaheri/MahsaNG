@@ -253,7 +253,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                 !notificationStopTokenGate.accepts(stopData?.lastPathSegment)
             ) {
                 Log.w(TAG, "Ignoring stale Psiphon notification stop")
-                return if (startCommandAccepted.get()) START_STICKY else START_NOT_STICKY
+                return if (startCommandAccepted.get() && !teardownStarted.get()) START_STICKY else START_NOT_STICKY
             }
             stopAll()
             return START_NOT_STICKY

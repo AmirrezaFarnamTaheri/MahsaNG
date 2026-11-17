@@ -65,13 +65,13 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                             }
                         }
                     }
-                    "BEGIN" -> {
+                    "BEGIN", "BEGIN_NEXT" -> {
                         val mode = VpnSessionMode.values().firstOrNull {
                             it.name == intent.getStringExtra("mode")
                         }
                         val result = if (mode == null) VpnSessionRecordResult.Rejected
                             else store.apply { VpnSessionFence.begin(it, id, mode) }
-                        Log.i(TAG, "$token $actor BEGIN ${status(result)}")
+                        Log.i(TAG, "$token $actor $operation ${status(result)}")
                     }
                     "ATTACH" -> {
                         val role = VpnSessionRole.values().firstOrNull {

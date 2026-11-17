@@ -57,7 +57,7 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                             try {
                                 val record = VpnSessionRecordCodec.encode(VpnSessionFence.empty())
                                 val ok = record != null && io.write(record)
-                                Log.i(TAG, "$token $actor SEED " + if (ok) "ACCEPTED" else "UNAVAILABLE")
+                                Log.i(TAG, "$token $actor SEED " + (if (ok) "ACCEPTED" else "UNAVAILABLE"))
                             } finally {
                                 io.unlock()
                             }
@@ -96,7 +96,7 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                         val result = store.apply { it }
                         val matches = result is VpnSessionRecordResult.Applied &&
                             result.state.generation == generation && result.state.phase.name == phase
-                        Log.i(TAG, "$token $actor CHECK " + if (matches) "PASS" else "FAIL")
+                        Log.i(TAG, "$token $actor CHECK $phase " + (if (matches) "PASS" else "FAIL"))
                     }
                     "PROBE" -> {
                         Log.i(TAG, "$token $actor PROBE ${status(store.apply { it })}")
@@ -122,7 +122,7 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                         } else {
                             try {
                                 val ok = io.write("not-a-valid-session-record")
-                                Log.i(TAG, "$token $actor CORRUPT " + if (ok) "ACCEPTED" else "UNAVAILABLE")
+                                Log.i(TAG, "$token $actor CORRUPT " + (if (ok) "ACCEPTED" else "UNAVAILABLE"))
                             } finally {
                                 io.unlock()
                             }

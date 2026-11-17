@@ -37,6 +37,7 @@ val productionHelpers = listOf(
     "TunnelProcessOwner",
     "CoreStopGate",
     "VpnSessionFence",
+    "VpnSessionRecordStore",
     "PsiphonStartGate",
     "PsiphonRouteGate",
     "VpnModeSelection",

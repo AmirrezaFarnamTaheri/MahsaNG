@@ -87,15 +87,15 @@ send_owner --es op CMD_SIM_ACK --es wire "$current_wire" --es role XRAY --ez com
 wait_for "OWNER CMD_SIM_ACK ACCEPTED"
 send_contender --es op CMD_ROLE_LEFT --es wire "$current_wire" --es role PSIPHON
 wait_for "CONTENDER CMD_ROLE_LEFT ACCEPTED"
-send_owner --es op BEGIN --es id "$second" --es mode XRAY_VPN
-wait_for "OWNER BEGIN REJECTED"
+send_owner --es op BEGIN_NEXT --es id "$second" --es mode XRAY_VPN
+wait_for "OWNER BEGIN_NEXT REJECTED"
 
 # Both simulated completions permit a successor generation. Old commands
 # and old acknowledgements remain rejected after generation changes.
 send_contender --es op CMD_SIM_ACK --es wire "$current_wire" --es role PSIPHON --ez complete true
 wait_for "CONTENDER CMD_SIM_ACK ACCEPTED"
-send_owner --es op BEGIN --es id "$second" --es mode XRAY_VPN
-wait_for "OWNER BEGIN ACCEPTED"
+send_owner --es op BEGIN_NEXT --es id "$second" --es mode XRAY_VPN
+wait_for "OWNER BEGIN_NEXT ACCEPTED"
 send_owner --es op CMD_CHECK --es wire "$current_wire" --es role XRAY
 wait_for "OWNER CMD_CHECK REJECTED"
 send_contender --es op CMD_REQUEST --es wire "$current_wire"

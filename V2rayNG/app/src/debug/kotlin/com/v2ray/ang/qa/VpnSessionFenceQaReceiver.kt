@@ -19,7 +19,7 @@ import com.v2ray.ang.service.VpnSessionRole
  * Uses a disposable, isolated MMKV namespace, NEVER actual user VPN sessions.
  * Emitted events contain only a generated test correlation token and status.
  */
-internal abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastReceiver() {
+abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastReceiver() {
     companion object {
         private const val TAG = "MahsaSessionFenceQA"
         private val CORRELATION = Regex("[A-Za-z0-9_-]{8,64}")

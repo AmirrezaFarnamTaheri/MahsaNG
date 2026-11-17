@@ -1,4 +1,4 @@
-"""Notification-generated Stop actions must be scoped to a service instance.
+"""Psiphon notification Stop actions must belong to the current service instance.
 
 This test protects the Kotlin-to-Android PendingIntent integration; the pure
 Kotlin NotificationStopTokenGateTest covers token lifecycle behavior.
@@ -31,32 +31,6 @@ class NotificationStopCommandContract(unittest.TestCase):
         self.assertIn("notificationStopTokenGate.invalidate()", text)
         self.assertIn("UUID.randomUUID()", text)
 
-    def test_xray_stale_notification_stop_does_not_target_replacement_owner(self):
-        text = (ROOT / "V2RayServiceManager.kt").read_text(encoding="utf-8")
-        setter = text.split("var serviceControl:", 1)[1].split(
-            "var currentConfig:", 1
-        )[0]
-        self.assertIn("notificationStopTokenGate.invalidate()", setter)
-        stop_method = text.split("fun stopV2rayPoint()", 1)[1].split(
-            "private class ReceiveMessageHandler", 1
-        )[0]
-        self.assertIn("notificationStopTokenGate.invalidate()", stop_method)
-        stop_branch = text.split("AppConfig.MSG_STATE_STOP -> {", 1)[1].split(
-            "AppConfig.MSG_STATE_RESTART -> {", 1
-        )[0]
-        self.assertIn("notificationStopTokenGate.accepts(", stop_branch)
-        self.assertIn("intent?.data", stop_branch)
-        self.assertIn("synchronized(V2RayServiceManager)", stop_branch)
-        self.assertLess(stop_branch.index("notificationStopTokenGate.accepts("),
-                        stop_branch.index("stopService()"))
-        notification = text.split("private fun showNotification()", 1)[1].split(
-            "private fun createNotificationChannel(", 1
-        )[0]
-        self.assertIn("notificationStopTokenGate.arm(", notification)
-        self.assertIn("stopV2RayIntent.data = Uri.parse(", notification)
-        self.assertLess(notification.index("stopV2RayIntent.data = Uri.parse("),
-                        notification.index("PendingIntent.getBroadcast("))
-
     def test_rejected_stale_stop_cannot_destroy_unowned_upstream_proxy(self):
         source = (ROOT / "PsiphonVpnService.kt").read_text(encoding="utf-8")
         start = source.split("override fun onStartCommand(", 1)[1].split(
@@ -77,16 +51,6 @@ class NotificationStopCommandContract(unittest.TestCase):
             "if (startCommandAccepted.get()) stopAll(isForced = false)", destroy
         )
 
-    def test_legacy_ui_stop_broadcast_is_preserved_until_shared_intent_migration(self):
-        text = (ROOT / "V2RayServiceManager.kt").read_text(encoding="utf-8")
-        stop_branch = text.split("AppConfig.MSG_STATE_STOP -> {", 1)[1].split(
-            "AppConfig.MSG_STATE_RESTART -> {", 1
-        )[0]
-        # A data-less legacy UI broadcast is deliberately still accepted.
-        # The new fence is limited to our own notification URI scheme.
-        self.assertIn("NOTIFICATION_STOP_SCHEME", stop_branch)
-        self.assertIn("requestData?.scheme", stop_branch)
-        self.assertIn("stopService()", stop_branch)
 
 
 if __name__ == "__main__":

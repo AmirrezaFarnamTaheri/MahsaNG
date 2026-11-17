@@ -65,7 +65,7 @@ if [[ -z "$owner_pid" || -z "$contender_pid" || "$owner_pid" == "$contender_pid"
   exit 1
 fi
 send_contender --es op CHECK --el gen 1 --es phase ACTIVE
-wait_for "CONTENDER CHECK PASS"
+wait_for "CONTENDER CHECK ACTIVE PASS"
 send_contender --es op STOP --es id "$second" --el gen 1
 wait_for "CONTENDER STOP REJECTED"
 
@@ -74,7 +74,7 @@ wait_for "OWNER STOP ACCEPTED"
 send_contender --es op RELEASE --es id "$first" --el gen 1 --es role PSIPHON
 wait_for "CONTENDER RELEASE ACCEPTED"
 send_owner --es op CHECK --el gen 1 --es phase STOPPING
-wait_for "OWNER CHECK PASS"
+wait_for "OWNER CHECK STOPPING PASS"
 send_contender --es op BEGIN --es id "$second" --es mode XRAY_VPN
 wait_for "CONTENDER BEGIN REJECTED"
 send_owner --es op RELEASE --es id "$first" --el gen 1 --es role XRAY
@@ -86,7 +86,7 @@ wait_for "CONTENDER BEGIN ACCEPTED"
 send_owner --es op STOP --es id "$first" --el gen 1
 wait_for "OWNER STOP REJECTED"
 send_contender --es op CHECK --el gen 2 --es phase STARTING
-wait_for "CONTENDER CHECK PASS"
+wait_for "CONTENDER CHECK STARTING PASS"
 
 # Real native lease exclusion from a different Android process.
 send_owner --es op HOLD >/dev/null &
@@ -100,6 +100,8 @@ send_contender --es op PROBE
 wait_for "CONTENDER PROBE ACCEPTED"
 
 # A malformed QA record must never become an implicit empty session.
+# Use a new correlation token so a previous lock-denial cannot satisfy this gate.
+token="SESSIONQABAD$(date +%s)$"
 send_owner --es op CORRUPT
 wait_for "OWNER CORRUPT ACCEPTED"
 send_contender --es op PROBE

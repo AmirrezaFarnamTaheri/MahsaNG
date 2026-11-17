@@ -29,6 +29,11 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             (qa_dir / "test-vpn-session-crossprocess-emulator.sh").write_text(
                 "#!/bin/bash\necho fake-session-qa-invoked\n", encoding="utf-8"
             )
+            # Stop-envelope QA is simulated here; CI uses real Android
+            # receivers to exercise native MMKV process isolation.
+            (qa_dir / "test-vpn-stop-command-emulator.sh").write_text(
+                "#!/bin/bash\\necho fake-stop-command-qa-invoked\\n", encoding="utf-8"
+            )
             adb = binaries / "adb"
             adb.write_text("""#!/usr/bin/env python3
 import os
@@ -90,6 +95,7 @@ sys.exit(0)
         self.assertIn("Emulator smoke passed", result.stdout)
         self.assertIn("fake-native-qa-invoked", result.stdout)
         self.assertIn("fake-session-qa-invoked", result.stdout)
+        self.assertIn("fake-stop-command-qa-invoked", result.stdout)
         self.assertIn("shell pm revoke com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS", calls)
         self.assertIn("shell pm set-permission-flags com.MahsaNG.EMS.dev android.permission.POST_NOTIFICATIONS user-set user-fixed", calls)
         self.assertLess(calls.index("shell pm set-permission-flags"), calls.index("shell am start"))

@@ -1,18 +1,29 @@
-# Isolated JVM regression suite
+# MahsaNG regression tests and physical-device QA
 
-This *separate Gradle project* compiles only ten pure Kotlin production helpers
-from `../app/src/main/kotlin` and their existing corresponding JUnit4 tests.
-It does not compile Android services, JNI wrappers, MMKV stores or UI classes.
+The separate `pure-tests` Gradle project compiles a curated list of pure Kotlin
+production helpers from `../app/src/main/kotlin` alongside their real JUnit4
+tests. It does **not** compile Android services, JNI, MMKV stores or UI classes.
 
 ```sh
 cd V2rayNG
 ./gradlew -p pure-tests --no-daemon test
 ```
 
-The root Android app is intentionally **not** a dependency. A green result here
-never proves that the Android application builds. The companion GitHub Actions
-job runs `./gradlew :app:compileDevDebugKotlin` independently and does **not**
-suppress failures (missing GFW source files remain an explicit blocker).
+The repository safety workflow also runs Python source/behavior contracts and
+an independent Android job that builds pinned native dependencies, assembles
+the devDebug APK, runs Android module unit tests, and launches a real Android
+35 emulator. This proves **app build and smoke behavior**, not a live VPN
+tunnel or a physical Wi-Fi-to-cellular handover.
 
-Requires JDK 17, Gradle 8.6 from the wrapper, and Maven Central access on CI.
-The tests run against real JUnit4 rather than an in-house imitation.
+```sh
+python3 -m unittest discover -s V2rayNG/pure-tests -p 'test_*.py'
+```
+
+Requirements for isolated JVM tests: JDK 17, the repository's Gradle wrapper,
+and Maven Central access. See `build.gradle.kts` for the current helper list;
+do not rely on a hard-coded count.
+
+**Physical device handover:** see [PHYSICAL_HANDOVER_QA.md](PHYSICAL_HANDOVER_QA.md)
+for the opt-in operator-run ADB gate and its limitations. The runner's fake-ADB
+unit tests are part of the Python suite, but CI does not and cannot claim
+live Wi-Fi/cellular tunnel validation.

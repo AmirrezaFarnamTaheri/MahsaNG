@@ -260,11 +260,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
         // Reserve BEFORE Builder.establish(), which can complete after Stop.
         if (!tunCloseTracker.beginEstablish()) return
         var establishmentPending = true
-        var descriptor: ParcelFileDescriptor? = null
         try {
             val established = builder.establish()
                 ?: error("Unable to establish Xray VPN TUN")
-            descriptor = established
             // Register and publish while holding the same monitor used by
             // requestStop. A late descriptor is tracked but never published.
             val started = synchronized(tunCloseTracker) {
@@ -284,8 +282,8 @@ class V2RayVpnService : VpnService(), ServiceControl {
             runTun2socks(generation)
         } catch (e: Exception) {
             if (establishmentPending) tunCloseTracker.establishFailed()
-            descriptor?.let { closeTrackedTunDescriptor(it) }
             Log.e(packageName, "Xray VPN TUN establishment failed", e)
+            // stopV2Ray requests stopSelf BEFORE closing any tracked PFD.
             stopV2Ray()
         }
     }

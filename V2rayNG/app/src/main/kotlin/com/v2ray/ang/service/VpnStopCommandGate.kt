@@ -32,11 +32,12 @@ internal object VpnStopCommandCodec {
  * transition under VpnSessionRecordStore's OS-backed lock BEFORE dispatch.
  *
  * A recipient must re-check eligibility under that same shared record. Its
- * native completion flag can become true ONLY after all its actual native
+ * native evidence can be accepted ONLY after all its actual native
  * workers, owned descriptors and TUN resources are confirmed stopped.
  *
  * This class does not issue broadcasts, access Android, perform I/O or
- * prove native completion. The debug QA test uses simulated acknowledgements.
+ * prove native completion. Evidence fields are caller-supplied claims; the
+ * debug QA test deliberately constructs simulations, NOT native receipts.
  */
 internal object VpnStopCommandGate {
     /** Record a controller's stop request for the exact current generation. */
@@ -62,10 +63,18 @@ internal object VpnStopCommandGate {
     fun acknowledgeStopped(
         state: VpnSessionSnapshot,
         command: VpnStopCommand,
-        role: VpnSessionRole,
-        nativeStopped: Boolean,
+        evidence: VpnNativeStopEvidence,
     ): VpnSessionSnapshot? {
-        if (!nativeStopped || !mayStopNative(state, command, role)) return null
-        return VpnSessionFence.release(state, command.sessionId, command.generation, role)
+        // Do not trust a complete claim from another role, session or
+        // generation. The persisted STOPPING membership is rechecked by the
+        // caller *inside* VpnSessionRecordStore.apply's OS-backed lock.
+        if (evidence.sessionId != command.sessionId ||
+            evidence.generation != command.generation ||
+            !evidence.isComplete() ||
+            !mayStopNative(state, command, evidence.role)
+        ) return null
+        return VpnSessionFence.release(
+            state, command.sessionId, command.generation, evidence.role
+        )
     }
 }

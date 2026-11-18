@@ -6,6 +6,9 @@ internal class CoreStopGate {
     private var stopping = false
     private var activeStop: Long? = null
     private var pendingStart = false
+    // A failed native stop cannot be retried or cleared without a new,
+    // independently verified recovery protocol. Keep this process fenced.
+    private var nativeStopUnverified = false
 
     /** A stopLoop can be pending while the native core still reports running. */
     @Synchronized
@@ -34,7 +37,14 @@ internal class CoreStopGate {
     /** A successful completed stop may return one deferred restart token. */
     @Synchronized
     fun completeStop(stopToken: Long, success: Boolean): Long? {
-        if (activeStop != stopToken || !stopping) return null
+        if (activeStop != stopToken || !stopping || nativeStopUnverified) return null
+        if (!success) {
+            nativeStopUnverified = true
+            pendingStart = false
+            // Retain STOPPING and the old token: late success callbacks must
+            // not re-enable starts after a failed native shutdown attempt.
+            return null
+        }
         stopping = false
         activeStop = null
         val restart = if (success && pendingStart) revision else null

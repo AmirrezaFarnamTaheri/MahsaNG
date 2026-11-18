@@ -732,9 +732,10 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_STOP_SUCCESS, "")
         } else {
             Log.w(TAG, "Psiphon local native cleanup incomplete; withholding Stop Success")
-            // If the VPN TUN closed, update the UI without asserting that the
-            // JNI worker or upstream Xray has terminated.
-            if (tunCloseReturned) {
+            // A live worker may still own a duplicate TUN descriptor, even
+            // after mInterface.close(). Do not announce not-running until
+            // both worker exit and local TUN close were observed.
+            if (workerExited && tunCloseReturned) {
                 MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_NOT_RUNNING, "")
             }
         }

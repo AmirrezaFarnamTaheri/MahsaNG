@@ -29,8 +29,10 @@ notification Stop action.
    session, generation and attached role. An old broadcast, unowned role or
    misordered start/stop callback cannot authorize native shutdown.
 5. Once an authorized participant has **actually** completed native shutdown,
-   it can submit `acknowledgeStopped(..., nativeStopped = true)` as another
-   atomic MMKV transaction. Failure, timeout, uncertainty or interrupted
+   a *trusted owner* may submit `acknowledgeStopped(..., evidence)` as another
+   atomic MMKV transaction. `VpnNativeStopEvidence.Xray` and `.Psiphon`
+   require distinct role-specific observations, matching the Stop command's
+   session ID and generation. Failure, timeout, uncertainty or interrupted
    shutdown must retain the participant in STOPPING. The next session cannot
    begin until the last member has released.
 6. On service/process death, a stale membership cannot expire by wall-clock
@@ -41,17 +43,25 @@ notification Stop action.
 
 ## Native acknowledgement prerequisites
 
-The `nativeStopped` flag is **only an API contract**. Do not infer true from
-a returned Android `stopService()`, an inactive notification, a PID change
-or a 3-second `Thread.join()`. Real integration requires all of the
-following for the right generation:
+The `VpnNativeStopEvidence` types are **caller-supplied policy inputs**, not
+authenticated receipts. Any caller can construct `true` values in tests.
+Do not infer completion from a returned Android `stopService()`, an inactive
+notification, a PID change or a 3-second `Thread.join()`. This typed check
+prevents cross-role and stale-generation evidence from releasing membership,
+but it does **not** verify the truthfulness, provenance or native timing of
+the observations. Real integration still requires all of the following for
+the right generation:
 
-- Xray: successful `stopLoop()` completion and native core no longer running;
-  all owned tun2socks and fragmentor workers fully terminated and descriptors
-  closed, plus the correct service owner's foreground lifecycle.
-- Psiphon: the JNI tun2socks worker has actually exited, Psiphon tunnel
-  shutdown succeeded, the VPN TUN was closed, and its same-generation Xray
-  proxy dependency has stopped (or has a separate pending acknowledgement).
+- Xray: successful `stopLoop()` completion and native core no longer running,
+  observed tun2socks process exit, fragmentor listener exit and TUN closure,
+  plus all owned per-client workers/descriptors and the correct service owner's
+  foreground lifecycle. The typed evidence currently lists the first group
+  but is **not sufficient** to prove the full native receipt.
+- Psiphon: the JNI tun2socks worker has actually exited, an independent
+  native Psiphon tunnel-shutdown receipt exists, the VPN TUN was closed, and
+  its same-generation Xray proxy dependency has separately acknowledged stop
+  or remains attached in STOPPING. A returned `PsiphonTunnel.stop()` is **not**
+  the required independent native acknowledgment.
 - Cross-process: scoped start/stop intents must carry the same generation
   and be directed to the correct private recipients. The present
   global `MSG_STATE_STOP` broadcast, existing app UI Stop, Android
@@ -66,9 +76,10 @@ following for the right generation:
 `VpnStopCommandGateTest` runs on the real pure Kotlin/JUnit build. The
 `test-vpn-stop-command-emulator.sh` gate runs in two **debug QA** Android
 processes and a **disposable** `VPN_SESSION_FENCE_DEBUG_QA_V1` MMKV namespace.
-The shell's `--ez complete true` value is a **simulated assertion**, not a JNI
-or VPN-engine receipt. The test proves policy wiring and shared-record
-observability only. The production Xray and Psiphon services remain unchanged.
+The shell's `--ez complete true` value constructs **simulated typed evidence**,
+not JNI or VPN-engine receipts. The test proves policy wiring and shared-record
+observability only. No production Xray/Psiphon service constructs these claims
+or invokes the role-release gate; they remain unchanged.
 
 The Android emulator smoke and Python contracts must not be described as
 physical-device handover, leak-safety verification, zero dropped packets,

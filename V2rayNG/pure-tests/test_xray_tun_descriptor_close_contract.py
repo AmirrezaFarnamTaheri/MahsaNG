@@ -22,6 +22,11 @@ class XrayTunDescriptorCloseContract(unittest.TestCase):
         self.assertLess(setup.index("tunCloseTracker.beginEstablish()"), setup.index("builder.establish()"))
         self.assertLess(setup.index("tunCloseTracker.registered(established)"),
                         setup.index("mInterface = established"))
+        # An establishment failure must keep the existing stopSelf-before-close
+        # ordering rather than directly closing a published FD in the catch path.
+        failure_path = setup.rsplit("} catch (e: Exception) {", 1)[1]
+        self.assertIn("stopV2Ray()", failure_path)
+        self.assertNotIn("closeTrackedTunDescriptor(", failure_path)
 
     def test_close_is_evidence_only_after_the_owned_close_returns_successfully(self):
         vpn = VPN.read_text(encoding="utf-8")

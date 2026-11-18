@@ -28,7 +28,7 @@ class VpnNativeStopEvidenceTest {
             sessionId = id, generation = generation,
             stopLoopReturned = true, coreNotRunning = true,
             tun2socksProcessExited = true, fragmentorListenersExited = true,
-            tunDescriptorClosed = true,
+            fragmentorForwardingWorkersExited = true, tunDescriptorClosed = true,
         )
 
     private fun psiphon(id: String = first, generation: Long = 1L) =

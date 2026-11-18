@@ -41,6 +41,9 @@ class PsiphonStopCompletionContract(unittest.TestCase):
             stop,
         )
         self.assertIn("AppConfig.MSG_STATE_NOT_RUNNING", stop)
+        # The service may have closed its own TUN fd while JNI still holds a
+        # duplicated descriptor. Do not announce stopped/not-running then.
+        self.assertIn("if (workerExited && tunCloseReturned)", stop)
         self.assertLess(stop.index("if (evidence.localStopReportable)"),
                         stop.index("AppConfig.MSG_STATE_STOP_SUCCESS"))
 

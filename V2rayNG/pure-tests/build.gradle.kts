@@ -42,6 +42,7 @@ val productionHelpers = listOf(
     "VpnStartCommandGate",
     "NotificationStopTokenGate",
     "PsiphonTeardownEvidence",
+    "FragmentorListenerExit",
     "PsiphonStartGate",
     "PsiphonRouteGate",
     "VpnModeSelection",

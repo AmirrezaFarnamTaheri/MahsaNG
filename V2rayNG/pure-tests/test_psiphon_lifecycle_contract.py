@@ -19,8 +19,9 @@ class PsiphonLifecycleContractTest(unittest.TestCase):
         stop = self.text.split("private fun stopAll(", 1)[1].split("override fun loadLibrary(", 1)[0]
         self.assertIn("startGate.stop()", stop)
         self.assertIn("teardownStarted.compareAndSet(false, true)", stop)
-        self.assertIn("mInterface?.close()", stop)
-        self.assertIn("mInterface = null", stop)
+        self.assertIn("val tunCloseReturned = closeOwnedTunDescriptors()", stop)
+        self.assertNotIn("mInterface = null", stop)
+        self.assertIn("closeOwnedTunDescriptors()", destroy)
 
     def test_port_wait_cancels_when_service_stops(self):
         self.assertRegex(self.text, r"while \(System.currentTimeMillis\(\) < deadline && startGate.isCurrent\(attempt\)\)")

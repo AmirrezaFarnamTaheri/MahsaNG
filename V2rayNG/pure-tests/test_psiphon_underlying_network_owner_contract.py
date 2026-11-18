@@ -36,10 +36,16 @@ class PsiphonUnderlyingNetworkOwnerContractTest(unittest.TestCase):
         setup = self.source.split("private fun establishVpnInterface()", 1)[1].split(
             "private fun startTun2socksRouting(port: Int)", 1
         )[0]
-        self.assertIn("mInterface = builder.establish()", setup)
+        self.assertIn("val established = builder.establish()", setup)
+        self.assertIn("tunCloseTracker.registered(established)", setup)
+        self.assertIn("if (allowed) mInterface = established", setup)
         self.assertIn("registerUnderlyingNetworkCallback()", setup)
         self.assertLess(
-            setup.index("mInterface = builder.establish()"),
+            setup.index("val established = builder.establish()"),
+            setup.index("tunCloseTracker.registered(established)"),
+        )
+        self.assertLess(
+            setup.index("if (allowed) mInterface = established"),
             setup.index("registerUnderlyingNetworkCallback()"),
         )
         self.assertNotIn("private val defaultNetworkCallback by lazy", self.source)

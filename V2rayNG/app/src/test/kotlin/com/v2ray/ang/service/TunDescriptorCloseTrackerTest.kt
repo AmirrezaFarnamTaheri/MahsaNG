@@ -138,6 +138,32 @@ class TunDescriptorCloseTrackerTest {
         }
     }
 
+    @Test fun synchronousStopCompletionDoesNotConfuseFailedCloseWithExit() {
+        val tracker = TunDescriptorCloseTracker<Any>()
+        val tun = Any()
+        assertFalse(tracker.isStopComplete())
+        assertTrue(tracker.beginEstablish())
+        assertTrue(tracker.registered(tun))
+        assertFalse(tracker.isStopComplete())
+        tracker.requestStop()
+        assertFalse(tracker.isStopComplete())
+        // A thrown close must not call closeReturned: keep the same handle for retry.
+        assertEquals(listOf(tun), tracker.requestStop())
+        assertFalse(tracker.isStopComplete())
+        assertTrue(tracker.closeReturned(tun))
+        assertTrue(tracker.isStopComplete())
+    }
+
+    @Test fun synchronousStopCompletionCannotIgnoreInFlightEstablishment() {
+        val tracker = TunDescriptorCloseTracker<Any>()
+        assertTrue(tracker.beginEstablish())
+        assertTrue(tracker.requestStop().isEmpty())
+        assertFalse(tracker.isStopComplete())
+        tracker.establishFailed()
+        assertTrue(tracker.isStopComplete())
+        assertFalse(tracker.beginEstablish())
+    }
+
     @Test fun invalidOrUnboundedWaitsAreNeverProofOfClosure() {
         val tracker = TunDescriptorCloseTracker<Any>()
         tracker.requestStop()

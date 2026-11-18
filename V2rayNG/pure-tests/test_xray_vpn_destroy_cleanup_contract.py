@@ -12,7 +12,8 @@ class XrayVpnDestroyCleanupContractTest(unittest.TestCase):
             "private fun setup()", 1
         )[0]
 
-        self.assertIn("tunProcesses.stop()?.destroy()", teardown)
+        self.assertIn("stopOwnedTun2socks()", teardown)
+        self.assertNotIn("tunProcesses.stop()?.destroy()", teardown)
         self.assertIn("releaseUnderlyingNetworkCallback()", teardown)
         self.assertIn("fdScope.cancel()", teardown)
         self.assertIn("if (this::mInterface.isInitialized)", teardown)

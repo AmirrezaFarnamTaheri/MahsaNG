@@ -38,8 +38,7 @@ class XrayTun2SocksExitContract(unittest.TestCase):
     def test_local_stop_success_requires_tun2socks_exit_after_core_and_fragmentor_stop(self):
         code = MANAGER.read_text(encoding="utf-8")
         stop = code.split("fun stopV2rayPoint() {", 1)[1].split("private class ReceiveMessageHandler", 1)[0]
-        self.assertIn("service is V2RayVpnService", stop)
-        self.assertIn("service.stopAndAwaitTun2socksExit()", stop)
+        self.assertIn("is V2RayVpnService -> service.stopAndAwaitTun2socksExit()", stop)
         self.assertIn("val stopped = coreStopped && fragmentorStopped && tunStopped", stop)
         self.assertLess(stop.index("val stopped = coreStopped && fragmentorStopped && tunStopped"),
                         stop.index("AppConfig.MSG_STATE_STOP_SUCCESS"))

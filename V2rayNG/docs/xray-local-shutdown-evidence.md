@@ -18,11 +18,20 @@ a replacement start.
 - The asynchronous IO teardown still requests native Xray `stopLoop()`.
 - `backServ.stopAndAwaitListeners()` asks **both** optional listener services
   to stop before waiting for listener threads to exit.
-- `FragmentorListenerExit.allExitedWithin()` requires observed thread
-  termination under one bounded timeout (3 seconds in production). It rejects
-  invalid or unbounded timeouts, self-joins and interrupted waits.
-- If the native core did not confirm its non-running state **or** an optional
-  fragmentor listener remains alive, Xray does not report local Stop Success.
+- `FragmentorListenerExit.allExitedWithin()` requires observed listener
+  thread termination. Both TLS and optional HTTPS fragmentors also register
+  every accepted-client upstream/downstream Java Thread in an instance-local
+  `FragmentorForwardingWorkers` gate before starting it. The gate retains
+  client/backend sockets; Stop rejects new workers and closes registered
+  sockets to unblock I/O. A backend arriving after Stop is closed immediately.
+- `backServ.stopAndAwaitListeners()` now requires **both listener exit and all
+  per-client forwarding Thread exits**. It uses one shared three-second
+  deadline for the listener and worker observations. Invalid/unbounded waits,
+  self-joins, timed-out workers and interrupted waits cannot prove completion.
+  Optional DoH fragmentor worker evidence is included when that disabled
+  configuration becomes available.
+- If the native core did not confirm its non-running state, or any listener or
+  forwarding worker remains alive, Xray does not report local Stop Success.
   `CoreStopGate` retains its failed-stop quarantine, preventing new starts.
 - A fragmentor whose listener exit was not observed remains referenced in the
   manager instead of losing the only handle. The incomplete-teardown path
@@ -67,7 +76,7 @@ a replacement start.
 ## Trust and recovery boundaries
 
 **Not a VPN-session native receipt.** Observed tun2socks child exit,
-fragmentor listener exit and successful close of the Java-owned VPN TUN
+fragmentor listener and forwarding-worker exit, and successful close of the Java-owned VPN TUN
 `ParcelFileDescriptor` do *not* prove that every per-client forwarding
 thread stopped, all socket or duplicated native FD aliases were released,
 the kernel VPN packet path was safely terminated, or same-generation Psiphon
@@ -82,9 +91,9 @@ a future separately reviewed native-recovery path must prove all resources
 are released, not simply wait for a TTL or trust an Android `stopService()`
 request.
 
-Pure Kotlin/JUnit covers timeout, multiple listeners, process-launch and
-TUN-establishment races, failure-preserving descriptor-close accounting,
-interruption and actual child-exit accounting. Python source contracts check
-live Stop Success ordering, retained uncertainty and API compatibility. GitHub Android 35 emulator CI checks build
+Pure Kotlin/JUnit covers timeout, listener/forwarder and subprocess exit,
+late forwarding sockets, TUN-establishment races, failed descriptor closure,
+and interruption. Python contracts check the live source ordering and the
+fail-closed local Stop Success gate. GitHub Android 35 emulator CI checks build
 compatibility and debug two-process fencing, **not** physical Xray teardown,
 VPN packet routing, or Wi-Fi/cellular handover.

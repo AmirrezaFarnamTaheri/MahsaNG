@@ -58,7 +58,7 @@ class PsiphonStopCompletionContract(unittest.TestCase):
     def test_failed_native_signal_still_attempts_all_resource_closes(self):
         stop = self.shutdown
         self.assertIn("runCatching { Tun2SocksJniLoader.terminateTun2Socks() }", stop)
-        self.assertIn("mInterface?.close()", stop)
+        self.assertIn("val tunCloseReturned = closeOwnedTunDescriptors()", stop)
         self.assertIn("tunnel?.stop()", stop)
         self.assertIn("startGate.stop()", stop)
         self.assertIn("releaseUnderlyingNetworkCallback()", stop)

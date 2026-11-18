@@ -36,6 +36,7 @@ val productionHelpers = listOf(
     "SubscriptionReplacementPlan",
     "TunnelProcessOwner",
     "TunnelProcessExitTracker",
+    "TunDescriptorCloseTracker",
     "CoreStopGate",
     "VpnSessionFence",
     "VpnSessionRecordStore",

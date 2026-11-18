@@ -26,9 +26,11 @@ completion acknowledgment.
   `ParcelFileDescriptor.close()` calls returned without throwing.
 - `PsiphonTeardownEvidence.localStopReportable` requires all these local
   observations before the legacy `MSG_STATE_STOP_SUCCESS` message is
-  emitted. Failure or uncertainty suppresses that success message. When the
-  TUN was closed, the UI can receive `MSG_STATE_NOT_RUNNING` instead; this
-  describes local service connectivity, **not** native worker completion.
+  emitted. Failure or uncertainty suppresses that success message. Only
+  when the routing worker was also observed exited **and** the TUN close
+  returned can the UI receive `MSG_STATE_NOT_RUNNING` instead. A live JNI
+  worker can still hold a duplicated TUN file descriptor after the service
+  closes its own descriptor; no stopped/not-running UI event is sent then.
 - `wholeChainCompletionEligible` remains false in the live service:
   neither `PsiphonTunnel.stop()` returning nor a returned upstream `stopService`
   request is an independently verified native completion receipt. Both

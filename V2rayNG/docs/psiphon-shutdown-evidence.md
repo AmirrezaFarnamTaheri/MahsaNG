@@ -29,9 +29,11 @@ completion acknowledgment.
   emitted. Failure or uncertainty suppresses that success message. When the
   TUN was closed, the UI can receive `MSG_STATE_NOT_RUNNING` instead; this
   describes local service connectivity, **not** native worker completion.
-- Chained mode's `wholeChainCompletionEligible` remains false because no
-  independently verified Xray native stop acknowledgment exists. A returned
-  `stopService` call never sets `xrayNativeStopAcknowledged` true.
+- `wholeChainCompletionEligible` remains false in the live service:
+  neither `PsiphonTunnel.stop()` returning nor a returned upstream `stopService`
+  request is an independently verified native completion receipt. Both
+  `psiphonNativeStopAcknowledged` and `xrayNativeStopAcknowledged` remain false.
+  A future coordinator needs independent native acknowledgments for both roles.
 
 The local policy observes synchronous results and an exited JNI thread.
 It does **not** prove that all asynchronous Psiphon internals or Xray sockets

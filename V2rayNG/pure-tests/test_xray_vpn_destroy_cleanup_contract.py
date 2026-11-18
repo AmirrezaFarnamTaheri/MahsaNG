@@ -16,8 +16,8 @@ class XrayVpnDestroyCleanupContractTest(unittest.TestCase):
         self.assertNotIn("tunProcesses.stop()?.destroy()", teardown)
         self.assertIn("releaseUnderlyingNetworkCallback()", teardown)
         self.assertIn("fdScope.cancel()", teardown)
-        self.assertIn("if (this::mInterface.isInitialized)", teardown)
-        self.assertIn("mInterface.close()", teardown)
+        self.assertIn("closeOwnedTunDescriptors()", teardown)
+        self.assertNotIn("runCatching { mInterface.close() }", teardown)
         self.assertIn("V2RayServiceManager.stopV2rayPointIfOwner(this, cancelForeground = true)", teardown)
         self.assertLess(
             teardown.index("V2RayServiceManager.stopV2rayPointIfOwner(this, cancelForeground = true)"),
@@ -51,7 +51,7 @@ class XrayVpnDestroyCleanupContractTest(unittest.TestCase):
         )[0]
         self.assertIn("stopOwnedTun2socks()", stop)
         self.assertIn("releaseUnderlyingNetworkCallback()", stop)
-        self.assertIn("mInterface.close()", stop)
+        self.assertIn("closeOwnedTunDescriptors()", stop)
         self.assertIn("V2RayServiceManager.stopV2rayPointIfOwner(this)", stop)
         self.assertNotIn("V2RayServiceManager.serviceControl?.get()", stop)
 

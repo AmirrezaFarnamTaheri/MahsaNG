@@ -12,6 +12,17 @@ class VpnStopCommandGateTest {
     private val first = "11111111-1111-4111-8111-111111111111"
     private val second = "22222222-2222-4222-8222-222222222222"
 
+    /** Simulated observations for the pure policy tests, not JNI receipts. */
+    private fun simulatedEvidence(role: VpnSessionRole, complete: Boolean): VpnNativeStopEvidence =
+        when (role) {
+            VpnSessionRole.XRAY -> VpnNativeStopEvidence.Xray(
+                first, 1L, complete, complete, complete, complete, complete
+            )
+            VpnSessionRole.PSIPHON -> VpnNativeStopEvidence.Psiphon(
+                first, 1L, complete, complete, complete
+            )
+        }
+
     private fun begun(mode: VpnSessionMode = VpnSessionMode.PSIPHON_VIA_XRAY):
         VpnSessionSnapshot = requireNotNull(VpnSessionFence.begin(VpnSessionFence.empty(), first, mode))
 
@@ -86,14 +97,10 @@ class VpnStopCommandGateTest {
     @Test fun nativeFailureOrNoStopRequestCannotReleaseAnyRole() {
         val state = active()
         val command = VpnStopCommand(first, 1L)
-        assertNull(VpnStopCommandGate.acknowledgeStopped(
-            state, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
+        assertNull(VpnStopCommandGate.acknowledgeStopped(state, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
         val stopping = requireNotNull(VpnStopCommandGate.requestStop(state, command))
         for (role in listOf(VpnSessionRole.XRAY, VpnSessionRole.PSIPHON)) {
-            assertNull(VpnStopCommandGate.acknowledgeStopped(
-                stopping, command, role, nativeStopped = false
-            ))
+            assertNull(VpnStopCommandGate.acknowledgeStopped(stopping, command, simulatedEvidence(role, false)))
         }
         assertEquals(setOf(VpnSessionRole.XRAY, VpnSessionRole.PSIPHON), stopping.members)
     }
@@ -101,34 +108,24 @@ class VpnStopCommandGateTest {
     @Test fun nextSessionCannotBeginUntilBothNativeStopAcknowledgements() {
         val command = VpnStopCommand(first, 1L)
         val stopping = requireNotNull(VpnStopCommandGate.requestStop(active(), command))
-        val xrayGone = requireNotNull(VpnStopCommandGate.acknowledgeStopped(
-            stopping, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
+        val xrayGone = requireNotNull(VpnStopCommandGate.acknowledgeStopped(stopping, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
         assertEquals(VpnSessionPhase.STOPPING, xrayGone.phase)
         assertEquals(setOf(VpnSessionRole.PSIPHON), xrayGone.members)
         assertNull(VpnSessionFence.begin(xrayGone, second, VpnSessionMode.XRAY_VPN))
-        val idle = requireNotNull(VpnStopCommandGate.acknowledgeStopped(
-            xrayGone, command, VpnSessionRole.PSIPHON, nativeStopped = true
-        ))
+        val idle = requireNotNull(VpnStopCommandGate.acknowledgeStopped(xrayGone, command, simulatedEvidence(VpnSessionRole.PSIPHON, true)))
         assertEquals(VpnSessionPhase.IDLE, idle.phase)
         val next = requireNotNull(VpnSessionFence.begin(idle, second, VpnSessionMode.XRAY_VPN))
         assertEquals(2L, next.generation)
         assertFalse(VpnStopCommandGate.mayStopNative(next, command, VpnSessionRole.XRAY))
-        assertNull(VpnStopCommandGate.acknowledgeStopped(
-            next, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
+        assertNull(VpnStopCommandGate.acknowledgeStopped(next, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
         assertNull(VpnStopCommandGate.requestStop(next, command))
     }
 
     @Test fun repeatedAckCannotImpersonateAnotherMember() {
         val command = VpnStopCommand(first, 1L)
         val stopping = requireNotNull(VpnStopCommandGate.requestStop(active(), command))
-        val partial = requireNotNull(VpnStopCommandGate.acknowledgeStopped(
-            stopping, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
-        assertNull(VpnStopCommandGate.acknowledgeStopped(
-            partial, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
+        val partial = requireNotNull(VpnStopCommandGate.acknowledgeStopped(stopping, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
+        assertNull(VpnStopCommandGate.acknowledgeStopped(partial, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
         assertTrue(VpnStopCommandGate.mayStopNative(partial, command, VpnSessionRole.PSIPHON))
     }
 
@@ -140,9 +137,7 @@ class VpnStopCommandGateTest {
         val next = requireNotNull(VpnSessionFence.begin(firstStop, first, VpnSessionMode.XRAY_VPN))
         assertEquals(2L, next.generation)
         assertNull(VpnStopCommandGate.requestStop(next, command))
-        assertNull(VpnStopCommandGate.acknowledgeStopped(
-            next, command, VpnSessionRole.XRAY, nativeStopped = true
-        ))
+        assertNull(VpnStopCommandGate.acknowledgeStopped(next, command, simulatedEvidence(VpnSessionRole.XRAY, true)))
     }
 
     @Test fun stopRequestAndAcknowledgementsAreAtomicUnderAnInjectedStoreLease() {
@@ -167,16 +162,16 @@ class VpnStopCommandGateTest {
         assertEquals(1, io.writes) // no unnecessary MMKV rewrite
         io.denyLock = true
         assertEquals(VpnSessionRecordResult.Unavailable, store.apply {
-            VpnStopCommandGate.acknowledgeStopped(it, command, VpnSessionRole.XRAY, true)
+            VpnStopCommandGate.acknowledgeStopped(it, command, simulatedEvidence(VpnSessionRole.XRAY, true))
         })
         io.denyLock = false
         assertEquals(VpnSessionPhase.STOPPING, VpnSessionRecordCodec.decode(io.raw!!)?.phase)
         assertEquals(VpnSessionRecordResult.Rejected, store.apply {
-            VpnStopCommandGate.acknowledgeStopped(it, command, VpnSessionRole.PSIPHON, false)
+            VpnStopCommandGate.acknowledgeStopped(it, command, simulatedEvidence(VpnSessionRole.PSIPHON, false))
         })
         assertEquals(1, io.writes)
         val firstAck = store.apply {
-            VpnStopCommandGate.acknowledgeStopped(it, command, VpnSessionRole.XRAY, true)
+            VpnStopCommandGate.acknowledgeStopped(it, command, simulatedEvidence(VpnSessionRole.XRAY, true))
         }
         assertTrue(firstAck is VpnSessionRecordResult.Applied)
         assertEquals(2, io.writes)
@@ -197,7 +192,7 @@ class VpnStopCommandGateTest {
             VpnStopCommandGate.requestStop(it, command)
         })
         assertEquals(VpnSessionRecordResult.Unavailable, store.apply {
-            VpnStopCommandGate.acknowledgeStopped(it, command, VpnSessionRole.XRAY, true)
+            VpnStopCommandGate.acknowledgeStopped(it, command, simulatedEvidence(VpnSessionRole.XRAY, true))
         })
     }
 }

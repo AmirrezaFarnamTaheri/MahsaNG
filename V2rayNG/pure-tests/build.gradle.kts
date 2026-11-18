@@ -39,6 +39,7 @@ val productionHelpers = listOf(
     "VpnSessionFence",
     "VpnSessionRecordStore",
     "VpnStopCommandGate",
+    "VpnNativeStopEvidence",
     "VpnStartCommandGate",
     "NotificationStopTokenGate",
     "PsiphonTeardownEvidence",

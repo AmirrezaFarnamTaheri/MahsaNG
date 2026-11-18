@@ -15,6 +15,8 @@ import com.v2ray.ang.service.VpnSessionRecordStore
 import com.v2ray.ang.service.VpnSessionRole
 import com.v2ray.ang.service.VpnStopCommandCodec
 import com.v2ray.ang.service.VpnStopCommandGate
+import com.v2ray.ang.service.VpnStartCommandCodec
+import com.v2ray.ang.service.VpnStartCommandGate
 
 /**
  * Debug-only DUMP-restricted Android cross-process state-transition probe.
@@ -80,6 +82,28 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                         val result = if (role == null) VpnSessionRecordResult.Rejected
                             else store.apply { VpnSessionFence.attach(it, id, generation, role) }
                         Log.i(TAG, "$token $actor ATTACH ${status(result)}")
+                    }
+                    "START_RESERVE" -> {
+                        // Debug QA only: reserve the matching role inside the
+                        // existing native-lock-backed cross-process store.
+                        val command = VpnStartCommandCodec.decode(
+                            intent.getStringExtra("wire").orEmpty()
+                        )
+                        val result = if (command == null) VpnSessionRecordResult.Rejected
+                            else store.apply { VpnStartCommandGate.reserve(it, command) }
+                        Log.i(TAG, "$token $actor START_RESERVE ${status(result)}")
+                    }
+                    "START_CHECK" -> {
+                        // This read-only transaction is not approval to start
+                        // JNI or a tunnel after the lock is released.
+                        val command = VpnStartCommandCodec.decode(
+                            intent.getStringExtra("wire").orEmpty()
+                        )
+                        val result = if (command == null) VpnSessionRecordResult.Rejected
+                            else store.apply { state ->
+                                if (VpnStartCommandGate.stillAttached(state, command)) state else null
+                            }
+                        Log.i(TAG, "$token $actor START_CHECK ${status(result)}")
                     }
                     "CMD_REQUEST" -> {
                         // This is QA-only simulated controller delivery. In

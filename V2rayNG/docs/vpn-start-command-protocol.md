@@ -67,3 +67,19 @@ Before any live integration, add two-process Android tests using private
 commands, actual native-start/shutdown acknowledgments, crash/revoke recovery,
 notification Stop compatibility and physical-device Wi-Fi/cellular handover
 checks. Do not claim leak safety or a fully coordinated tunnel from unit tests.
+
+## Debug-only two-process Start-reservation QA
+
+After applying the QA integration, the Android 35 smoke job executes
+`pure-tests/test-vpn-start-command-emulator.sh`. It drives two existing
+DUMP-restricted debug receivers and a disposable MMKV QA namespace. The
+script checks mismatched ID/generation rejection, duplicate reservation,
+role membership across processes, STOPPING invalidation and ABA protection.
+Each requested assertion has a distinct correlation token to prevent old
+log lines from satisfying later conditions.
+
+**No native engine is started or stopped.** `START_CHECK` is a read-only
+policy check under the lock, not a native-readiness barrier or permission to
+start asynchronous JNI work. The Stop acknowledgments remain simulated.
+Live start/stop integration requires a separate review and actual Android
+native worker lifecycle evidence.

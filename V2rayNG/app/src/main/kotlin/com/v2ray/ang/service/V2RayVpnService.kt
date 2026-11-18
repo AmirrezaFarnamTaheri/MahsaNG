@@ -40,6 +40,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     private lateinit var mInterface: ParcelFileDescriptor
 
     private val tunProcesses = TunnelProcessOwner<Process>()
+    private val tunExitTracker = TunnelProcessExitTracker<Process>()
     private val fdScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**destroy
@@ -140,7 +141,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
     override fun onDestroy() {
         releaseUnderlyingNetworkCallback()
-        tunProcesses.stop()?.destroy()
+        stopOwnedTun2socks()
         fdScope.cancel()
         // Android may destroy the service without an explicit stop or revoke.
         // Always release the TUN, even when startup never completed.
@@ -292,36 +293,46 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
         Log.d(packageName, cmd.toString())
 
+        // Account for a ProcessBuilder.start() that may finish after Stop.
+        // Without this, a late unadopted child could outlive Stop Success.
+        if (!tunExitTracker.beginLaunch()) return
+        var launchUnaccounted = true
         try {
             val child = ProcessBuilder(cmd)
                 .redirectErrorStream(true)
                 .directory(applicationContext.filesDir)
                 .start()
+            val registered = tunExitTracker.registered(child)
+            launchUnaccounted = false
+            val adopted = registered && tunProcesses.adopt(generation, child)
 
-            // Stop may win while ProcessBuilder.start() is in progress.
-            if (!tunProcesses.adopt(generation, child)) {
-                child.destroy()
-                return
-            }
-
+            // Always watch a successfully spawned child, even if Stop won
+            // adoption. waitFor() is available on the app's minimum API.
             Thread({
                 val exitCode = runCatching { child.waitFor() }.getOrNull()
                 if (exitCode != null) {
-                    if (tunProcesses.departed(generation, child)) {
-                        Log.d(packageName, "$TUN2SOCKS exited ($exitCode), restarting owned session")
-                        runTun2socks(generation)
-                    } else if (tunProcesses.isCurrent(generation)) {
-                        // This was the owned child but the bounded restart budget
-                        // is exhausted. Do not leave an apparently running VPN
-                        // with no tun2socks bridge.
-                        Log.e(packageName, "$TUN2SOCKS restart budget exhausted")
-                        stopV2Ray()
+                    tunExitTracker.observedExit(child)
+                    if (adopted) {
+                        if (tunProcesses.departed(generation, child)) {
+                            Log.d(packageName, "$TUN2SOCKS exited ($exitCode), restarting owned session")
+                            runTun2socks(generation)
+                        } else if (tunProcesses.isCurrent(generation)) {
+                            // A running VPN with no native bridge must stop.
+                            Log.e(packageName, "$TUN2SOCKS restart budget exhausted")
+                            stopV2Ray()
+                        }
                     }
                 }
             }, "tun2socks-watch").start()
 
+            if (!adopted) {
+                // The tracker retains this exact child until watcher exit.
+                child.destroy()
+                return
+            }
             sendFd(generation, child)
         } catch (e: Exception) {
+            if (launchUnaccounted) tunExitTracker.launchFailed()
             Log.e(packageName, "tun2socks start failed: $e")
             // A failed current-generation restart must not leave a live VPN without a bridge.
             if (tunProcesses.isCurrent(generation)) stopV2Ray()
@@ -371,20 +382,40 @@ class V2RayVpnService : VpnService(), ServiceControl {
         //return super.onStartCommand(intent, flags, startId)
     }
 
+    /** Signal termination on any lifecycle thread; do not block Android main. */
+    private fun stopOwnedTun2socks() {
+        val owned = tunProcesses.stop()
+        // Keep every launched child (including late/unadopted children) on the
+        // pending list until its own waitFor() watcher observes actual exit.
+        val pending = tunExitTracker.requestStop()
+        pending.forEach { child ->
+            runCatching { child.destroy() }.onFailure {
+                Log.w(packageName, "Unable to request tun2socks termination")
+            }
+        }
+        if (owned != null && pending.none { it === owned }) {
+            runCatching { owned.destroy() }.onFailure {
+                Log.w(packageName, "Unable to request owned tun2socks termination")
+            }
+        }
+    }
+
+    /**
+     * ONLY V2RayServiceManager's IO cleanup calls this bounded observer.
+     * Not an authoritative native/TUN completion receipt for a VPN generation.
+     */
+    internal fun stopAndAwaitTun2socksExit(): Boolean {
+        stopOwnedTun2socks()
+        return tunExitTracker.awaitStopped(3_000L)
+    }
+
     private fun stopV2Ray(isForced: Boolean = true) {
 //        val configName = defaultDPreference.getPrefString(PREF_CURR_CONFIG_GUID, "")
 //        val emptyInfo = VpnNetworkInfo()
 //        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
 //        saveVpnNetworkInfo(configName, info)
-        val stoppedChild = tunProcesses.stop()
+        stopOwnedTun2socks()
         releaseUnderlyingNetworkCallback()
-
-        try {
-            Log.d(packageName, "tun2socks destroy")
-            stoppedChild?.destroy()
-        } catch (e: Exception) {
-            Log.d(packageName, e.toString())
-        }
 
         // Always release this instance's TUN/process resources, but atomically
         // refuse global shutdown when a new service has taken ownership.

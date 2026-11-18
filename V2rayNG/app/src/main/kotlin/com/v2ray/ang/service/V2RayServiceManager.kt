@@ -273,10 +273,23 @@ object V2RayServiceManager {
             }.onFailure {
                 Log.w(ANG_PACKAGE, "Fragmentor listener cleanup failed")
             }.getOrDefault(false)
-            val stopped = coreStopped && fragmentorStopped
+            // Process.destroy() is only a request. The actual child watcher
+            // must observe every spawned tun2socks Process exit, including
+            // ProcessBuilder starts which completed after Stop was requested.
+            // This waits on IO, never on Android's service lifecycle thread.
+            val tunStopped = runCatching {
+                when (service) {
+                    is V2RayVpnService -> service.stopAndAwaitTun2socksExit()
+                    is V2RayProxyOnlyService -> true // No VPN tun2socks subprocess.
+                    else -> false // Unknown owner cannot prove VPN child exit.
+                }
+            }.onFailure {
+                Log.w(ANG_PACKAGE, "Xray tun2socks exit observation unavailable")
+            }.getOrDefault(false)
+            val stopped = coreStopped && fragmentorStopped && tunStopped
 
-            // Legacy local status only: this is NOT an authoritative
-            // generation-scoped Xray/TUN/native-worker stop receipt.
+            // Legacy local status only: this does NOT prove TUN FD closure,
+            // all fragmentor client handlers, or cross-process native receipt.
             withContext(Dispatchers.Main) {
                 if (!fragmentorStopped && fragmentor != null && TLS_serv == null) {
                     // Keep a handle to the unverified listener for diagnostics.

@@ -51,15 +51,17 @@ internal class TunDescriptorCloseTracker<T : Any> {
         return outstanding.toList()
     }
 
+    /** Nonblocking snapshot for an Android lifecycle callback (not native FD proof). */
+    @Synchronized fun isStopComplete(): Boolean =
+        stopRequested && establishmentsInFlight == 0 && outstanding.isEmpty()
+
     /** Bounded observation for IO cleanup; never block an Android lifecycle callback. */
     fun awaitClosed(timeoutMillis: Long): Boolean {
         if (timeoutMillis !in 1L..10_000L) return false
         val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
         while (true) {
             if (Thread.currentThread().isInterrupted) return false
-            val complete = synchronized(this) {
-                stopRequested && establishmentsInFlight == 0 && outstanding.isEmpty()
-            }
+            val complete = isStopComplete()
             if (complete) return true
             val remaining = deadline - System.nanoTime()
             if (remaining <= 0L) return false

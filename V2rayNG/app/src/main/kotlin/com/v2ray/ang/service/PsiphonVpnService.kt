@@ -118,11 +118,16 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
     private var psiphonTunnel: PsiphonTunnel? = null
     private var mInterface: ParcelFileDescriptor? = null
+    // Exact Java TUN PFD ownership persists until close() actually returns.
+    private val tunCloseTracker = TunDescriptorCloseTracker<ParcelFileDescriptor>()
     @Volatile private var tun2socksThread: Thread? = null
     private val isRunning = AtomicBoolean(false)
     private val startGate = PsiphonStartGate()
     private val routeGate = PsiphonRouteGate()
     private val teardownStarted = AtomicBoolean(false)
+    // Do not retry TUN close from onDestroy while the first teardown is
+    // still signalling JNI or stopping the native tunnel.
+    private val stopCleanupFinished = AtomicBoolean(false)
     private val startCommandAccepted = AtomicBoolean(false)
     private val notificationStopTokenGate = NotificationStopTokenGate()
     private val notificationStopToken = UUID.randomUUID().toString()
@@ -240,7 +245,14 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
         // VpnService may be destroyed without ACTION_STOP or onRevoke.
         // A stale notification can create and destroy a service that has
         // never started a tunnel; it must not stop another session's proxy.
+        val alreadyStopping = teardownStarted.get()
         if (startCommandAccepted.get()) stopAll(isForced = false)
+        // A close exception during Stop must not erase the sole owned PFD.
+        // Retry only when the first native teardown has already finished,
+        // and do not reissue JNI termination or claim a new native receipt.
+        if (alreadyStopping && stopCleanupFinished.get() &&
+            !closeOwnedTunDescriptors()
+        ) Log.w(TAG, "Psiphon TUN closure still unverified during destroy")
         super.onDestroy()
     }
 
@@ -450,19 +462,38 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             }
         }
 
-        // Close old interface
-        try {
-            mInterface?.close()
-        } catch (ignored: Exception) {
+        // Never discard an earlier owner if its close failed. This setup runs
+        // under startGate's monitor; Stop cannot overtake TUN publication.
+        val oldInterface = mInterface
+        if (oldInterface != null && !closeTrackedTunDescriptor(oldInterface)) {
+            throw IllegalStateException("Previous Psiphon VPN TUN closure unverified")
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             builder.setMetered(false)
         }
 
-        mInterface = builder.establish()
-        if (mInterface == null) {
-            throw Exception("VpnService.Builder.establish() returned null — VPN permission not granted?")
+        if (!tunCloseTracker.beginEstablish()) {
+            throw IllegalStateException("Psiphon VPN TUN establishment blocked by Stop")
+        }
+        var establishmentPending = true
+        try {
+            val established = builder.establish()
+                ?: throw IllegalStateException("Unable to establish Psiphon VPN TUN")
+            val accepted = synchronized(tunCloseTracker) {
+                val allowed = tunCloseTracker.registered(established)
+                establishmentPending = false
+                if (allowed) mInterface = established
+                allowed
+            }
+            if (!accepted) {
+                // Even a late rejected PFD remains owned until close returns.
+                closeTrackedTunDescriptor(established)
+                throw IllegalStateException("Psiphon Stop won TUN establishment")
+            }
+        } catch (failure: Exception) {
+            if (establishmentPending) tunCloseTracker.establishFailed()
+            throw failure
         }
         // Only start observing the underlay once Android has established our TUN.
         registerUnderlyingNetworkCallback()
@@ -651,6 +682,33 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     // Shutdown
     // =========================================================================
 
+    /**
+     * Only the returned close() of this exact PFD can release its local owner.
+     * Native/duplicated FD aliases may remain live after this result.
+     */
+    private fun closeTrackedTunDescriptor(descriptor: ParcelFileDescriptor): Boolean =
+        synchronized(tunCloseTracker) {
+            if (!tunCloseTracker.isOutstanding(descriptor)) return@synchronized true
+            val closed = runCatching { descriptor.close() }
+                .onFailure { Log.w(TAG, "Psiphon VPN TUN close failed", it) }
+                .isSuccess
+            if (closed) {
+                tunCloseTracker.closeReturned(descriptor)
+                if (mInterface === descriptor) mInterface = null
+            }
+            closed
+        }
+
+    /** Nonblocking lifecycle cleanup; every failed close remains retriable. */
+    private fun closeOwnedTunDescriptors(): Boolean {
+        val owned = tunCloseTracker.requestStop()
+        var allReturned = true
+        owned.forEach { descriptor ->
+            if (!closeTrackedTunDescriptor(descriptor)) allReturned = false
+        }
+        return allReturned && tunCloseTracker.isStopComplete()
+    }
+
     private fun stopAll(isForced: Boolean = true) {
         // Terminate start issuance and TUN-worker registration atomically.
         synchronized(startGate) {
@@ -697,16 +755,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             .onFailure { Log.e(TAG, "Native Psiphon tunnel stop failed", it) }
             .isSuccess
 
-        // The TUN must close on normal destruction as well as forced stop.
-        var tunCloseReturned = true
-        try {
-            mInterface?.close()
-        } catch (_: Exception) {
-            tunCloseReturned = false
-            Log.w(TAG, "Psiphon VPN TUN close failed")
-        } finally {
-            mInterface = null
-        }
+        // A close exception is NOT evidence of closure. Keep the exact PFD
+        // for a later destroy-time retry rather than discarding ownership.
+        val tunCloseReturned = closeOwnedTunDescriptors()
         // Closing Psiphon must not leave a live unprotected upstream SOCKS process.
         if (usesUpstreamProxy) {
             runCatching { stopService(Intent(this, V2RayProxyOnlyService::class.java)) }
@@ -739,6 +790,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                 MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_NOT_RUNNING, "")
             }
         }
+        stopCleanupFinished.set(true)
         if (isForced) stopSelf()
     }
 

@@ -66,7 +66,8 @@ service restarts without clock-based takeover.
 Pure Kotlin tests exercise the conservative evidence and TUN descriptor
 ownership state machine, including failure retention, in-flight establishments
 and retry completion. Python source contracts require the live service to
-retain failed PFD closes and gate its success message. Android CI compiles and starts the app, but the emulator does not
-start a live Psiphon tunnel or simulate a worker that ignores JNI termination.
+retain failed PFD closes and gate its success message. Android CI compiles
+and starts the app, but the emulator does not start a live Psiphon tunnel or
+simulate a worker that ignores JNI termination.
 A physical-device run with Wi-Fi/cellular handover and intentional JNI
 shutdown failures is still required before making end-to-end guarantees.

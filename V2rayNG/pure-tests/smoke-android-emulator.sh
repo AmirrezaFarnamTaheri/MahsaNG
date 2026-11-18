@@ -71,4 +71,6 @@ bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-vpn-session-crossprocess-em
 # Verify stop-envelope delivery/ack policy in two genuine Android QA processes.
 # Positive 'complete' is simulated: this does NOT test real native shutdown.
 bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-vpn-stop-command-emulator.sh" "$package_id"
+# START-reservation QA in distinct Android processes. No JNI starts.
+bash "${GITHUB_WORKSPACE:-.}/V2rayNG/pure-tests/test-vpn-start-command-emulator.sh" "$package_id"
 echo "Emulator smoke passed: $package_id running with PID $pid"

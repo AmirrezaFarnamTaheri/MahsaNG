@@ -18,6 +18,8 @@ internal data class PsiphonTeardownEvidence(
     val psiphonTunnelStopReturned: Boolean,
     val tunCloseReturned: Boolean,
     val dependsOnXray: Boolean,
+    /** Independently verified completion, never inferred from stop() return. */
+    val psiphonNativeStopAcknowledged: Boolean,
     val xrayNativeStopAcknowledged: Boolean,
 ) {
     /**
@@ -35,6 +37,6 @@ internal data class PsiphonTeardownEvidence(
      * No production caller currently supplies a verified upstream receipt.
      */
     val wholeChainCompletionEligible: Boolean
-        get() = localStopReportable &&
+        get() = localStopReportable && psiphonNativeStopAcknowledged &&
             (!dependsOnXray || xrayNativeStopAcknowledged)
 }

@@ -8,6 +8,7 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.Collections
+import com.v2ray.ang.service.FragmentorForwardingWorkers
 
 const val myT_socket_timeout = 8000  // Set socket timeout to 8 seconds
 
@@ -23,6 +24,7 @@ class TLS_Fragmentor(
     @Volatile var ss: ServerSocket? = null
     @Volatile private var stopRequested = false
     private val listenerLock = Any()
+    private val forwarders = FragmentorForwardingWorkers()
     var client_sock: Socket? = null
     @Volatile var is_ready = false
 
@@ -48,17 +50,26 @@ class TLS_Fragmentor(
             is_ready = true
             while (!stopRequested) {
 //                println("TLS waiting for input socket ...")
-                client_sock = ss!!.accept()
-
-                val up_thread = My_upstream(
-                    client_sock,
-                    target_ip,
-                    target_port,
-                    isFragment,
-                    num_fragment,
-                    fragment_sleep
-                )
-                up_thread.start()
+                val accepted = ss!!.accept()
+                client_sock = accepted
+                try {
+                    val up_thread = My_upstream(
+                        accepted,
+                        target_ip,
+                        target_port,
+                        isFragment,
+                        num_fragment,
+                        fragment_sleep,
+                        forwarders
+                    )
+                    if (!forwarders.start(up_thread, accepted)) {
+                        // Stop won after accept but before registration.
+                        FragmentorSocketBinding.closeQuietly(accepted)
+                    }
+                } catch (failure: Exception) {
+                    FragmentorSocketBinding.closeQuietly(accepted)
+                    throw failure
+                }
             }
         } catch (e: Exception) {
 //            println("TLS Server ERR: " + e.message)
@@ -67,6 +78,7 @@ class TLS_Fragmentor(
 //            println("TLS Server Stopped. Listening Finished.")
             is_ready = false
             FragmentorSocketBinding.closeQuietly(ss)
+            forwarders.stop()
         }
 //        println("TLS Server Thread Finished")
     } // run
@@ -94,7 +106,12 @@ class TLS_Fragmentor(
             FragmentorSocketBinding.closeQuietly(ss)
             is_ready = false
         }
+        // Request all client/backend socket closures, not just the listener.
+        forwarders.stop()
     }
+
+    fun awaitForwardersExited(timeoutMillis: Long): Boolean =
+        forwarders.awaitExited(timeoutMillis)
 } //class Server
 
 
@@ -106,7 +123,8 @@ internal class My_upstream(
     var target_port: Int,
     var isFragment1: Boolean,
     var num_fragment1: Int,
-    var fragment_sleep1: Double ) : Thread() {
+    var fragment_sleep1: Double,
+    private val forwarders: FragmentorForwardingWorkers ) : Thread() {
 
     var ips: InputStream
     var ops: OutputStream? = null
@@ -129,12 +147,18 @@ internal class My_upstream(
     override fun run() {
         try {
             backend_sock = Socket(target_ip, target_port)
+            // connect() may have finished after stop: close the late socket.
+            if (!forwarders.track(this, backend_sock!!)) {
+                throw IllegalStateException("Fragmentor stopped during backend connection")
+            }
             backend_sock!!.soTimeout = myT_socket_timeout
             backend_sock!!.tcpNoDelay = true
             ops = backend_sock!!.getOutputStream()
 
             val down_thread = My_downstream(backend_sock!!.getInputStream(), client_sock!!.getOutputStream())
-            down_thread.start()
+            if (!forwarders.start(down_thread, backend_sock!!, client_sock!!)) {
+                throw IllegalStateException("Fragmentor stopped before downstream start")
+            }
 
 //            println("up-stream started")
             sleep(first_time_sleep) // wait n millisec for first packet to fully receive

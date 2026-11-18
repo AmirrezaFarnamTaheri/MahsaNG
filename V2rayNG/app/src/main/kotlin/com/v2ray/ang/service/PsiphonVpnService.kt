@@ -671,28 +671,39 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
         // A missing JNI module throws LinkageError, not Exception: continue
         // closing the TUN and upstream proxy even when native termination fails.
-        runCatching { Tun2SocksJniLoader.terminateTun2Socks() }
+        val jniTerminationSignalReturned = runCatching { Tun2SocksJniLoader.terminateTun2Socks() }
             .onFailure { Log.w(TAG, "Psiphon JNI termination signal failed") }
+            .isSuccess
+        val worker = tun2socksThread
         runCatching {
-            val worker = tun2socksThread
             if (worker != null && worker !== Thread.currentThread()) worker.join(3000)
         }.onFailure { failure ->
             if (failure is InterruptedException) Thread.currentThread().interrupt()
             Log.w(TAG, "Psiphon routing worker join failed")
         }
-        tun2socksThread = null
+        // A bounded join is not a native completion acknowledgment.
+        // Keep ownership of any still-live worker; its finally block
+        // retains the process-wide native start gate until actual exit.
+        val workerExited = worker == null ||
+            (worker !== Thread.currentThread() && !worker.isAlive)
+        if (workerExited) tun2socksThread = null
+        else Log.w(TAG, "Psiphon routing worker still alive after stop request")
 
         // Clear the handle before stopping so teardown is safe if the native
         // callback concurrently calls onExiting().
         val tunnel = psiphonTunnel
         psiphonTunnel = null
-        runCatching { tunnel?.stop() }
+        val tunnelStopReturned = runCatching { tunnel?.stop() }
             .onFailure { Log.e(TAG, "Native Psiphon tunnel stop failed", it) }
+            .isSuccess
 
         // The TUN must close on normal destruction as well as forced stop.
+        var tunCloseReturned = true
         try {
             mInterface?.close()
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
+            tunCloseReturned = false
+            Log.w(TAG, "Psiphon VPN TUN close failed")
         } finally {
             mInterface = null
         }
@@ -701,9 +712,33 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             runCatching { stopService(Intent(this, V2RayProxyOnlyService::class.java)) }
                 .onFailure { Log.w(TAG, "Unable to stop upstream proxy process") }
         }
-        // Report stopped only after the native worker, VPN TUN and upstream
-        // proxy cleanup has been attempted.
-        MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+        val evidence = PsiphonTeardownEvidence(
+            workerRegistered = worker != null,
+            workerExited = workerExited,
+            jniTerminationSignalReturned = jniTerminationSignalReturned,
+            psiphonTunnelStopReturned = tunnelStopReturned,
+            tunCloseReturned = tunCloseReturned,
+            dependsOnXray = usesUpstreamProxy,
+            // A returned PsiphonTunnel.stop() is not a native completion receipt.
+            psiphonNativeStopAcknowledged = false,
+            // stopService() is only a request; no Xray native receipt exists.
+            xrayNativeStopAcknowledged = false,
+        )
+        if (!evidence.wholeChainCompletionEligible && usesUpstreamProxy) {
+            Log.i(TAG, "Upstream Xray native stop remains unverified")
+        }
+        if (evidence.localStopReportable) {
+            // A legacy local-service status, NOT a full-chain session ack.
+            MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+        } else {
+            Log.w(TAG, "Psiphon local native cleanup incomplete; withholding Stop Success")
+            // A live worker may still own a duplicate TUN descriptor, even
+            // after mInterface.close(). Do not announce not-running until
+            // both worker exit and local TUN close were observed.
+            if (workerExited && tunCloseReturned) {
+                MessageUtil.sendMsg2UI(this, AppConfig.MSG_STATE_NOT_RUNNING, "")
+            }
+        }
         if (isForced) stopSelf()
     }
 

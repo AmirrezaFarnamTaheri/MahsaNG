@@ -64,10 +64,10 @@ class TLS_Fragmentor(
                     )
                     if (!forwarders.start(up_thread, accepted)) {
                         // Stop won after accept but before registration.
-                        FragmentorSocketBinding.closeQuietly(accepted)
+                        runCatching { accepted.close() }
                     }
                 } catch (failure: Exception) {
-                    FragmentorSocketBinding.closeQuietly(accepted)
+                    runCatching { accepted.close() }
                     throw failure
                 }
             }

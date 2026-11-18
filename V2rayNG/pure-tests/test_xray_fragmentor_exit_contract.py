@@ -24,8 +24,8 @@ class XrayFragmentorExitContract(unittest.TestCase):
         code = MANAGER.read_text(encoding="utf-8")
         stop = code.split("fun stopV2rayPoint() {", 1)[1].split("private class ReceiveMessageHandler", 1)[0]
         self.assertIn("stopAndAwaitListeners(", stop)
-        self.assertIn("val stopped = coreStopped && fragmentorStopped && tunStopped", stop)
-        self.assertLess(stop.index("val stopped = coreStopped && fragmentorStopped && tunStopped"), stop.index("MSG_STATE_STOP_SUCCESS"))
+        self.assertIn("val stopped = coreStopped && fragmentorStopped && tunStopped && tunDescriptorClosed", stop)
+        self.assertLess(stop.index("val stopped = coreStopped && fragmentorStopped && tunStopped && tunDescriptorClosed"), stop.index("MSG_STATE_STOP_SUCCESS"))
         self.assertIn("coreStopGate.completeStop(stopToken, stopped)", stop)
 
     def test_unverified_fragmentor_keeps_ownership_and_suppresses_not_running(self):

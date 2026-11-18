@@ -56,10 +56,10 @@ class HTTPS_Fragmentor(
                         forwarders
                     )
                     if (!forwarders.start(up_thread, accepted)) {
-                        FragmentorSocketBinding.closeQuietly(accepted)
+                        runCatching { accepted.close() }
                     }
                 } catch (failure: Exception) {
-                    FragmentorSocketBinding.closeQuietly(accepted)
+                    runCatching { accepted.close() }
                     throw failure
                 }
             }

@@ -49,7 +49,7 @@ class XrayVpnDestroyCleanupContractTest(unittest.TestCase):
         stop = vpn.split("private fun stopV2Ray(", 1)[1].split(
             "override fun getService()", 1
         )[0]
-        self.assertIn("tunProcesses.stop()", stop)
+        self.assertIn("stopOwnedTun2socks()", stop)
         self.assertIn("releaseUnderlyingNetworkCallback()", stop)
         self.assertIn("mInterface.close()", stop)
         self.assertIn("V2RayServiceManager.stopV2rayPointIfOwner(this)", stop)

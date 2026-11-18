@@ -719,6 +719,8 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             psiphonTunnelStopReturned = tunnelStopReturned,
             tunCloseReturned = tunCloseReturned,
             dependsOnXray = usesUpstreamProxy,
+            // A returned PsiphonTunnel.stop() is not a native completion receipt.
+            psiphonNativeStopAcknowledged = false,
             // stopService() is only a request; no Xray native receipt exists.
             xrayNativeStopAcknowledged = false,
         )

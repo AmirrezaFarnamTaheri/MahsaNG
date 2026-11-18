@@ -23,7 +23,18 @@ completion acknowledgment.
   alive, and its existing process-wide native lease remains occupied until
   the worker's `finally` block releases it.
 - The service observes whether synchronous `PsiphonTunnel.stop()` and
-  `ParcelFileDescriptor.close()` calls returned without throwing.
+  `ParcelFileDescriptor.close()` calls returned without throwing. Psiphon's
+  Java-owned VPN TUN PFD is now registered with the existing
+  `TunDescriptorCloseTracker` before publishing it. Replacing an existing
+  PFD is forbidden if its prior close fails; failed close leaves the exact
+  descriptor tracked and retains `mInterface` rather than nulling the only
+  handle. A synchronous `isStopComplete()` snapshot requires no in-flight
+  establishment and no outstanding descriptors after Stop.
+- If the first teardown finishes without an observed TUN close,
+  `onDestroy()` can attempt closing the retained PFD again. It does **not**
+  rerun JNI or `PsiphonTunnel.stop()`, synthesize a native acknowledgment or
+  retroactively send a Stop Success event. Closing the service's PFD does not
+  prove that JNI-owned duplicated FD aliases have been released.
 - `PsiphonTeardownEvidence.localStopReportable` requires all these local
   observations before the legacy `MSG_STATE_STOP_SUCCESS` message is
   emitted. Failure or uncertainty suppresses that success message. Only
@@ -52,9 +63,10 @@ independent Xray `stopLoop` acknowledgment before releasing either role in
 crash recovery, revoked VPN permissions, delayed callbacks and sticky
 service restarts without clock-based takeover.
 
-The pure Kotlin tests exercise the conservative evidence logic. Python source
-contracts require the live service to check worker exit and gate its success
-message. Android CI compiles and starts the app, but the emulator does not
+Pure Kotlin tests exercise the conservative evidence and TUN descriptor
+ownership state machine, including failure retention, in-flight establishments
+and retry completion. Python source contracts require the live service to
+retain failed PFD closes and gate its success message. Android CI compiles and starts the app, but the emulator does not
 start a live Psiphon tunnel or simulate a worker that ignores JNI termination.
 A physical-device run with Wi-Fi/cellular handover and intentional JNI
 shutdown failures is still required before making end-to-end guarantees.

@@ -13,6 +13,7 @@ import com.v2ray.ang.service.VpnSessionRecordCodec
 import com.v2ray.ang.service.VpnSessionRecordResult
 import com.v2ray.ang.service.VpnSessionRecordStore
 import com.v2ray.ang.service.VpnSessionRole
+import com.v2ray.ang.service.VpnNativeStopEvidence
 import com.v2ray.ang.service.VpnStopCommandCodec
 import com.v2ray.ang.service.VpnStopCommandGate
 import com.v2ray.ang.service.VpnStartCommandCodec
@@ -150,10 +151,34 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                             it.name == intent.getStringExtra("role")
                         }
                         val complete = intent.getBooleanExtra("complete", false)
-                        val result = if (command == null || role == null) VpnSessionRecordResult.Rejected
-                            else store.apply {
-                                VpnStopCommandGate.acknowledgeStopped(it, command, role, complete)
+                        // QA-only simulation. A shell boolean cannot prove
+                        // JNI exit, descriptor closure, or a native tunnel ack.
+                        // Keep this under the disposable debug-only record.
+                        val simulatedEvidence: VpnNativeStopEvidence? = when (role) {
+                            VpnSessionRole.XRAY -> command?.let {
+                                VpnNativeStopEvidence.Xray(
+                                    sessionId = it.sessionId, generation = it.generation,
+                                    stopLoopReturned = complete, coreNotRunning = complete,
+                                    tun2socksProcessExited = complete,
+                                    fragmentorListenersExited = complete,
+                                    tunDescriptorClosed = complete,
+                                )
                             }
+                            VpnSessionRole.PSIPHON -> command?.let {
+                                VpnNativeStopEvidence.Psiphon(
+                                    sessionId = it.sessionId, generation = it.generation,
+                                    routingWorkerExited = complete,
+                                    psiphonNativeShutdownAcknowledged = complete,
+                                    tunDescriptorClosed = complete,
+                                )
+                            }
+                            null -> null
+                        }
+                        val result = if (command == null || simulatedEvidence == null) {
+                            VpnSessionRecordResult.Rejected
+                        } else store.apply {
+                            VpnStopCommandGate.acknowledgeStopped(it, command, simulatedEvidence)
+                        }
                         Log.i(TAG, "$token $actor CMD_SIM_ACK ${status(result)}")
                     }
                     "STOP" -> {

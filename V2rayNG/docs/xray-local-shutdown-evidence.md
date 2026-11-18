@@ -1,4 +1,4 @@
-# Xray local fragmentor listener shutdown evidence
+# Xray local shutdown observations (core, listeners, tun2socks, TUN owner)
 
 This narrowly hardens **legacy Xray local Stop Success and in-process restart**
 without introducing an authoritative cross-process native completion receipt.
@@ -47,14 +47,32 @@ a replacement start.
   watcher, plus a bounded observer on the existing IO cleanup coroutine,
   for compatibility with the app's lower supported Android API levels.
 
+- The Xray VPN service now also tracks its **owned TUN
+  `ParcelFileDescriptor` objects** by identity using
+  `TunDescriptorCloseTracker`. It reserves every `Builder.establish()`
+  operation **before** attempting it. A descriptor returned after Stop is
+  recorded but cannot be published as the active VPN interface; the late
+  descriptor must still be closed successfully.
+- Replacing a TUN closes its previous descriptor before publishing the
+  replacement. A close failure is retained as pending ownership and prevents
+  local Stop Success. `onDestroy()`, forced Stop and the manager's IO teardown
+  request closure of all tracked descriptors. Only a successfully returned
+  `ParcelFileDescriptor.close()` removes a descriptor from the outstanding
+  set. The manager waits up to three seconds for closure and all in-flight
+  establishments, separately from waiting for the tun2socks child to exit.
+- The existing `stopSelf()`-before-TUN-close ordering is preserved in forced
+  Stop. A proxy-only service has no VPN TUN and cannot substitute a success
+  claim for an unknown VPN owner.
+
 ## Trust and recovery boundaries
 
-**Not a VPN-session native receipt.** An observed tun2socks child exit and
-fragmentor listener exits do *not* prove that every per-client forwarding
-thread stopped, all sockets closed, the VPN TUN file descriptor was closed,
-or a same-generation Psiphon process acknowledged native shutdown.
-The local tracker is tied to one Android service instance, **not** an
-authoritative cross-process VPN session generation.
+**Not a VPN-session native receipt.** Observed tun2socks child exit,
+fragmentor listener exit and successful close of the Java-owned VPN TUN
+`ParcelFileDescriptor` do *not* prove that every per-client forwarding
+thread stopped, all socket or duplicated native FD aliases were released,
+the kernel VPN packet path was safely terminated, or same-generation Psiphon
+native shutdown was acknowledged. The trackers belong to one Android service
+instance, **not** an authoritative cross-process VPN session generation.
 
 These observations MUST NOT be used as a complete
 `VpnNativeStopEvidence` receipt or as authority to release a persisted
@@ -64,7 +82,8 @@ a future separately reviewed native-recovery path must prove all resources
 are released, not simply wait for a TTL or trust an Android `stopService()`
 request.
 
-Pure Kotlin/JUnit covers timeout, multiple listeners, process-launch races,
+Pure Kotlin/JUnit covers timeout, multiple listeners, process-launch and
+TUN-establishment races, failure-preserving descriptor-close accounting,
 interruption and actual child-exit accounting. Python source contracts check
 live Stop Success ordering, retained uncertainty and API compatibility. GitHub Android 35 emulator CI checks build
 compatibility and debug two-process fencing, **not** physical Xray teardown,

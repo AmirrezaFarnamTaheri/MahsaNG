@@ -273,10 +273,22 @@ object V2RayServiceManager {
             }.onFailure {
                 Log.w(ANG_PACKAGE, "Fragmentor listener cleanup failed")
             }.getOrDefault(false)
-            // Process.destroy() is only a request. The actual child watcher
-            // must observe every spawned tun2socks Process exit, including
-            // ProcessBuilder starts which completed after Stop was requested.
-            // This waits on IO, never on Android's service lifecycle thread.
+            // Closing the Android VpnService's own TUN PFD is independent
+            // from tun2socks subprocess termination. The owner must account
+            // for all established PFDs and any Builder.establish() in flight.
+            // Run this on IO; never wait on the Android lifecycle thread.
+            val tunDescriptorClosed = runCatching {
+                when (service) {
+                    is V2RayVpnService -> service.stopAndAwaitTunDescriptorClose()
+                    is V2RayProxyOnlyService -> true // Does not own a VPN TUN.
+                    else -> false // Unknown owner cannot supply close evidence.
+                }
+            }.onFailure {
+                Log.w(ANG_PACKAGE, "Xray TUN descriptor close observation unavailable")
+            }.getOrDefault(false)
+
+            // Process.destroy() is only a request. Every spawned tun2socks
+            // process must be observed exited by its own waitFor() watcher.
             val tunStopped = runCatching {
                 when (service) {
                     is V2RayVpnService -> service.stopAndAwaitTun2socksExit()
@@ -286,10 +298,10 @@ object V2RayServiceManager {
             }.onFailure {
                 Log.w(ANG_PACKAGE, "Xray tun2socks exit observation unavailable")
             }.getOrDefault(false)
-            val stopped = coreStopped && fragmentorStopped && tunStopped
+            val stopped = coreStopped && fragmentorStopped && tunStopped && tunDescriptorClosed
 
-            // Legacy local status only: this does NOT prove TUN FD closure,
-            // all fragmentor client handlers, or cross-process native receipt.
+            // Legacy local status only: owned PFD close return does NOT prove
+            // native aliases, per-client handlers, or a cross-process receipt.
             withContext(Dispatchers.Main) {
                 if (!fragmentorStopped && fragmentor != null && TLS_serv == null) {
                     // Keep a handle to the unverified listener for diagnostics.

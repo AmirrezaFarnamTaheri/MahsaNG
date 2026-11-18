@@ -41,6 +41,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
     private val tunProcesses = TunnelProcessOwner<Process>()
     private val tunExitTracker = TunnelProcessExitTracker<Process>()
+    private val tunCloseTracker = TunDescriptorCloseTracker<ParcelFileDescriptor>()
     private val fdScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**destroy
@@ -145,9 +146,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
         fdScope.cancel()
         // Android may destroy the service without an explicit stop or revoke.
         // Always release the TUN, even when startup never completed.
-        if (this::mInterface.isInitialized) {
-            runCatching { mInterface.close() }
-        }
+        closeOwnedTunDescriptors()
         // CoreStopGate makes repeated shutdown idempotent. The manager checks
         // ownership and initiates stop/foreground cleanup under one monitor.
         V2RayServiceManager.stopV2rayPointIfOwner(this, cancelForeground = true)
@@ -242,11 +241,12 @@ class V2RayVpnService : VpnService(), ServiceControl {
             }
         }
 
-        // Close the old interface since the parameters have been changed.
-        try {
-            mInterface.close()
-        } catch (ignored: Exception) {
-            // ignored
+        // A replaced TUN is still our responsibility until its own close
+        // succeeds. Failed closure must never disappear behind a new handle.
+        if (this::mInterface.isInitialized && !closeTrackedTunDescriptor(mInterface)) {
+            Log.w(packageName, "Previous Xray TUN closure unverified")
+            stopV2Ray()
+            return
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -257,15 +257,33 @@ class V2RayVpnService : VpnService(), ServiceControl {
             builder.setMetered(false)
         }
 
-        // Create a new interface using the builder and save the parameters.
+        // Reserve BEFORE Builder.establish(), which can complete after Stop.
+        if (!tunCloseTracker.beginEstablish()) return
+        var establishmentPending = true
         try {
-            mInterface = builder.establish()!!
-            val (generation, previousChild) = tunProcesses.begin()
+            val established = builder.establish()
+                ?: error("Unable to establish Xray VPN TUN")
+            // Register and publish while holding the same monitor used by
+            // requestStop. A late descriptor is tracked but never published.
+            val started = synchronized(tunCloseTracker) {
+                val allowed = tunCloseTracker.registered(established)
+                establishmentPending = false
+                if (allowed) {
+                    mInterface = established
+                    tunProcesses.begin()
+                } else null
+            }
+            if (started == null) {
+                closeTrackedTunDescriptor(established)
+                return
+            }
+            val (generation, previousChild) = started
             previousChild?.destroy()
             runTun2socks(generation)
         } catch (e: Exception) {
-            // non-nullable lateinit var
-            e.printStackTrace()
+            if (establishmentPending) tunCloseTracker.establishFailed()
+            Log.e(packageName, "Xray VPN TUN establishment failed", e)
+            // stopV2Ray requests stopSelf BEFORE closing any tracked PFD.
             stopV2Ray()
         }
     }
@@ -409,6 +427,37 @@ class V2RayVpnService : VpnService(), ServiceControl {
         return tunExitTracker.awaitStopped(3_000L)
     }
 
+    /**
+     * Only a successfully returned close() for this exact descriptor removes
+     * it from the pending set. The monitor prevents competing close calls.
+     */
+    private fun closeTrackedTunDescriptor(descriptor: ParcelFileDescriptor): Boolean =
+        synchronized(tunCloseTracker) {
+            if (!tunCloseTracker.isOutstanding(descriptor)) return@synchronized true
+            val closed = runCatching { descriptor.close() }
+                .onFailure { Log.w(packageName, "Xray VPN TUN descriptor close failed", it) }
+                .isSuccess
+            if (closed) tunCloseTracker.closeReturned(descriptor)
+            closed
+        }
+
+    /** Request closure without a blocking wait on Android's lifecycle thread. */
+    private fun closeOwnedTunDescriptors() {
+        tunCloseTracker.requestStop().forEach { closeTrackedTunDescriptor(it) }
+    }
+
+    /**
+     * Called only during the manager's IO shutdown. This verifies close()
+     * returned for each owned PFD and no establishment remains in flight.
+     * It cannot prove duplicated/native FD aliases were released.
+     */
+    internal fun stopAndAwaitTunDescriptorClose(): Boolean {
+        // Preserve the existing stopSelf-before-TUN-close requirement.
+        stopSelf()
+        closeOwnedTunDescriptors()
+        return tunCloseTracker.awaitClosed(3_000L)
+    }
+
     private fun stopV2Ray(isForced: Boolean = true) {
 //        val configName = defaultDPreference.getPrefString(PREF_CURR_CONFIG_GUID, "")
 //        val emptyInfo = VpnNetworkInfo()
@@ -422,18 +471,12 @@ class V2RayVpnService : VpnService(), ServiceControl {
         V2RayServiceManager.stopV2rayPointIfOwner(this)
 
         if (isForced) {
-            //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped
-            //It's strage but true.
-            //This can be verified by putting stopself() behind and call stopLoop and startLoop
-            //in a row for several times. You will find that later created v2ray core report port in use
-            //which means the first v2ray core somehow failed to stop and release the port.
+            // Preserve stopSelf-before-TUN-close ordering. Closing the
+            // service-owned descriptor first previously left Xray's native
+            // listener port occupied during rapid stop/start cycles.
             stopSelf()
 
-            try {
-                mInterface.close()
-            } catch (ignored: Exception) {
-                // ignored
-            }
+            closeOwnedTunDescriptors()
         }
     }
 

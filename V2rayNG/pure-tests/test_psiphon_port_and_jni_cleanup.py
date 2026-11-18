@@ -35,7 +35,7 @@ class PsiphonSettingsAndRoutingSafetyContract(unittest.TestCase):
             "override fun loadLibrary(", 1
         )[0]
         self.assertIn("runCatching { Tun2SocksJniLoader.terminateTun2Socks() }", cleanup)
-        self.assertIn("mInterface?.close()", cleanup)
+        self.assertIn("val tunCloseReturned = closeOwnedTunDescriptors()", cleanup)
         self.assertIn("stopService(Intent(this, V2RayProxyOnlyService::class.java))", cleanup)
 
     def test_native_psiphon_start_catches_linkage_error(self):

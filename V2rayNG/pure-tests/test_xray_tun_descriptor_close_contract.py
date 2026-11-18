@@ -16,12 +16,12 @@ class XrayTunDescriptorCloseContract(unittest.TestCase):
         vpn = VPN.read_text(encoding="utf-8")
         setup = vpn.split("private fun setup() {", 1)[1].split("private fun runTun2socks(", 1)[0]
         self.assertIn("tunCloseTracker.beginEstablish()", setup)
-        self.assertIn("tunCloseTracker.registered(descriptor)", setup)
+        self.assertIn("tunCloseTracker.registered(established)", setup)
         self.assertIn("tunCloseTracker.establishFailed()", setup)
-        self.assertIn("closeTrackedTunDescriptor(descriptor)", setup)
+        self.assertIn("closeTrackedTunDescriptor(established)", setup)
         self.assertLess(setup.index("tunCloseTracker.beginEstablish()"), setup.index("builder.establish()"))
-        self.assertLess(setup.index("tunCloseTracker.registered(descriptor)"),
-                        setup.index("mInterface = descriptor"))
+        self.assertLess(setup.index("tunCloseTracker.registered(established)"),
+                        setup.index("mInterface = established"))
 
     def test_close_is_evidence_only_after_the_owned_close_returns_successfully(self):
         vpn = VPN.read_text(encoding="utf-8")

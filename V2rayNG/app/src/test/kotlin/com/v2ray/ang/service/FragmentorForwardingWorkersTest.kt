@@ -196,21 +196,23 @@ class FragmentorForwardingWorkersTest {
 
     @Test fun aWorkerCannotAcknowledgeItsOwnTermination() {
         val gate = FragmentorForwardingWorkers()
-        val observed = java.util.concurrent.atomic.AtomicBoolean(true)
+        val incorrectlyCompleted = java.util.concurrent.atomic.AtomicBoolean(true)
         val entered = CountDownLatch(1)
+        val mayCheck = CountDownLatch(1)
         val worker = Thread {
             entered.countDown()
-            while (true) {
-                if (Thread.currentThread().isInterrupted) break
-                if (gate.awaitExited(50)) observed.set(false)
-                break
-            }
+            mayCheck.await(1, TimeUnit.SECONDS)
+            incorrectlyCompleted.set(gate.awaitExited(100))
         }
         assertTrue(gate.start(worker))
-        assertTrue(entered.await(1, TimeUnit.SECONDS))
-        gate.stop()
-        worker.join(1_000)
-        assertTrue(observed.get())
+        try {
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            gate.stop()
+        } finally {
+            mayCheck.countDown()
+            worker.join(1_000)
+        }
+        assertFalse(incorrectlyCompleted.get())
         assertTrue(gate.awaitExited(100))
     }
 }

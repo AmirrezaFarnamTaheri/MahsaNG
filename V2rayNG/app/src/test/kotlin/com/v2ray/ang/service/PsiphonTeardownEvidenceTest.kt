@@ -13,6 +13,7 @@ class PsiphonTeardownEvidenceTest {
         psiphonTunnelStopReturned: Boolean = true,
         tunCloseReturned: Boolean = true,
         dependsOnXray: Boolean = false,
+        psiphonNativeStopAcknowledged: Boolean = false,
         xrayNativeStopAcknowledged: Boolean = false,
     ) = PsiphonTeardownEvidence(
         workerRegistered = workerRegistered,
@@ -21,12 +22,13 @@ class PsiphonTeardownEvidenceTest {
         psiphonTunnelStopReturned = psiphonTunnelStopReturned,
         tunCloseReturned = tunCloseReturned,
         dependsOnXray = dependsOnXray,
+        psiphonNativeStopAcknowledged = psiphonNativeStopAcknowledged,
         xrayNativeStopAcknowledged = xrayNativeStopAcknowledged,
     )
 
     @Test fun exitedWorkerAndSuccessfulLocalStopsAllowLegacyLocalReport() {
         assertTrue(evidence().localStopReportable)
-        assertTrue(evidence().wholeChainCompletionEligible)
+        assertFalse(evidence().wholeChainCompletionEligible)
     }
 
     @Test fun absentWorkerNeedsNoTerminationSignal() {
@@ -66,14 +68,19 @@ class PsiphonTeardownEvidenceTest {
         assertFalse(result.wholeChainCompletionEligible)
     }
 
+    @Test fun psiphonNativeReceiptRequiredEvenWithoutUpstream() {
+        assertFalse(evidence().wholeChainCompletionEligible)
+        assertTrue(evidence(psiphonNativeStopAcknowledged = true).wholeChainCompletionEligible)
+    }
+
     @Test fun upstreamStopRequestCannotImpersonateXrayNativeAcknowledgement() {
-        val result = evidence(dependsOnXray = true, xrayNativeStopAcknowledged = false)
+        val result = evidence(dependsOnXray = true, psiphonNativeStopAcknowledged = true, xrayNativeStopAcknowledged = false)
         assertTrue(result.localStopReportable)
         assertFalse(result.wholeChainCompletionEligible)
     }
 
-    @Test fun onlyIndependentUpstreamAcknowledgementEnablesChainCompletion() {
-        val result = evidence(dependsOnXray = true, xrayNativeStopAcknowledged = true)
+    @Test fun onlyBothIndependentNativeAcknowledgementsEnableChainCompletion() {
+        val result = evidence(dependsOnXray = true, psiphonNativeStopAcknowledged = true, xrayNativeStopAcknowledged = true)
         assertTrue(result.localStopReportable)
         assertTrue(result.wholeChainCompletionEligible)
     }
@@ -82,6 +89,7 @@ class PsiphonTeardownEvidenceTest {
         val result = evidence(
             dependsOnXray = true,
             xrayNativeStopAcknowledged = true,
+            psiphonNativeStopAcknowledged = true,
             workerExited = false,
         )
         assertFalse(result.localStopReportable)

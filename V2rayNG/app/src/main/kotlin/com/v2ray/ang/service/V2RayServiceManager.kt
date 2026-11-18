@@ -258,20 +258,31 @@ object V2RayServiceManager {
         TLS_serv = null
 
         nativeCleanupScope.launch {
-            var stopped = false
+            var coreStopped = false
             try {
                 if (v2rayPoint.isRunning) v2rayPoint.stopLoop()
-                stopped = !v2rayPoint.isRunning
+                coreStopped = !v2rayPoint.isRunning
             } catch (failure: Exception) {
                 Log.d(ANG_PACKAGE, "Native stopLoop failed: $failure")
-            } finally {
-                runCatching { fragmentor?.stop_HTTPS_service() }
-                runCatching { fragmentor?.stop_TLS_service() }
             }
 
-            // A successful stop broadcast must follow native socket cleanup,
-            // not precede it as it did with unowned GlobalScope.
+            // Closing a listener socket is not proof its Thread exited. The
+            // fragmentor requests both stops and checks the bounded exit.
+            val fragmentorStopped = runCatching {
+                fragmentor?.stopAndAwaitListeners() ?: true
+            }.onFailure {
+                Log.w(ANG_PACKAGE, "Fragmentor listener cleanup failed")
+            }.getOrDefault(false)
+            val stopped = coreStopped && fragmentorStopped
+
+            // Legacy local status only: this is NOT an authoritative
+            // generation-scoped Xray/TUN/native-worker stop receipt.
             withContext(Dispatchers.Main) {
+                if (!fragmentorStopped && fragmentor != null && TLS_serv == null) {
+                    // Keep a handle to the unverified listener for diagnostics.
+                    // CoreStopGate quarantines new starts on incomplete cleanup.
+                    TLS_serv = fragmentor
+                }
                 if (stopped) {
                     cancelNotificationFor(service)
                     if (service != null) {
@@ -280,13 +291,14 @@ object V2RayServiceManager {
                     }
                     currentConfig = null
                 } else if (service != null) {
-                    // Do not claim the core stopped if stopLoop failed or is still running.
-                    val actualState = if (v2rayPoint.isRunning) {
-                        AppConfig.MSG_STATE_RUNNING
+                    if (v2rayPoint.isRunning) {
+                        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_RUNNING, "")
                     } else {
-                        AppConfig.MSG_STATE_NOT_RUNNING
+                        // The core might have exited while a listener still
+                        // owns resources. Neither Success nor Not Running is
+                        // evidence of a fully stopped VPN at that point.
+                        Log.w(ANG_PACKAGE, "Xray local teardown incomplete; suppressing not-running state")
                     }
-                    MessageUtil.sendMsg2UI(service, actualState, "")
                 }
 
                 val restartToken = coreStopGate.completeStop(stopToken, stopped)

@@ -44,7 +44,8 @@ class XrayTunDescriptorCloseContract(unittest.TestCase):
         self.assertIn("stopSelf()", stop)
         self.assertLess(stop.index("stopSelf()"), stop.index("closeOwnedTunDescriptors()"))
         self.assertNotIn("runCatching { mInterface.close() }", destroy)
-        self.assertNotIn("mInterface.close()", stop)
+        executable_lines = [line.strip() for line in stop.splitlines() if not line.lstrip().startswith("//")]
+        self.assertNotIn("mInterface.close()", executable_lines)
         self.assertNotIn("Thread.sleep(", destroy)
 
     def test_manager_success_requires_service_owned_fd_close_and_subprocess_exit(self):

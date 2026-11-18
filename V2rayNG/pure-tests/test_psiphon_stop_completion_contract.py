@@ -48,6 +48,7 @@ class PsiphonStopCompletionContract(unittest.TestCase):
         stop = self.shutdown
         self.assertIn("stopService(Intent(this, V2RayProxyOnlyService::class.java))", stop)
         self.assertIn("dependsOnXray = usesUpstreamProxy", stop)
+        self.assertIn("psiphonNativeStopAcknowledged = false", stop)
         self.assertIn("xrayNativeStopAcknowledged = false", stop)
         self.assertIn("!evidence.wholeChainCompletionEligible", stop)
 

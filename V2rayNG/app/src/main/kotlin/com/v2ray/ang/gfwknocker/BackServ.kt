@@ -2,6 +2,7 @@ package com.v2ray.ang.gfwknocker
 
 import android.app.Service
 import android.content.Context
+import com.v2ray.ang.service.FragmentorListenerExit
 
 
 class backServ(ctx1 : Context , svc1 : Service , target_ip : String , target_port : Int , nfrag : Int , sleepfrag : Double , is_youtube : Boolean ){
@@ -59,5 +60,19 @@ class backServ(ctx1 : Context , svc1 : Service , target_ip : String , target_por
         runCatching { TLS_serv?.safely_stop_server() }
     }
 
+    /**
+     * Ask both optional local listeners to stop, then observe actual listener
+     * thread exit. A stop request alone is not exit evidence.
+     * This does not await active per-client handler threads or the VPN TUN.
+     */
+    fun stopAndAwaitListeners(timeoutMillis: Long = 3_000L): Boolean {
+        // Always attempt both stops even if either request fails.
+        val httpsStopReturned = runCatching { stop_HTTPS_service() }.isSuccess
+        val tlsStopReturned = runCatching { stop_TLS_service() }.isSuccess
+        val listenersExited = FragmentorListenerExit.allExitedWithin(
+            timeoutMillis, HTTPS_serv, TLS_serv
+        )
+        return httpsStopReturned && tlsStopReturned && listenersExited
+    }
 }
 

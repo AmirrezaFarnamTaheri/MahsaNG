@@ -16,7 +16,7 @@ class VpnStopCommandGateTest {
     private fun simulatedEvidence(role: VpnSessionRole, complete: Boolean): VpnNativeStopEvidence =
         when (role) {
             VpnSessionRole.XRAY -> VpnNativeStopEvidence.Xray(
-                first, 1L, complete, complete, complete, complete, complete
+                first, 1L, complete, complete, complete, complete, complete, complete
             )
             VpnSessionRole.PSIPHON -> VpnNativeStopEvidence.Psiphon(
                 first, 1L, complete, complete, complete

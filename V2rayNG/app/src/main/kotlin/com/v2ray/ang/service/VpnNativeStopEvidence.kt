@@ -27,13 +27,16 @@ internal sealed interface VpnNativeStopEvidence {
         val coreNotRunning: Boolean,
         val tun2socksProcessExited: Boolean,
         val fragmentorListenersExited: Boolean,
+        // A closed listener does not imply accepted-client up/downstream exit.
+        val fragmentorForwardingWorkersExited: Boolean,
         val tunDescriptorClosed: Boolean,
     ) : VpnNativeStopEvidence {
         override val role: VpnSessionRole get() = VpnSessionRole.XRAY
 
         override fun isComplete(): Boolean =
             stopLoopReturned && coreNotRunning && tun2socksProcessExited &&
-                fragmentorListenersExited && tunDescriptorClosed
+                fragmentorListenersExited && fragmentorForwardingWorkersExited &&
+                tunDescriptorClosed
     }
 
     /**

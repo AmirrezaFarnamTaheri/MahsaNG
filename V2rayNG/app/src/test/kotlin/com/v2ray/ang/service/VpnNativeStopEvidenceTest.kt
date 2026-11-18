@@ -28,7 +28,7 @@ class VpnNativeStopEvidenceTest {
             sessionId = id, generation = generation,
             stopLoopReturned = true, coreNotRunning = true,
             tun2socksProcessExited = true, fragmentorListenersExited = true,
-            tunDescriptorClosed = true,
+            fragmentorForwardingWorkersExited = true, tunDescriptorClosed = true,
         )
 
     private fun psiphon(id: String = first, generation: Long = 1L) =
@@ -45,11 +45,41 @@ class VpnNativeStopEvidenceTest {
             xray().copy(coreNotRunning = false),
             xray().copy(tun2socksProcessExited = false),
             xray().copy(fragmentorListenersExited = false),
+            // Listener exit is not proof that accepted clients exited.
+            xray().copy(fragmentorForwardingWorkersExited = false),
             xray().copy(tunDescriptorClosed = false),
         )) {
             assertNull(VpnStopCommandGate.acknowledgeStopped(state, command, missing))
         }
         assertEquals(setOf(VpnSessionRole.XRAY, VpnSessionRole.PSIPHON), state.members)
+    }
+
+    @Test fun stoppedXrayListenerWithLiveForwardersCannotReleaseOrWritePersistedRecord() {
+        val state = stopped()
+        val incomplete = xray().copy(
+            fragmentorListenersExited = true,
+            fragmentorForwardingWorkersExited = false,
+        )
+        class MemoryRecord : VpnSessionRecordIO {
+            var raw: String? = VpnSessionRecordCodec.encode(state)
+            var writes = 0
+            override fun tryLock() = true
+            override fun read(): String? = raw
+            override fun write(value: String): Boolean {
+                raw = value
+                writes++
+                return true
+            }
+            override fun unlock() = Unit
+        }
+        val io = MemoryRecord()
+        val outcome = VpnSessionRecordStore(io).apply {
+            VpnStopCommandGate.acknowledgeStopped(it, command, incomplete)
+        }
+        assertEquals(VpnSessionRecordResult.Rejected, outcome)
+        assertEquals(0, io.writes)
+        assertEquals(state, VpnSessionRecordCodec.decode(requireNotNull(io.raw)))
+        assertNull(VpnSessionFence.begin(state, second, VpnSessionMode.XRAY_VPN))
     }
 
     @Test fun psiphonJniExitWithoutIndependentNativeTunnelAckCannotRelease() {

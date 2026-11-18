@@ -31,6 +31,23 @@ class NativeStopEvidenceContract(unittest.TestCase):
         self.assertIn("VpnSessionRole.XRAY", code)
         self.assertIn("VpnSessionRole.PSIPHON", code)
 
+    def test_xray_evidence_separates_listener_and_client_worker_exit(self):
+        code = (SERVICES / "VpnNativeStopEvidence.kt").read_text(encoding="utf-8")
+        xray = code.split("data class Xray(", 1)[1].split("data class Psiphon(", 1)[0]
+        self.assertIn("val fragmentorListenersExited: Boolean", xray)
+        self.assertIn("val fragmentorForwardingWorkersExited: Boolean", xray)
+        self.assertIn("fragmentorListenersExited && fragmentorForwardingWorkersExited", xray)
+
+        qa = QA.read_text(encoding="utf-8")
+        simulated = qa.split("VpnNativeStopEvidence.Xray(", 1)[1].split(
+            "VpnNativeStopEvidence.Psiphon(", 1
+        )[0]
+        self.assertIn("fragmentorForwardingWorkersExited = complete", simulated)
+        # The live services must still not emit this caller-supplied policy claim.
+        self.assertNotIn("VpnNativeStopEvidence.Xray(", (
+            SERVICES / "V2RayServiceManager.kt"
+        ).read_text(encoding="utf-8"))
+
     def test_qa_boolean_stays_debug_only_and_never_becomes_live_evidence(self):
         code = QA.read_text(encoding="utf-8")
         self.assertIn('"CMD_SIM_ACK"', code)

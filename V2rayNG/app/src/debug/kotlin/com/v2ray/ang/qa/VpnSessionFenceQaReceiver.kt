@@ -161,6 +161,7 @@ abstract class VpnSessionFenceQaReceiver(private val actor: String) : BroadcastR
                                     stopLoopReturned = complete, coreNotRunning = complete,
                                     tun2socksProcessExited = complete,
                                     fragmentorListenersExited = complete,
+                                    fragmentorForwardingWorkersExited = complete,
                                     tunDescriptorClosed = complete,
                                 )
                             }

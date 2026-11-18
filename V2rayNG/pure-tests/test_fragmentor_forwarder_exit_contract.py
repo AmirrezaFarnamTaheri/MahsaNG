@@ -25,6 +25,8 @@ class ForwarderExitContract(unittest.TestCase):
                 self.assertIn("fun awaitForwardersExited(", listener)
                 self.assertIn("forwarders.awaitExited(", listener)
                 self.assertIn("if (!forwarders.start(up_thread, accepted))", listener)
+                self.assertIn("runCatching { accepted.close() }", listener)
+                self.assertNotIn("FragmentorSocketBinding.closeQuietly(accepted)", listener)
 
     def test_upstreams_track_backend_sockets_and_downstream_threads(self):
         for path in (TLS, HTTPS):

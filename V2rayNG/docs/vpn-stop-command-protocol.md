@@ -53,10 +53,14 @@ the observations. Real integration still requires all of the following for
 the right generation:
 
 - Xray: successful `stopLoop()` completion and native core no longer running,
-  observed tun2socks process exit, fragmentor listener exit and TUN closure,
-  plus all owned per-client workers/descriptors and the correct service owner's
-  foreground lifecycle. The typed evidence currently lists the first group
-  but is **not sufficient** to prove the full native receipt.
+  observed tun2socks process exit, fragmentor **listener exit and independently
+  observed accepted-client upstream/downstream forwarding-worker exit**, and
+  service-owned TUN close return. The Xray evidence model now requires separate
+  `fragmentorListenersExited` and `fragmentorForwardingWorkersExited` claims
+  to prevent a listener-only completion from releasing a STOPPING role. The
+  type still does **not** establish native/duplicated FD alias release, Android
+  TUN packet-path safety, provenance of those claims or the correct service
+  owner's foreground lifecycle. It is **not** a native receipt.
 - Psiphon: the JNI tun2socks worker has actually exited, an independent
   native Psiphon tunnel-shutdown receipt exists, the VPN TUN was closed, and
   its same-generation Xray proxy dependency has separately acknowledged stop

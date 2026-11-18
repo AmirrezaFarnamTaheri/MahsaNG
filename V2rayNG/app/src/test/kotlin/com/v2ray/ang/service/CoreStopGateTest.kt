@@ -35,11 +35,41 @@ class CoreStopGateTest {
         assertTrue(gate.completeStop(token, success = true) != null)
     }
 
-    @Test fun nativeStopFailureDoesNotAuthorizeRestart() {
+    @Test fun nativeStopFailureQuarantinesAllFutureStarts() {
         val gate = CoreStopGate()
         val token = gate.beginStop()!!
         assertFalse(gate.requestStart())
         assertEquals(null, gate.completeStop(token, success = false))
+        // A failed stopLoop is not native termination evidence. No new core
+        // may start while the old one may still own sockets or a TUN.
+        assertFalse(gate.requestStart())
+        assertFalse(gate.requestStart())
+        assertTrue(gate.isStopping())
+    }
+
+    @Test fun failedStopCannotBeRetriedOrReleasedByAStaleCompletion() {
+        val gate = CoreStopGate()
+        val token = gate.beginStop()!!
+        assertEquals(null, gate.completeStop(token, success = false))
+        assertEquals(null, gate.beginStop())
+        assertEquals(null, gate.completeStop(token, success = true))
+        assertFalse(gate.canResume(token))
+        assertFalse(gate.requestStart())
+    }
+
+    @Test fun failedStopWithoutPendingStartStillBlocksLaterStartup() {
+        val gate = CoreStopGate()
+        val token = gate.beginStop()!!
+        assertEquals(null, gate.completeStop(token, success = false))
+        assertTrue(gate.isStopping())
+        assertFalse(gate.requestStart())
+    }
+
+    @Test fun successfulStopStillPermitsFreshStartsWithoutDeferral() {
+        val gate = CoreStopGate()
+        val token = gate.beginStop()!!
+        assertEquals(null, gate.completeStop(token, success = true))
+        assertFalse(gate.isStopping())
         assertTrue(gate.requestStart())
     }
 

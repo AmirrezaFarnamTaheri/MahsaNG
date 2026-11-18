@@ -39,8 +39,8 @@ class XrayTun2SocksExitContract(unittest.TestCase):
         code = MANAGER.read_text(encoding="utf-8")
         stop = code.split("fun stopV2rayPoint() {", 1)[1].split("private class ReceiveMessageHandler", 1)[0]
         self.assertIn("is V2RayVpnService -> service.stopAndAwaitTun2socksExit()", stop)
-        self.assertIn("val stopped = coreStopped && fragmentorStopped && tunStopped", stop)
-        self.assertLess(stop.index("val stopped = coreStopped && fragmentorStopped && tunStopped"),
+        self.assertIn("val stopped = coreStopped && fragmentorStopped && tunStopped && tunDescriptorClosed", stop)
+        self.assertLess(stop.index("val stopped = coreStopped && fragmentorStopped && tunStopped && tunDescriptorClosed"),
                         stop.index("AppConfig.MSG_STATE_STOP_SUCCESS"))
         self.assertIn("coreStopGate.completeStop(stopToken, stopped)", stop)
         self.assertNotIn("VpnNativeStopEvidence", stop)

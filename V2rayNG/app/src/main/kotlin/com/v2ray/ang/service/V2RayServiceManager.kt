@@ -290,6 +290,10 @@ object V2RayServiceManager {
                 coreStopped = !v2rayPoint.isRunning
             } catch (failure: Exception) {
                 Log.d(ANG_PACKAGE, "Native stopLoop failed: $failure")
+            } catch (failure: LinkageError) {
+                // A missing JNI symbol must not skip listener, tun2socks or
+                // TUN-owner cleanup. Keep coreStopped=false (unverified).
+                Log.e(ANG_PACKAGE, "Native Xray stop unavailable", failure)
             }
 
             // Closing a listener socket is not proof its Thread exited. The
@@ -342,7 +346,9 @@ object V2RayServiceManager {
                     }
                     currentConfig = null
                 } else if (service != null) {
-                    if (v2rayPoint.isRunning) {
+                    // A failed JNI status query is not evidence of STOPPED and
+                    // must not prevent CoreStopGate from recording failure.
+                    if (runCatching { v2rayPoint.isRunning }.getOrDefault(false)) {
                         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_RUNNING, "")
                     } else {
                         // The core might have exited while a listener still

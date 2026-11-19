@@ -20,8 +20,13 @@ completion acknowledgment.
   skip Psiphon tunnel cleanup or VPN TUN closure.
 - After the existing bounded join, the service checks the worker's actual
   `isAlive` state. It **retains the worker handle** if that worker is still
-  alive, and its existing process-wide native lease remains occupied until
-  the worker's `finally` block releases it.
+  alive. The process-wide JNI preparation gate now issues a unique, identity-
+  bound lease per accepted worker. Its `finally` block releases **only its
+  own lease** after returning from native entry; delayed, duplicate, or
+  unrelated releases cannot open a newer worker's gate. The pre-start failure
+  path likewise releases only the lease acquired by that failed attempt.
+  This Java lease is not a trusted native shutdown receipt, and gate release
+  alone is not proof that every native resource or duplicated FD is gone.
 - The service observes whether synchronous `PsiphonTunnel.stop()` and
   `ParcelFileDescriptor.close()` calls returned without throwing. Psiphon's
   Java-owned VPN TUN PFD is now registered with the existing

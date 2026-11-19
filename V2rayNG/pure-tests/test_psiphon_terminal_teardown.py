@@ -31,9 +31,11 @@ class TerminalPsiphonStartContractTest(unittest.TestCase):
         worker = SERVICE.split("private fun startTun2socks(socksPort: Int)", 1)[1].split(
             "private fun startForegroundNotification()", 1
         )[0]
-        self.assertIn("PsiphonNativeWorkerGate.acquire", worker)
+        self.assertIn("val acquiredLease = PsiphonNativeWorkerGate.acquire", worker)
         self.assertIn("Tun2SocksJniLoader.prepareTun2Socks()", worker)
-        self.assertIn("PsiphonNativeWorkerGate.release()", worker)
+        self.assertIn("PsiphonNativeWorkerGate.release(acquiredLease)", worker)
+        self.assertIn("nativeLease?.let { PsiphonNativeWorkerGate.release(it) }", worker)
+        self.assertNotIn("PsiphonNativeWorkerGate.release()", worker)
         self.assertLess(worker.index("prepareTun2Socks()"), worker.index("worker.start()"))
 
     def test_native_worker_cannot_claim_a_verified_connection_on_launch(self):

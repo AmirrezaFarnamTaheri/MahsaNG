@@ -59,8 +59,12 @@ change to the pinned `tun2socks.c`. The patch adds a native
 `prepareTun2Socks()` entry point and moves the termination-flag reset out
 of the native worker's entry path, where the upstream code could erase a
 concurrent stop. A process-wide worker lease prevents re-arming while a
-previous worker remains alive. The test suite checks the native patch anchors
-and the start/stop interleaving. Any upstream-source drift rejects the build.
+previous worker has not returned from its native entry path. The gate now
+uses identity-bound per-worker leases: a stale release cannot clear the lease
+held by a later worker. The test suite explicitly includes the gate's real
+Kotlin/JUnit tests, checks the native patch anchors and start/stop
+interleaving. These are local admission barriers, not authenticated native
+completion evidence. Any upstream-source drift rejects the build.
 It verifies exported `JNI_OnLoad`, copies the four ABI outputs into the
 application build, and requires their presence in the universal APK.
 

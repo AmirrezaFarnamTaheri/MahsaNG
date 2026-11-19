@@ -53,6 +53,25 @@ class XrayStartFailureTeardownContract(unittest.TestCase):
                         helper.index("AppConfig.MSG_STATE_START_FAILURE"))
         self.assertNotIn("fragmentor?.stopAndAwaitListeners()", helper)  # no main-thread join
 
+    def test_jni_linkage_error_during_async_stop_does_not_skip_remaining_cleanup(self):
+        stop = self.stop
+        core = stop.split("var coreStopped = false", 1)[1].split(
+            "// Closing a listener socket", 1
+        )[0]
+        self.assertIn("catch (failure: LinkageError)", core)
+        self.assertLess(stop.index("catch (failure: LinkageError)"),
+                        stop.index("fragmentor?.stopAndAwaitListeners()"))
+        # An unverified JNI status must never set coreStopped=true.
+        self.assertIn("var coreStopped = false", stop)
+
+    def test_failed_core_status_query_cannot_skip_stop_gate_finalization(self):
+        stop = self.stop
+        failure = stop.split("} else if (service != null) {", 1)[1].split(
+            "val restartToken = coreStopGate.completeStop(", 1
+        )[0]
+        self.assertIn("runCatching { v2rayPoint.isRunning }.getOrDefault(false)", failure)
+        self.assertIn("Log.w(ANG_PACKAGE", failure)
+
     def test_existing_async_stop_still_requires_every_local_resource_exit(self):
         stop = self.stop
         self.assertIn("val stopToken = coreStopGate.beginStop()", stop)

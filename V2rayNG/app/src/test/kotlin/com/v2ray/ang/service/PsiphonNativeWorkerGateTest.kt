@@ -3,20 +3,29 @@ package com.v2ray.ang.service
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
+/** The real singleton gate is tested; these are not native JNI receipts. */
 class PsiphonNativeWorkerGateTest {
     @Test fun stopBeforeNativeEntryIsNotLost() {
         val stopped = AtomicBoolean(true)
-        assertTrue(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
-        stopped.set(true)
-        assertFalse(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
-        assertTrue(stopped.get())
-        PsiphonNativeWorkerGate.release()
-        assertTrue(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
-        assertFalse(stopped.get())
-        PsiphonNativeWorkerGate.release()
+        val first = requireNotNull(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
+        try {
+            stopped.set(true)
+            assertNull(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
+            assertTrue(stopped.get())
+        } finally {
+            assertTrue(PsiphonNativeWorkerGate.release(first))
+        }
+        val second = requireNotNull(PsiphonNativeWorkerGate.acquire { stopped.set(false) })
+        try {
+            assertFalse(stopped.get())
+        } finally {
+            assertTrue(PsiphonNativeWorkerGate.release(second))
+        }
     }
 
     @Test fun nativePrepareFailureDoesNotRetainLease() {
@@ -24,42 +33,57 @@ class PsiphonNativeWorkerGateTest {
             PsiphonNativeWorkerGate.acquire { error("JNI unavailable") }
             fail("expected JNI failure")
         } catch (_: IllegalStateException) { }
-        assertTrue(PsiphonNativeWorkerGate.acquire { })
-        PsiphonNativeWorkerGate.release()
+        val next = requireNotNull(PsiphonNativeWorkerGate.acquire { })
+        assertTrue(PsiphonNativeWorkerGate.release(next))
     }
 
     @Test fun unrelatedThreadCannotReleaseAnotherNativeWorker() {
-        assertTrue(PsiphonNativeWorkerGate.acquire { })
-        val released = CountDownLatch(1)
+        val active = requireNotNull(PsiphonNativeWorkerGate.acquire { })
+        val fake = PsiphonNativeWorkerGate.Lease() // Not the issued instance.
+        val completed = CountDownLatch(1)
+        val incorrectlyReleased = AtomicBoolean(true)
         try {
-            val mistakenCallback = Thread {
-                // This is currently unowned and unconditionally opens the gate.
-                PsiphonNativeWorkerGate.release()
-                released.countDown()
+            val unrelated = Thread {
+                try {
+                    incorrectlyReleased.set(PsiphonNativeWorkerGate.release(fake))
+                } finally {
+                    completed.countDown()
+                }
             }
-            mistakenCallback.start()
-            assertTrue(released.await(2, java.util.concurrent.TimeUnit.SECONDS))
-            mistakenCallback.join(2_000)
-            val overlappingWorker = PsiphonNativeWorkerGate.acquire { }
-            if (overlappingWorker) PsiphonNativeWorkerGate.release()
-            assertFalse("Unrelated callback admitted overlapping JNI owner", overlappingWorker)
+            unrelated.start()
+            assertTrue(completed.await(2, TimeUnit.SECONDS))
+            unrelated.join(2_000)
+            assertFalse(incorrectlyReleased.get())
+            assertNull("Unrelated callback admitted overlapping JNI owner",
+                PsiphonNativeWorkerGate.acquire { })
         } finally {
-            PsiphonNativeWorkerGate.release()
+            assertTrue(PsiphonNativeWorkerGate.release(active))
         }
     }
 
     @Test fun duplicateReleaseMustNotClearSuccessorNativeWorker() {
-        assertTrue(PsiphonNativeWorkerGate.acquire { })
-        PsiphonNativeWorkerGate.release()
-        assertTrue(PsiphonNativeWorkerGate.acquire { })
+        val earlier = requireNotNull(PsiphonNativeWorkerGate.acquire { })
+        assertTrue(PsiphonNativeWorkerGate.release(earlier))
+        val successor = requireNotNull(PsiphonNativeWorkerGate.acquire { })
         try {
-            // A late duplicate callback from an earlier worker.
-            PsiphonNativeWorkerGate.release()
-            val unexpected = PsiphonNativeWorkerGate.acquire { }
-            if (unexpected) PsiphonNativeWorkerGate.release()
-            assertFalse("Old completion opened a successor's JNI lease", unexpected)
+            assertFalse(PsiphonNativeWorkerGate.release(earlier))
+            assertNull("Old completion opened a successor's JNI lease",
+                PsiphonNativeWorkerGate.acquire { })
         } finally {
-            PsiphonNativeWorkerGate.release()
+            assertTrue(PsiphonNativeWorkerGate.release(successor))
+        }
+        // The old lease remains invalid even after the new one exits.
+        assertFalse(PsiphonNativeWorkerGate.release(earlier))
+    }
+
+    @Test fun rejectedAcquireNeverRearmsNativeTerminationFlag() {
+        val prepareCalls = AtomicInteger()
+        val active = requireNotNull(PsiphonNativeWorkerGate.acquire { prepareCalls.incrementAndGet() })
+        try {
+            assertNull(PsiphonNativeWorkerGate.acquire { prepareCalls.incrementAndGet() })
+            assertEquals(1, prepareCalls.get())
+        } finally {
+            assertTrue(PsiphonNativeWorkerGate.release(active))
         }
     }
 
@@ -67,16 +91,27 @@ class PsiphonNativeWorkerGateTest {
         val start = CountDownLatch(1)
         val done = CountDownLatch(16)
         val accepted = AtomicInteger()
+        val owner = AtomicReference<PsiphonNativeWorkerGate.Lease?>()
         repeat(16) {
             Thread {
-                start.await()
-                if (PsiphonNativeWorkerGate.acquire { }) accepted.incrementAndGet()
-                done.countDown()
+                try {
+                    start.await()
+                    val lease = PsiphonNativeWorkerGate.acquire { }
+                    if (lease != null) {
+                        accepted.incrementAndGet()
+                        owner.set(lease)
+                    }
+                } finally {
+                    done.countDown()
+                }
             }.start()
         }
         start.countDown()
-        done.await()
-        assertEquals(1, accepted.get())
-        PsiphonNativeWorkerGate.release()
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        try {
+            assertEquals(1, accepted.get())
+        } finally {
+            owner.get()?.let { assertTrue(PsiphonNativeWorkerGate.release(it)) }
+        }
     }
 }

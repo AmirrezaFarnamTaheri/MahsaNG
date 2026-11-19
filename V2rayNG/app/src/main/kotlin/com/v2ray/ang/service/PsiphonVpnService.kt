@@ -561,15 +561,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             // The duplicate belongs to the worker/native bridge. Do not detach
             // unless we can create and register the worker before teardown.
             val tunFd = iface.dup().detachFd()
-            var leased = false
+            var nativeLease: PsiphonNativeWorkerGate.Lease? = null
             var workerStarted = false
             try {
-                // Arm native termination before publishing the worker. Native
-                // entry cannot erase a later stop signal.
-                if (!PsiphonNativeWorkerGate.acquire {
-                        Tun2SocksJniLoader.prepareTun2Socks()
-                    }) throw IllegalStateException("Previous routing worker is still alive")
-                leased = true
+                // Arm native termination before publishing the worker. The
+                // returned lease belongs only to this exact native attempt.
+                val acquiredLease = PsiphonNativeWorkerGate.acquire {
+                    Tun2SocksJniLoader.prepareTun2Socks()
+                } ?: throw IllegalStateException("Previous routing worker is still alive")
+                nativeLease = acquiredLease
                 val worker = Thread {
                     try {
                         if (teardownStarted.get() || !startGate.isActive()) {
@@ -594,7 +594,10 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
                     } catch (error: Exception) {
                         Log.e(TAG, "Psiphon JNI routing failed", error)
                     } finally {
-                        PsiphonNativeWorkerGate.release()
+                        // A late completion cannot release a newer JNI lease.
+                        if (!PsiphonNativeWorkerGate.release(acquiredLease)) {
+                            Log.e(TAG, "Psiphon JNI worker returned with a stale lease")
+                        }
                         if (!teardownStarted.get()) {
                             // Never preserve a VPN with no packet-routing worker.
                             Thread { stopAll() }.start()
@@ -607,7 +610,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             } catch (failure: Throwable) {
                 tun2socksThread = null
                 if (!workerStarted) {
-                    if (leased) PsiphonNativeWorkerGate.release()
+                    nativeLease?.let { PsiphonNativeWorkerGate.release(it) }
                     runCatching { ParcelFileDescriptor.adoptFd(tunFd).close() }
                 }
                 throw failure

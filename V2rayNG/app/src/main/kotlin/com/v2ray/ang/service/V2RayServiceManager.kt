@@ -222,16 +222,42 @@ object V2RayServiceManager {
             MessageUtil.sendMsg2UI(service, state, "")
             runCatching { showNotification() }.onFailure { Log.d(ANG_PACKAGE, "Notification: $it") }
         } catch (failure: Exception) {
-            Log.d(ANG_PACKAGE, "Native core start failed: $failure")
-            runCatching { fragmentor?.stop_HTTPS_service() }
-            runCatching { fragmentor?.stop_TLS_service() }
-            if (TLS_serv === fragmentor) TLS_serv = null
-            if (receiverRegistered) {
-                runCatching { service.unregisterReceiver(mMsgReceive) }
-            }
-            currentConfig = null
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            cleanupFailedStartup(service, fragmentor, receiverRegistered, failure)
+        } catch (failure: LinkageError) {
+            // Missing/broken JNI is an Error, not an Exception. It must not
+            // strand local forwarding listeners when native startup fails.
+            cleanupFailedStartup(service, fragmentor, receiverRegistered, failure)
         }
+    }
+
+    /**
+     * Start failures may occur AFTER a listener or JNI resource was launched.
+     * The synchronous stop requests interrupt listener I/O promptly, but do
+     * not prove thread exit. Retain the exact fragmentor before dispatching
+     * the existing background stop gate so a new start stays fenced until
+     * core, listener/forwarder, tun2socks and TUN close evidence is complete.
+     *
+     * Invoked under startV2rayPoint's manager monitor. Do not join threads
+     * or infer cross-process native completion on this startup/UI path.
+     */
+    private fun cleanupFailedStartup(
+        service: Service,
+        fragmentor: backServ?,
+        receiverRegistered: Boolean,
+        failure: Throwable,
+    ) {
+        Log.d(ANG_PACKAGE, "Native core start failed: $failure")
+        runCatching { fragmentor?.stop_HTTPS_service() }
+        runCatching { fragmentor?.stop_TLS_service() }
+        // A stop request is not exit evidence. The async stop observer must
+        // retain this handle even when failure happened before publication.
+        if (fragmentor != null) TLS_serv = fragmentor
+        stopV2rayPoint()
+        if (receiverRegistered) {
+            runCatching { service.unregisterReceiver(mMsgReceive) }
+        }
+        currentConfig = null
+        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
     }
 
     /**
@@ -264,6 +290,10 @@ object V2RayServiceManager {
                 coreStopped = !v2rayPoint.isRunning
             } catch (failure: Exception) {
                 Log.d(ANG_PACKAGE, "Native stopLoop failed: $failure")
+            } catch (failure: LinkageError) {
+                // A missing JNI symbol must not skip listener, tun2socks or
+                // TUN-owner cleanup. Keep coreStopped=false (unverified).
+                Log.e(ANG_PACKAGE, "Native Xray stop unavailable", failure)
             }
 
             // Closing a listener socket is not proof its Thread exited. The
@@ -316,7 +346,9 @@ object V2RayServiceManager {
                     }
                     currentConfig = null
                 } else if (service != null) {
-                    if (v2rayPoint.isRunning) {
+                    // A failed JNI status query is not evidence of STOPPED and
+                    // must not prevent CoreStopGate from recording failure.
+                    if (runCatching { v2rayPoint.isRunning }.getOrDefault(false)) {
                         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_RUNNING, "")
                     } else {
                         // The core might have exited while a listener still

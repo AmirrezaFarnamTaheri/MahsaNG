@@ -22,7 +22,10 @@ a replacement start.
   enters the same `CoreStopGate` asynchronous teardown as an explicit Stop.
   A stop request alone is not listener exit; the existing cleanup gate checks
   core, listener/client workers, tun2socks and owned TUN closure before
-  permitting another in-process start. A native failure whose completion is
+  permitting another in-process start. A JNI `LinkageError` during asynchronous
+  `stopLoop` or its running-state query cannot bypass the remaining owner
+  checks or the failed-stop gate finalization. An unavailable JNI status is
+  **not** a confirmed stopped core. A native failure whose completion is
   unverified remains quarantined rather than allowing speculative restart.
 - `backServ.stopAndAwaitListeners()` asks **both** optional listener services
   to stop before waiting for listener threads to exit.

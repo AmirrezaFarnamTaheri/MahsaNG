@@ -16,6 +16,14 @@ a replacement start.
 ## Local exit observation
 
 - The asynchronous IO teardown still requests native Xray `stopLoop()`.
+- A startup exception (including `LinkageError` from a missing JNI binding)
+  after optional fragmentor creation now requests listener stops **without
+  blocking the startup thread**, keeps the listener owner referenced, and
+  enters the same `CoreStopGate` asynchronous teardown as an explicit Stop.
+  A stop request alone is not listener exit; the existing cleanup gate checks
+  core, listener/client workers, tun2socks and owned TUN closure before
+  permitting another in-process start. A native failure whose completion is
+  unverified remains quarantined rather than allowing speculative restart.
 - `backServ.stopAndAwaitListeners()` asks **both** optional listener services
   to stop before waiting for listener threads to exit.
 - `FragmentorListenerExit.allExitedWithin()` requires observed listener

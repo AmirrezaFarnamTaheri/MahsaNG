@@ -36,10 +36,19 @@ notification Stop action.
    shutdown must retain the participant in STOPPING. The next session cannot
    begin until the last member has released.
 6. On service/process death, a stale membership cannot expire by wall-clock
-   time. A separately reviewed controller must confirm the old TUN, native
-   workers and sockets are gone before any recovery transition clears a
-   stranded STOPPING record. Tokens are *fencing identifiers*, not secrets or
-   origin authentication; Android IPC must be private/permission restricted.
+   time. The pure `VpnProcessDeathQuarantine.markLost()` policy now permits a
+   **future authenticated process observer** to quarantine only the matching
+   *already enrolled* ID/generation/role. For STARTING with an attached member
+   or ACTIVE, it marks the session STOPPING **without removing any role**;
+   duplicate reports in STOPPING are idempotent. An unreserved STARTING state
+   remains STARTING rather than being inferred IDLE. An unowned, wrong-role,
+   wrong-generation or already-released death report is rejected.
+   This policy is **not wired** to Android services, death watchers or IPC.
+   A separately reviewed controller must confirm the old TUN, native
+   workers and sockets are gone before any transition releases a stranded
+   STOPPING role. Tokens are *fencing identifiers*, not secrets or
+   origin authentication; a real process observer and Android IPC must be
+   private/permission restricted and bound to the correct native owner.
 
 ## Native acknowledgement prerequisites
 
@@ -76,6 +85,11 @@ the right generation:
   then complete physical Wi-Fi/cellular VPN and packet-path QA.
 
 ## What CI verifies today
+
+`VpnProcessDeathQuarantineTest` also exercises the pure loss policy,
+including record locking, stale/mismatched reports, quarantined partial
+startup, and refusal to treat process death as native stop evidence.
+Neither test is a trustworthy OS process-death source or native receipt.
 
 `VpnStopCommandGateTest` runs on the real pure Kotlin/JUnit build. The
 `test-vpn-stop-command-emulator.sh` gate runs in two **debug QA** Android

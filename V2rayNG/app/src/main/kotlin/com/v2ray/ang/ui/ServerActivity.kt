@@ -937,13 +937,19 @@ class ServerActivity : BaseActivity() {
                 if (settingsStorage?.decodeBool(AppConfig.PREF_CONFIRM_REMOVE) == true) {
                     AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
                         .setPositiveButton(android.R.string.ok) { _, _ ->
-                            MmkvManager.removeServer(editGuid)
-                            finish()
+                            if (MmkvManager.removeServer(editGuid)) {
+                                finish()
+                            } else {
+                                toast(R.string.toast_failure)
+                            }
                         }
                         .show()
                 } else {
-                    MmkvManager.removeServer(editGuid)
-                    finish()
+                    if (MmkvManager.removeServer(editGuid)) {
+                        finish()
+                    } else {
+                        toast(R.string.toast_failure)
+                    }
                 }
             }
         }

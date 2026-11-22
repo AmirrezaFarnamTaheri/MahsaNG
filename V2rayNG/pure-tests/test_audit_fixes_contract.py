@@ -71,6 +71,39 @@ class AuditFixesContractTest(unittest.TestCase):
         custom = (KOTLIN / "ui/ServerCustomConfigActivity.kt").read_text(encoding="utf-8")
         self.assertIn("if (savedGuid.isBlank())", server)
         self.assertIn("if (savedGuid.isBlank())", custom)
+        self.assertIn("if (MmkvManager.removeServer(editGuid))", server)
+        self.assertIn("if (MmkvManager.removeServer(editGuid))", custom)
+        adapter = (KOTLIN / "ui/MainRecyclerAdapter.kt").read_text(encoding="utf-8")
+        self.assertIn("fun removeServer(guid: String): Boolean", vm)
+        self.assertIn("if (mActivity.mainViewModel.removeServer(guid))", adapter)
+
+    def test_coderabbit_followups_harden_restart_fragmentor_cleanup_query_and_route_state(self):
+        vpn = (KOTLIN / "service/V2RayVpnService.kt").read_text(encoding="utf-8")
+        self.assertIn("internal fun isLifecycleActive(): Boolean = fdScope.isActive", vpn)
+        self.assertIn("if (!fdScope.isActive) return false", vpn)
+        manager = (KOTLIN / "service/V2RayServiceManager.kt").read_text(encoding="utf-8")
+        self.assertIn("!service.isLifecycleActive()", manager)
+        self.assertIn("!currentService.isLifecycleActive()", manager)
+
+        for name in ("TLS_Fragmentor.kt", "HTTPS_Fragmentor.kt"):
+            src = (KOTLIN / "gfwknocker" / name).read_text(encoding="utf-8")
+            self.assertIn("InetAddress.getAllByName(", src)
+
+        protected_ui = (KOTLIN / "ui/ProtectedProfileFilesActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("NonCancellable + Dispatchers.IO", protected_ui)
+        self.assertIn("if (!exportSucceeded)", protected_ui)
+
+        downloader = (KOTLIN / "util/AppFetchFileDownloader.kt").read_text(encoding="utf-8")
+        self.assertIn("internal fun publishReplacement(", downloader)
+        self.assertNotIn("target.exists() && target.delete()", downloader)
+
+        ang = (KOTLIN / "util/AngConfigManager.kt").read_text(encoding="utf-8")
+        self.assertNotIn('it.split("=")', ang)
+        self.assertIn('it.split("=", limit = 2)', ang)
+
+        asset = (KOTLIN / "ui/UserAssetActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("AppConfig.MSG_REGISTER_CLIENT", asset)
+        self.assertIn("AppFetchRouteChooser.choose(this, { vpnRunning })", asset)
 
 
 if __name__ == "__main__":

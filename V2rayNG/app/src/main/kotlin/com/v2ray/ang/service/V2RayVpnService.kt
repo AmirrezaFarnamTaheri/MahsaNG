@@ -257,6 +257,10 @@ class V2RayVpnService : VpnService(), ServiceControl {
             builder.setMetered(false)
         }
 
+        if (!fdScope.isActive) {
+            throw IllegalStateException("Xray VPN service lifecycle is no longer active")
+        }
+
         // Reserve BEFORE Builder.establish(), which can complete after Stop.
         if (!tunCloseTracker.beginEstablish()) {
             throw IllegalStateException("Xray VPN TUN establishment blocked by Stop")
@@ -404,13 +408,18 @@ class V2RayVpnService : VpnService(), ServiceControl {
         //return super.onStartCommand(intent, flags, startId)
     }
 
+    internal fun isLifecycleActive(): Boolean = fdScope.isActive
+
     /**
      * Reopen local TUN/subprocess trackers on a reused V2RayVpnService instance
-     * ONLY after a verified clean stop left zero pending establishments,
-     * unclosed descriptors, pending launches or live tun2socks children.
+     * ONLY while its fdScope is still active and after a verified clean stop left
+     * zero pending establishments, unclosed descriptors, pending launches or live
+     * tun2socks children.
      */
-    internal fun prepareForVerifiedRestart(): Boolean =
-        tunCloseTracker.resetForNewSession() && tunExitTracker.resetForNewSession()
+    internal fun prepareForVerifiedRestart(): Boolean {
+        if (!fdScope.isActive) return false
+        return tunCloseTracker.resetForNewSession() && tunExitTracker.resetForNewSession()
+    }
 
     /** Signal termination on any lifecycle thread; do not block Android main. */
     private fun stopOwnedTun2socks() {

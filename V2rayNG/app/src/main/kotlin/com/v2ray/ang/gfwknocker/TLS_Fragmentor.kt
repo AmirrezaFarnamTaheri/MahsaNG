@@ -3,8 +3,10 @@ package com.v2ray.ang.gfwknocker
 //import android.util.Log
 //import android.net.VpnService
 
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -147,13 +149,26 @@ internal class My_upstream(
 
     override fun run() {
         try {
-            val remote = Socket()
-            backend_sock = remote
-            // Track before connect() so stop() unblocks even a stalled TCP SYN.
-            if (!forwarders.track(this, backend_sock!!)) {
-                throw IllegalStateException("Fragmentor stopped during backend connection")
+            val addresses = InetAddress.getAllByName(target_ip)
+            var connected: Socket? = null
+            var lastError: Exception? = null
+            for (address in addresses) {
+                val remote = Socket()
+                backend_sock = remote
+                // Track before connect() so stop() unblocks even a stalled TCP SYN.
+                if (!forwarders.track(this, backend_sock!!)) {
+                    throw IllegalStateException("Fragmentor stopped during backend connection")
+                }
+                try {
+                    remote.connect(InetSocketAddress(address, target_port), myT_socket_timeout)
+                    connected = remote
+                    break
+                } catch (connectError: Exception) {
+                    lastError = connectError
+                    runCatching { remote.close() }
+                }
             }
-            remote.connect(InetSocketAddress(target_ip, target_port), myT_socket_timeout)
+            backend_sock = connected ?: throw (lastError ?: IOException("Unable to connect to $target_ip:$target_port"))
             backend_sock!!.soTimeout = myT_socket_timeout
             backend_sock!!.tcpNoDelay = true
             ops = backend_sock!!.getOutputStream()

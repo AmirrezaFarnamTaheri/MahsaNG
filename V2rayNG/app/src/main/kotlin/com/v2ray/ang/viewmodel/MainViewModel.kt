@@ -139,11 +139,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateListAction.value = -1
     }
 
-    fun removeServer(guid: String) {
+    fun removeServer(guid: String): Boolean {
         if (!MmkvManager.removeServer(guid)) {
             getApplication<AngApplication>().toast(R.string.toast_failure)
             reloadServerList()
-            return
+            return false
         }
         tcpEvidenceByGuid.remove(guid)
         tcpEvidenceRevisions.remove(guid)
@@ -152,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if(index >= 0){
             serversCache.removeAt(index)
         }
+        return true
     }
 
     fun appendCustomConfigServer(server: String) {

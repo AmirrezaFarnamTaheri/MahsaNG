@@ -85,16 +85,40 @@ object AppFetchFileDownloader {
                 }
             }
             if (total <= 0L || temporary.length() == 0L) return false
-            if (temporary.renameTo(target)) return true
-            // On POSIX/Android, same-directory renameTo atomically replaces target.
-            // On Windows JVM tests, renameTo fails when target exists.
-            return target.exists() && target.delete() && temporary.renameTo(target)
+            return publishReplacement(temporary, target, parent)
         } catch (_: Exception) {
             // Never log the remote URL: it may contain embedded credentials.
             return false
         } finally {
             connection?.disconnect()
             staging?.delete()
+        }
+    }
+
+    /**
+     * Atomically replace [target] with [temporary]. On filesystems where
+     * [File.renameTo] cannot overwrite an existing destination (e.g. Windows JVM),
+     * move [target] to a temporary backup and restore it if publishing fails so
+     * a failed replacement never loses the existing working asset.
+     */
+    internal fun publishReplacement(
+        temporary: File,
+        target: File,
+        parent: File,
+        rename: (File, File) -> Boolean = { src, dst -> src.renameTo(dst) },
+    ): Boolean {
+        if (rename(temporary, target)) return true
+        if (!target.exists()) return false
+        val backup = File.createTempFile("${target.name}.", ".backup", parent)
+        if (!backup.delete()) return false
+        if (!rename(target, backup)) return false
+        return if (rename(temporary, target)) {
+            backup.delete()
+            true
+        } else {
+            // Restore the existing asset before returning failure.
+            rename(backup, target)
+            false
         }
     }
 }

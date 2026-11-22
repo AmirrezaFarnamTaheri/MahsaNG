@@ -1,8 +1,10 @@
 package com.v2ray.ang.gfwknocker
 
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -238,11 +240,26 @@ internal class My_upstream_H(
                 }
             }
 //            println("$remote_host --> $remote_port")
-            backend_sock = Socket()
-            if (!forwarders.track(this, backend_sock)) {
-                return null
+            val host = remote_host?.takeIf { it.isNotBlank() }
+                ?: throw IOException("Missing remote host")
+            val addresses = InetAddress.getAllByName(host)
+            var connected: Socket? = null
+            var lastError: Exception? = null
+            for (address in addresses) {
+                val candidate = Socket()
+                if (!forwarders.track(this, candidate)) {
+                    return null
+                }
+                try {
+                    candidate.connect(InetSocketAddress(address, remote_port), myH_socket_timeout)
+                    connected = candidate
+                    break
+                } catch (connectError: Exception) {
+                    lastError = connectError
+                    runCatching { candidate.close() }
+                }
             }
-            backend_sock.connect(InetSocketAddress(remote_host, remote_port), myH_socket_timeout)
+            backend_sock = connected ?: throw (lastError ?: IOException("Unable to connect to $host:$remote_port"))
             backend_sock.soTimeout = myH_socket_timeout
             backend_sock.tcpNoDelay = true
             response_data =

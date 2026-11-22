@@ -381,7 +381,7 @@ object AngConfigManager {
                 var fingerprint = config.outboundBean?.streamSettings?.tlsSettings?.fingerprint
                 if (uri.rawQuery != null) {
                     val queryParam = uri.rawQuery.split("&")
-                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                        .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
                     val sni = config.outboundBean?.streamSettings?.populateTransportSettings(
                         queryParam["type"] ?: "tcp",
@@ -423,7 +423,7 @@ object AngConfigManager {
             } else if (str.startsWith(EConfigType.VLESS.protocolScheme)) {
                 val uri = URI(Utils.fixIllegalUrl(str))
                 val queryParam = uri.rawQuery.split("&")
-                    .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                    .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
                 config = ServerConfig.create(EConfigType.VLESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return -1
 
@@ -471,7 +471,7 @@ object AngConfigManager {
                     config.remarks = Utils.urlDecode(uri.fragment ?: "")
 
                     val queryParam = uri.rawQuery.split("&")
-                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                        .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
                     config.outboundBean?.settings?.let { wireguard ->
                         wireguard.secretKey = uri.userInfo
@@ -528,7 +528,7 @@ object AngConfigManager {
                     ?: error("parse user info fail.")
             val tls = tlsStr.isNotBlank()
             val queryParam = uri.rawQuery.split("&")
-                .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
             val streamSetting = config.outboundBean?.streamSettings ?: return false
             config.remarks = Utils.urlDecode(uri.fragment ?: "")
@@ -1290,7 +1290,7 @@ object AngConfigManager {
                 var fingerprint = config.outboundBean?.streamSettings?.tlsSettings?.fingerprint
                 if (uri.rawQuery != null) {
                     val queryParam = uri.rawQuery.split("&")
-                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                        .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
                     val sni = config.outboundBean?.streamSettings?.populateTransportSettings(
                         queryParam["type"] ?: "tcp",
@@ -1332,7 +1332,7 @@ object AngConfigManager {
             } else if (str.startsWith(EConfigType.VLESS.protocolScheme)) {
                 val uri = URI(Utils.fixIllegalUrl(str))
                 val queryParam = uri.rawQuery.split("&")
-                    .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                    .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
                 config = ServerConfig.create(EConfigType.VLESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return ""
 
@@ -1380,7 +1380,7 @@ object AngConfigManager {
                     config.remarks = Utils.urlDecode(uri.fragment ?: "")
 
                     val queryParam = uri.rawQuery.split("&")
-                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                        .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
                     config.outboundBean?.settings?.let { wireguard ->
                         wireguard.secretKey = uri.userInfo
@@ -1584,7 +1584,7 @@ object AngConfigManager {
                 var fingerprint = config.outboundBean?.streamSettings?.tlsSettings?.fingerprint
                 if (uri.rawQuery != null) {
                     val queryParam = uri.rawQuery.split("&")
-                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                        .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
                     val sni = config.outboundBean?.streamSettings?.populateTransportSettings(
                         queryParam["type"] ?: "tcp",
@@ -1620,7 +1620,7 @@ object AngConfigManager {
             } else if (str.startsWith(EConfigType.VLESS.protocolScheme)) {
                 val uri = URI(Utils.fixIllegalUrl(str))
                 val queryParam = uri.rawQuery.split("&")
-                    .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                    .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
                 config = ServerConfig.create(EConfigType.VLESS)
                 val streamSetting = config.outboundBean?.streamSettings ?: return ""
                 var fingerprint = streamSetting.tlsSettings?.fingerprint

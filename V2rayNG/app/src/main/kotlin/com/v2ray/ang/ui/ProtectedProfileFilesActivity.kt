@@ -19,6 +19,7 @@ import com.v2ray.ang.util.MmkvManager
 import com.v2ray.ang.util.PasswordProtectedLinkArchive
 import com.v2ray.ang.util.ProfileLinkBundle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -86,7 +87,7 @@ class ProtectedProfileFilesActivity : BaseActivity() {
     }
 
     private fun deleteUnusedExportDocument(uri: Uri) {
-        runCatching { DocumentsContract.deleteDocument(contentResolver, uri) }
+        runCatching { DocumentsContract.deleteDocument(applicationContext.contentResolver, uri) }
     }
 
     private fun showExportPasswordDialog(uri: Uri) {
@@ -122,34 +123,45 @@ class ProtectedProfileFilesActivity : BaseActivity() {
                     exportStarted = true
                     lifecycleScope.launch {
                         status.setText(R.string.protected_profile_working)
-                        val result = withContext(Dispatchers.IO) {
-                            try {
-                                val export = AngConfigManager.exportPortableProfileLinks(
-                                    MmkvManager.decodeServerList()
-                                ) ?: return@withContext null
-                                val plain = export.contents.toByteArray(StandardCharsets.UTF_8)
-                                val encrypted = try {
-                                    PasswordProtectedLinkArchive.encrypt(plain, pass)
-                                } finally {
-                                    plain.fill(0)
-                                }
+                        var exportSucceeded = false
+                        val result = try {
+                            withContext(Dispatchers.IO) {
                                 try {
-                                    contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                                        output.write(encrypted)
-                                        output.flush()
-                                        export.count to export.skipped
+                                    val export = AngConfigManager.exportPortableProfileLinks(
+                                        MmkvManager.decodeServerList()
+                                    ) ?: return@withContext null
+                                    val plain = export.contents.toByteArray(StandardCharsets.UTF_8)
+                                    val encrypted = try {
+                                        PasswordProtectedLinkArchive.encrypt(plain, pass)
+                                    } finally {
+                                        plain.fill(0)
                                     }
-                                } finally {
-                                    encrypted.fill(0)
+                                    val written = try {
+                                        contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                                            output.write(encrypted)
+                                            output.flush()
+                                            export.count to export.skipped
+                                        }
+                                    } finally {
+                                        encrypted.fill(0)
+                                    }
+                                    if (written != null) {
+                                        exportSucceeded = true
+                                    }
+                                    written
+                                } catch (_: Exception) {
+                                    null
                                 }
-                            } catch (_: Exception) {
-                                null
-                            } finally {
-                                pass.fill('\u0000')
+                            }
+                        } finally {
+                            pass.fill('\u0000')
+                            if (!exportSucceeded) {
+                                withContext(NonCancellable + Dispatchers.IO) {
+                                    deleteUnusedExportDocument(uri)
+                                }
                             }
                         }
                         if (result == null) {
-                            withContext(Dispatchers.IO) { deleteUnusedExportDocument(uri) }
                             status.text = getString(R.string.protected_profile_export_failed)
                         } else {
                             status.text = getString(

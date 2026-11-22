@@ -226,10 +226,11 @@ class MainRecyclerAdapter(val activity: MainActivity) : RecyclerView.Adapter<Mai
         }
     }
 
-    private  fun removeServer(guid: String,position:Int) {
-        mActivity.mainViewModel.removeServer(guid)
-        notifyItemRemoved(position)
-        notifyItemRangeChanged(position, mActivity.mainViewModel.serversCache.size)
+    private fun removeServer(guid: String, position: Int) {
+        if (mActivity.mainViewModel.removeServer(guid)) {
+            notifyItemRemoved(position)
+            notifyItemRangeChanged(position, mActivity.mainViewModel.serversCache.size)
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BaseViewHolder {
@@ -270,8 +271,9 @@ class MainRecyclerAdapter(val activity: MainActivity) : RecyclerView.Adapter<Mai
         if (guid != mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)) {
 //            mActivity.alert(R.string.del_config_comfirm) {
 //                positiveButton(android.R.string.ok) {
-            mActivity.mainViewModel.removeServer(guid)
-            notifyItemRemoved(position)
+            if (mActivity.mainViewModel.removeServer(guid)) {
+                notifyItemRemoved(position)
+            }
 //                }
 //                show()
 //            }

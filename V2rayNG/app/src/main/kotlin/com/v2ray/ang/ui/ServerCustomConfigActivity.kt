@@ -116,8 +116,11 @@ class ServerCustomConfigActivity : BaseActivity() {
         if (editGuid.isNotEmpty()) {
             AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
                     .setPositiveButton(android.R.string.ok) { _, _ ->
-                        MmkvManager.removeServer(editGuid)
-                        finish()
+                        if (MmkvManager.removeServer(editGuid)) {
+                            finish()
+                        } else {
+                            toast(R.string.toast_failure)
+                        }
                     }
                     .show()
         }

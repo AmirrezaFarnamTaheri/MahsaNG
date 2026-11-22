@@ -157,4 +157,45 @@ class AppFetchFileDownloaderTest {
         assertEquals("redirected", target.readText())
         assertEquals(listOf(Proxy.Type.HTTP, Proxy.Type.HTTP), seenProxies)
     }
+
+    @Test fun failedReplacementRestoresOriginalAssetFromBackup() {
+        val target = dir.resolve("geoip.dat").apply { writeText("old") }
+        val staged = dir.resolve("geoip.dat.staging").apply { writeText("new") }
+        var stagedRenameAttempts = 0
+        val published = AppFetchFileDownloader.publishReplacement(
+            temporary = staged,
+            target = target,
+            parent = dir,
+            rename = { src, dst ->
+                if (src == staged && dst == target) {
+                    stagedRenameAttempts += 1
+                    false
+                } else {
+                    src.renameTo(dst)
+                }
+            },
+        )
+        assertFalse(published)
+        assertEquals(2, stagedRenameAttempts)
+        assertTrue(target.exists())
+        assertEquals("old", target.readText())
+        assertTrue(staged.exists())
+        // No orphaned backup files should remain after restoration.
+        assertEquals(listOf("geoip.dat", "geoip.dat.staging"), dir.listFiles().orEmpty().map { it.name }.sorted())
+    }
+
+    @Test fun failedBackupRenamePreservesExistingAsset() {
+        val target = dir.resolve("geoip.dat").apply { writeText("old") }
+        val staged = dir.resolve("geoip.dat.staging").apply { writeText("new") }
+        val published = AppFetchFileDownloader.publishReplacement(
+            temporary = staged,
+            target = target,
+            parent = dir,
+            rename = { _, _ -> false },
+        )
+        assertFalse(published)
+        assertTrue(target.exists())
+        assertEquals("old", target.readText())
+        assertEquals(listOf("geoip.dat", "geoip.dat.staging"), dir.listFiles().orEmpty().map { it.name }.sorted())
+    }
 }

@@ -180,6 +180,13 @@ object V2RayServiceManager {
             }
             return
         }
+        if (service is V2RayVpnService && !service.isLifecycleActive()) {
+            Log.e(ANG_PACKAGE, "Refusing Xray VPN start on destroyed V2RayVpnService")
+            cancelNotificationFor(service)
+            service.stopSelf()
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
         // If stopLoop is still executing, coalesce starts into one deferred retry.
         if (!coreStopGate.requestStart()) return
 
@@ -410,7 +417,16 @@ object V2RayServiceManager {
 
                 val restartToken = coreStopGate.completeStop(stopToken, stopped)
                 if (restartToken != null && coreStopGate.canResume(restartToken)) {
-                    startV2rayPoint()
+                    val currentService = serviceControl?.get()?.getService()
+                    if (currentService is V2RayVpnService && !currentService.isLifecycleActive()) {
+                        Log.w(ANG_PACKAGE, "Deferred Xray restart observed destroyed V2RayVpnService; launching fresh service")
+                        runCatching { startV2Ray(currentService.applicationContext) }.onFailure {
+                            Log.e(ANG_PACKAGE, "Unable to relaunch V2RayVpnService after verified stop", it)
+                            MessageUtil.sendMsg2UI(currentService, AppConfig.MSG_STATE_START_FAILURE, "")
+                        }
+                    } else {
+                        startV2rayPoint()
+                    }
                 }
             }
         }

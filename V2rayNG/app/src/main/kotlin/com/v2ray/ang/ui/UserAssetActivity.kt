@@ -1,8 +1,12 @@
 package com.v2ray.ang.ui
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.system.Os
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -21,6 +25,7 @@ import com.v2ray.ang.databinding.ItemRecyclerUserAssetBinding
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.AppFetchFileDownloader
+import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.SafeAssetFilename
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +44,23 @@ class UserAssetActivity : BaseActivity() {
     }
 
     private lateinit var binding: ActivitySubSettingBinding
+    @Volatile private var vpnRunning: Boolean = false
+    private var vpnReceiverRegistered: Boolean = false
+
+    private val vpnStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            when (intent?.getIntExtra("key", 0)) {
+                AppConfig.MSG_STATE_RUNNING, AppConfig.MSG_STATE_START_SUCCESS -> {
+                    vpnRunning = true
+                }
+                AppConfig.MSG_STATE_NOT_RUNNING,
+                AppConfig.MSG_STATE_START_FAILURE,
+                AppConfig.MSG_STATE_STOP_SUCCESS -> {
+                    vpnRunning = false
+                }
+            }
+        }
+    }
 
     val extDir by lazy { File(Utils.userAssetPath(this)) }
     val geofiles = arrayOf("geosite.dat", "geoip.dat")
@@ -51,9 +73,32 @@ class UserAssetActivity : BaseActivity() {
         title = getString(R.string.title_user_asset_setting)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
+        vpnRunning = intent.getBooleanExtra(EXTRA_VPN_RUNNING, false)
+        val filter = IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(vpnStateReceiver, filter)
+        }
+        vpnReceiverRegistered = true
+
         binding.recyclerView.setHasFixedSize(true)
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = UserAssetAdapter()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Query live service state so route choice reflects changes while this screen stays open.
+        MessageUtil.sendMsg2Service(this, AppConfig.MSG_REGISTER_CLIENT, "")
+    }
+
+    override fun onDestroy() {
+        if (vpnReceiverRegistered) {
+            runCatching { unregisterReceiver(vpnStateReceiver) }
+            vpnReceiverRegistered = false
+        }
+        super.onDestroy()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -166,8 +211,7 @@ class UserAssetActivity : BaseActivity() {
 
     private fun downloadGeoFiles() {
         // Prefer a live local proxy; offline direct downloads require explicit consent.
-        val vpnReportedRunning = intent.getBooleanExtra(EXTRA_VPN_RUNNING, false)
-        AppFetchRouteChooser.choose(this, { vpnReportedRunning }) { route ->
+        AppFetchRouteChooser.choose(this, { vpnRunning }) { route ->
             toast(R.string.msg_downloading_content)
             geofiles.forEach { name ->
                 lifecycleScope.launch(Dispatchers.IO) {

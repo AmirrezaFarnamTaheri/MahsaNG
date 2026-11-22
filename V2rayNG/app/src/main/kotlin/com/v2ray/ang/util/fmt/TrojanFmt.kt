@@ -44,7 +44,7 @@ object TrojanFmt {
             )
         } else {
             val queryParam = uri.rawQuery.split("&")
-                .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
             val sni = config.outboundBean?.streamSettings?.populateTransportSettings(
                 queryParam["type"] ?: "tcp",

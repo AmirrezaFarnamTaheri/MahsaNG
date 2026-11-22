@@ -16,7 +16,7 @@ object WireguardFmt {
             config.remarks = Utils.urlDecode(uri.fragment ?: "")
 
             val queryParam = uri.rawQuery.split("&")
-                .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+                .associate { it.split("=", limit = 2).let { (k, v) -> k to Utils.urlDecode(v) } }
 
             config.outboundBean?.settings?.let { wireguard ->
                 wireguard.secretKey = uri.userInfo

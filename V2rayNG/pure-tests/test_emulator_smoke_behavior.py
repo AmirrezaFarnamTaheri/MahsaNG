@@ -2,8 +2,10 @@
 import os
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
+from shell_test_utils import find_bash
 
 SCRIPT = pathlib.Path(__file__).with_name("smoke-android-emulator.sh")
 
@@ -38,9 +40,8 @@ class EmulatorForegroundSmokeTest(unittest.TestCase):
             (qa_dir / "test-vpn-start-command-emulator.sh").write_text(
                 "#!/bin/bash\necho fake-start-command-qa-invoked\n", encoding="utf-8"
             )
-            adb = binaries / "adb"
-            adb.write_text("""#!/usr/bin/env python3
-import os
+            adb_script = binaries / "adb_impl.py"
+            adb_script.write_text("""import os
 import pathlib
 import sys
 args = sys.argv[1:]
@@ -68,10 +69,17 @@ elif args[:2] == ["install", "-r"]:
 elif args[:3] == ["shell", "am", "start"]:
     print("Status: ok")
 sys.exit(0)
-""", encoding="utf-8")
+""", encoding="utf-8", newline="\n")
+            adb = binaries / "adb"
+            python_bin = pathlib.Path(sys.executable).as_posix()
+            adb.write_text(
+                f'#!/bin/sh\nexec "{python_bin}" "{adb_script.as_posix()}" "$@"\n',
+                encoding="utf-8",
+                newline="\n",
+            )
             adb.chmod(0o755)
             fast_sleep = binaries / "sleep"
-            fast_sleep.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fast_sleep.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
             fast_sleep.chmod(0o755)
             environment = os.environ.copy()
             marker = root / "permission-denied"
@@ -80,17 +88,18 @@ sys.exit(0)
                 FAKE_CALLS=str(calls),
                 FAKE_MARKER=str(marker),
                 FAKE_MODE=mode,
-                GITHUB_WORKSPACE=str(root),
+                GITHUB_WORKSPACE=root.as_posix(),
                 PATH=str(binaries) + os.pathsep + environment.get("PATH", ""),
             )
             result = subprocess.run(
-                ["bash", str(SCRIPT)],
+                [find_bash(), SCRIPT.as_posix()],
                 capture_output=True,
                 text=True,
                 env=environment,
                 timeout=25,
             )
-            return result, marker.exists(), calls.read_text(encoding="utf-8")
+            logged = calls.read_text(encoding="utf-8") if calls.exists() else ""
+            return result, marker.exists(), logged
 
     def test_success_requires_actual_main_activity_in_foreground(self):
         result, denied, calls = self.run_smoke("normal")

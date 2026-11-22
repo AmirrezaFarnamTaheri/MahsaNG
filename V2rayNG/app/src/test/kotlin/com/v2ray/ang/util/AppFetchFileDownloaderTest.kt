@@ -20,10 +20,15 @@ class AppFetchFileDownloaderTest {
         dir.deleteRecursively()
     }
 
-    private class Response(private val code: Int, private val payload: ByteArray) :
-        HttpURLConnection(URL("https://example.test/asset")) {
+    private class Response(
+        private val code: Int,
+        private val payload: ByteArray,
+        private val location: String? = null,
+    ) : HttpURLConnection(URL("https://example.test/asset")) {
         var disconnected = false
         override fun getResponseCode(): Int = code
+        override fun getHeaderField(name: String?): String? =
+            if (name.equals("Location", ignoreCase = true)) location else null
         override fun connect() = Unit
         override fun disconnect() { disconnected = true }
         override fun usingProxy(): Boolean = false
@@ -104,5 +109,52 @@ class AppFetchFileDownloaderTest {
         )
         assertFalse(saved)
         assertFalse(contacted)
+    }
+
+    @Test fun oversizedResponseIsRejectedWithoutOverwritingExistingAsset() {
+        val target = dir.resolve("geoip.dat").apply { writeText("old") }
+        val saved = AppFetchFileDownloader.download(
+            URL("https://example.test/geoip.dat"),
+            target,
+            AppFetchRoutePolicy.Route.ViaProxy(10809),
+            maxBytes = 4L,
+            openConnection = { _, _ -> Response(200, "0123456789".toByteArray()) },
+        )
+        assertFalse(saved)
+        assertEquals("old", target.readText())
+        assertEquals(listOf("geoip.dat"), dir.listFiles().orEmpty().map { it.name })
+    }
+
+    @Test fun httpsToHttpRedirectDowngradeIsRejected() {
+        val target = dir.resolve("geoip.dat").apply { writeText("old") }
+        val saved = AppFetchFileDownloader.download(
+            URL("https://example.test/geoip.dat"),
+            target,
+            AppFetchRoutePolicy.Route.ViaProxy(10809),
+            openConnection = { _, _ -> Response(302, byteArrayOf(), location = "http://example.test/plain.dat") },
+        )
+        assertFalse(saved)
+        assertEquals("old", target.readText())
+    }
+
+    @Test fun httpsRedirectStaysOnConfiguredProxyRoute() {
+        val target = dir.resolve("geoip.dat").apply { writeText("old") }
+        val seenProxies = mutableListOf<Proxy.Type>()
+        val saved = AppFetchFileDownloader.download(
+            URL("https://example.test/geoip.dat"),
+            target,
+            AppFetchRoutePolicy.Route.ViaProxy(10809),
+            openConnection = { url, proxy ->
+                seenProxies.add(proxy.type())
+                if (url.path == "/geoip.dat") {
+                    Response(302, byteArrayOf(), location = "https://cdn.example.test/final.dat")
+                } else {
+                    Response(200, "redirected".toByteArray())
+                }
+            },
+        )
+        assertTrue(saved)
+        assertEquals("redirected", target.readText())
+        assertEquals(listOf(Proxy.Type.HTTP, Proxy.Type.HTTP), seenProxies)
     }
 }

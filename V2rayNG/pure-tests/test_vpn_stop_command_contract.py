@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import unittest
+from shell_test_utils import find_bash
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "app/src/main/kotlin/com/v2ray/ang/service"
@@ -50,7 +51,7 @@ class StopCommandGateContract(unittest.TestCase):
             self.assertNotIn("VpnStopCommandCodec", live)
 
     def test_script_runs_real_two_process_qa_without_claiming_native_ack(self):
-        process = subprocess.run(["bash", "-n", str(STOP_QA)],
+        process = subprocess.run([find_bash(), "-n", str(STOP_QA)],
                                  text=True, capture_output=True, timeout=10)
         self.assertEqual(0, process.returncode, process.stderr)
         script = STOP_QA.read_text(encoding="utf-8")

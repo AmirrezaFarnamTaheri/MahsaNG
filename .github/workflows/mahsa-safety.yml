@@ -6,7 +6,7 @@ on:
     branches: [master, 'roadmap/**', 'fix/**', 'feat/**']
   push:
     branches:
-      - 'fix/failed-deletion-observation-id-*'
+      - master
       - 'roadmap/**'
       - 'upstream/**'
   workflow_dispatch:

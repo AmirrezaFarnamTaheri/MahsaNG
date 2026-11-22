@@ -52,8 +52,11 @@ class PhysicalHandoverQaTest(unittest.TestCase):
             bin_dir = root / "bin"
             bin_dir.mkdir()
             fake = bin_dir / "adb"
-            fake.write_text(FAKE_ADB, encoding="utf-8")
+            fake.write_text(FAKE_ADB, encoding="utf-8", newline="\n")
             fake.chmod(0o755)
+            if os.name == "nt":
+                fake_bat = bin_dir / "adb.cmd"
+                fake_bat.write_text(f'@"{sys.executable}" "{fake}" %*\r\n', encoding="utf-8")
             report = root / "report.json"
             env = os.environ.copy()
             env.update(

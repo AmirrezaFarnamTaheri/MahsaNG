@@ -91,5 +91,15 @@ class CoreStopGateTest {
         assertEquals(null, gate.completeStop(token, success = true))
         assertEquals(null, gate.completeStop(token, success = true))
         assertTrue(gate.requestStart())
+        assertFalse(gate.isQuarantined())
+    }
+
+    @Test fun isQuarantinedReflectsUnverifiedNativeStop() {
+        val gate = CoreStopGate()
+        assertFalse(gate.isQuarantined())
+        val token = gate.beginStop()!!
+        assertFalse(gate.isQuarantined())
+        assertEquals(null, gate.completeStop(token, success = false))
+        assertTrue(gate.isQuarantined())
     }
 }

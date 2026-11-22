@@ -135,4 +135,33 @@ class TunnelProcessExitTrackerTest {
         assertFalse(tracker.awaitStopped(Long.MAX_VALUE))
         assertTrue(tracker.awaitStopped(100L))
     }
+
+    @Test fun resetForNewSessionReopensOnlyAfterAllChildrenAndLaunchesFinish() {
+        val tracker = TunnelProcessExitTracker<Any>()
+        val first = Any()
+        assertTrue(tracker.beginLaunch())
+        assertTrue(tracker.registered(first))
+        tracker.requestStop()
+        assertFalse(tracker.resetForNewSession())
+        assertFalse(tracker.beginLaunch())
+        assertTrue(tracker.observedExit(first))
+        assertTrue(tracker.awaitStopped(50L))
+        assertTrue(tracker.resetForNewSession())
+        assertTrue(tracker.beginLaunch())
+        val second = Any()
+        assertTrue(tracker.registered(second))
+        tracker.requestStop()
+        assertFalse(tracker.resetForNewSession())
+        assertTrue(tracker.observedExit(second))
+        assertTrue(tracker.awaitStopped(50L))
+    }
+
+    @Test fun resetForNewSessionRejectsInFlightLaunch() {
+        val tracker = TunnelProcessExitTracker<Any>()
+        assertTrue(tracker.beginLaunch())
+        tracker.requestStop()
+        assertFalse(tracker.resetForNewSession())
+        tracker.launchFailed()
+        assertTrue(tracker.resetForNewSession())
+    }
 }

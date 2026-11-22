@@ -172,4 +172,35 @@ class TunDescriptorCloseTrackerTest {
         assertFalse(tracker.awaitClosed(Long.MAX_VALUE))
         assertTrue(tracker.awaitClosed(25L))
     }
+
+    @Test fun resetForNewSessionReopensOnlyAfterVerifiedCleanStop() {
+        val tracker = TunDescriptorCloseTracker<Any>()
+        val first = Any()
+        assertTrue(tracker.beginEstablish())
+        assertTrue(tracker.registered(first))
+        tracker.requestStop()
+        // Unclosed descriptor keeps reset closed.
+        assertFalse(tracker.resetForNewSession())
+        assertFalse(tracker.beginEstablish())
+        assertTrue(tracker.closeReturned(first))
+        assertTrue(tracker.awaitClosed(25L))
+        // After clean stop, a reused VpnService instance may start a fresh session.
+        assertTrue(tracker.resetForNewSession())
+        assertTrue(tracker.beginEstablish())
+        val second = Any()
+        assertTrue(tracker.registered(second))
+        tracker.requestStop()
+        assertFalse(tracker.resetForNewSession())
+        assertTrue(tracker.closeReturned(second))
+        assertTrue(tracker.awaitClosed(25L))
+    }
+
+    @Test fun resetForNewSessionRejectsInFlightEstablishment() {
+        val tracker = TunDescriptorCloseTracker<Any>()
+        assertTrue(tracker.beginEstablish())
+        tracker.requestStop()
+        assertFalse(tracker.resetForNewSession())
+        tracker.establishFailed()
+        assertTrue(tracker.resetForNewSession())
+    }
 }

@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import subprocess
 import unittest
+from shell_test_utils import find_bash
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / '.github/workflows/mahsa-safety.yml'
@@ -19,7 +20,7 @@ class EmulatorSmokeContractTest(unittest.TestCase):
 
     def test_smoke_script_has_valid_bash_syntax_and_checks_real_app(self):
         self.assertTrue(SMOKE.is_file())
-        result = subprocess.run(['bash', '-n', str(SMOKE)], capture_output=True, text=True)
+        result = subprocess.run([find_bash(), '-n', str(SMOKE)], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
         script = SMOKE.read_text(encoding='utf-8')
         for required in (

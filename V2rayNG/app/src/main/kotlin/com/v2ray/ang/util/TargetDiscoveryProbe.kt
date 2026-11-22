@@ -8,9 +8,9 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SNIHostName
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLParameters
 import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
@@ -112,7 +112,7 @@ internal object TargetDiscoveryProbe {
                         .use { tls ->
                             tls.soTimeout = timeoutMs
                             val parameters = tls.sslParameters
-                            parameters.serverNames = listOf(SNIHostName(serverName))
+                            applySniIfAvailable(parameters, serverName)
                             parameters.endpointIdentificationAlgorithm = "HTTPS"
                             tls.sslParameters = parameters
                             val handshakeStarted = System.nanoTime()
@@ -126,6 +126,10 @@ internal object TargetDiscoveryProbe {
                     status = TargetProbeStatus.TCP_OPEN
                 }
             }
+        } catch (error: LinkageError) {
+            // SSLParameters.endpointIdentificationAlgorithm requires Android API 24+.
+            // Fail closed rather than silently disabling hostname verification.
+            status = TargetProbeStatus.TLS_HANDSHAKE_FAILED
         } catch (error: Exception) {
             status = if (!lease.isActive()) TargetProbeStatus.CANCELLED else classify(error)
         } finally {
@@ -133,6 +137,16 @@ internal object TargetDiscoveryProbe {
             runCatching { plain.close() }
         }
         return TargetDiscoveryResult(target, status, tcpMs, tlsMs, started, clock())
+    }
+
+    /** Set explicit SNIHostName on API 24+ runtimes without breaking API 21-23 class loading. */
+    private fun applySniIfAvailable(parameters: SSLParameters, serverName: String) {
+        runCatching {
+            val sniClass = Class.forName("javax.net.ssl.SNIHostName")
+            val sni = sniClass.getConstructor(String::class.java).newInstance(serverName)
+            val setServerNames = parameters.javaClass.getMethod("setServerNames", List::class.java)
+            setServerNames.invoke(parameters, listOf(sni))
+        }
     }
 
     private fun classify(error: Exception): TargetProbeStatus = when (error) {

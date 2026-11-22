@@ -8,6 +8,7 @@ import com.v2ray.ang.dto.ServerConfig
 import com.v2ray.ang.dto.V2rayConfig
 import com.v2ray.ang.extension.idnHost
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.TlsCertificatePolicy
 import com.v2ray.ang.util.Utils
 import java.net.URI
 
@@ -20,7 +21,9 @@ object VlessFmt {
     }
 
     fun parseVless(str: String): ServerConfig? {
-        var allowInsecure = !(settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: false)
+        val allowInsecure = TlsCertificatePolicy.forImport(
+            settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true
+        )
         val config = ServerConfig.create(EConfigType.VLESS)
 
         val uri = URI(Utils.fixIllegalUrl(str))
@@ -51,7 +54,6 @@ object VlessFmt {
             queryParam["serviceName"],
             queryParam["authority"]
         )
-        allowInsecure = if ((queryParam["allowInsecure"] ?: "") == "1") true else allowInsecure
         val security = queryParam["security"] ?: ""
         val ech = EchLinkParameters.fromQuery(security, queryParam)
         streamSetting.populateTlsSettings(

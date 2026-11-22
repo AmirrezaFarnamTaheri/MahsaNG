@@ -805,7 +805,10 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                         .putExtra("isRunning", mainViewModel.isRunning.value == true))
             }
             R.id.user_asset_setting -> {
-                startActivity(Intent(this, UserAssetActivity::class.java))
+                startActivity(
+                    Intent(this, UserAssetActivity::class.java)
+                        .putExtra(UserAssetActivity.EXTRA_VPN_RUNNING, mainViewModel.isRunning.value == true)
+                )
             }
             R.id.feedback -> {
                 Utils.openUri(this, AppConfig.v2rayNGIssues)

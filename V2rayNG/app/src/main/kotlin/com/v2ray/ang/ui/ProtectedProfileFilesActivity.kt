@@ -2,6 +2,7 @@ package com.v2ray.ang.ui
 
 import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.text.InputType
 import android.view.View
 import android.widget.Button
@@ -84,6 +85,10 @@ class ProtectedProfileFilesActivity : BaseActivity() {
         maxLines = 1
     }
 
+    private fun deleteUnusedExportDocument(uri: Uri) {
+        runCatching { DocumentsContract.deleteDocument(contentResolver, uri) }
+    }
+
     private fun showExportPasswordDialog(uri: Uri) {
         val password = passwordField()
         val again = passwordField().apply {
@@ -96,6 +101,7 @@ class ProtectedProfileFilesActivity : BaseActivity() {
             addView(password)
             addView(again)
         }
+        var exportStarted = false
         AlertDialog.Builder(this)
             .setTitle(R.string.protected_profile_export)
             .setMessage(R.string.protected_profile_export_warning)
@@ -110,8 +116,10 @@ class ProtectedProfileFilesActivity : BaseActivity() {
                 confirm.fill('\u0000')
                 if (!valid) {
                     pass.fill('\u0000')
+                    deleteUnusedExportDocument(uri)
                     status.setText(R.string.protected_profile_password_invalid)
                 } else {
+                    exportStarted = true
                     lifecycleScope.launch {
                         status.setText(R.string.protected_profile_working)
                         val result = withContext(Dispatchers.IO) {
@@ -140,14 +148,25 @@ class ProtectedProfileFilesActivity : BaseActivity() {
                                 pass.fill('\u0000')
                             }
                         }
-                        status.text = if (result == null)
-                            getString(R.string.protected_profile_export_failed)
-                        else getString(R.string.protected_profile_export_summary,
-                            result.first, result.second)
+                        if (result == null) {
+                            withContext(Dispatchers.IO) { deleteUnusedExportDocument(uri) }
+                            status.text = getString(R.string.protected_profile_export_failed)
+                        } else {
+                            status.text = getString(
+                                R.string.protected_profile_export_summary,
+                                result.first,
+                                result.second,
+                            )
+                        }
                     }
                 }
             }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setNegativeButton(android.R.string.cancel) { _, _ ->
+                deleteUnusedExportDocument(uri)
+            }
+            .setOnCancelListener {
+                if (!exportStarted) deleteUnusedExportDocument(uri)
+            }
             .show()
     }
 

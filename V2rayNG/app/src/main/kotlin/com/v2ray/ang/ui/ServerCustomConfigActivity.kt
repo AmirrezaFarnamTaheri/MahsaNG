@@ -92,14 +92,18 @@ class ServerCustomConfigActivity : BaseActivity() {
         config.remarks = binding.etRemarks.text.toString().trim()
         config.fullConfig = v2rayConfig
 
-        MmkvManager.encodeServerConfig(editGuid, config)
+        val savedGuid = MmkvManager.encodeServerConfig(editGuid, config)
+        if (savedGuid.isBlank()) {
+            toast(R.string.toast_failure)
+            return false
+        }
         // This custom editor changes the endpoint under the same GUID too.
         // Retire in-flight and persisted results before reporting success.
         if (editGuid.isNotBlank()) {
             TestRunTracker.forgetProfile(editGuid)
             MmkvManager.clearTestDelayResults(listOf(editGuid))
         }
-        serverRawStorage?.encode(editGuid, binding.editor.text.toString())
+        serverRawStorage?.encode(savedGuid, binding.editor.text.toString())
         toast(R.string.toast_success)
         finish()
         return true

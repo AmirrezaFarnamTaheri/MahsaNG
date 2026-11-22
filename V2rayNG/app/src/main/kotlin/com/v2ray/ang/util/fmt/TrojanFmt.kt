@@ -8,6 +8,7 @@ import com.v2ray.ang.dto.ServerConfig
 import com.v2ray.ang.dto.V2rayConfig
 import com.v2ray.ang.extension.idnHost
 import com.v2ray.ang.util.MmkvManager
+import com.v2ray.ang.util.TlsCertificatePolicy
 import com.v2ray.ang.util.Utils
 import java.net.URI
 
@@ -20,7 +21,9 @@ object TrojanFmt {
     }
 
     fun parseTrojan(str: String): ServerConfig? {
-        var allowInsecure = !(settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) ?: false)
+        val allowInsecure = TlsCertificatePolicy.forImport(
+            settingsStorage?.decodeBool(AppConfig.PREF_ALLOW_INSECURE) == true
+        )
         val config = ServerConfig.create(EConfigType.TROJAN)
 
         val uri = URI(Utils.fixIllegalUrl(str))
@@ -56,7 +59,6 @@ object TrojanFmt {
                 queryParam["authority"]
             )
             fingerprint = queryParam["fp"] ?: ""
-            allowInsecure = if ((queryParam["allowInsecure"] ?: "") == "1") true else allowInsecure
             val security = queryParam["security"] ?: V2rayConfig.TLS
             val ech = EchLinkParameters.fromQuery(security, queryParam)
             config.outboundBean?.streamSettings?.populateTlsSettings(

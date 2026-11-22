@@ -34,6 +34,10 @@ import java.text.DateFormat
 import java.util.*
 
 class UserAssetActivity : BaseActivity() {
+    companion object {
+        const val EXTRA_VPN_RUNNING = "extra_vpn_running"
+    }
+
     private lateinit var binding: ActivitySubSettingBinding
 
     val extDir by lazy { File(Utils.userAssetPath(this)) }
@@ -94,10 +98,16 @@ class UserAssetActivity : BaseActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val uri = it.data?.data
             if (it.resultCode == RESULT_OK && uri != null) {
-                try {
-                    copyFile(uri)
-                } catch (e: Exception) {
-                    toast(R.string.toast_asset_copy_failed)
+                lifecycleScope.launch {
+                    val copied = withContext(Dispatchers.IO) {
+                        runCatching { copyFile(uri) }.isSuccess
+                    }
+                    if (copied) {
+                        toast(R.string.toast_success)
+                        binding.recyclerView.adapter?.notifyDataSetChanged()
+                    } else {
+                        toast(R.string.toast_asset_copy_failed)
+                    }
                 }
             }
         }
@@ -117,8 +127,21 @@ class UserAssetActivity : BaseActivity() {
         // A failed stream or partial copy must never replace the existing asset.
         val staged = File.createTempFile(".asset-import-", ".tmp", root)
         try {
-            val copiedBytes = contentResolver.openInputStream(uri)?.use { input ->
-                staged.outputStream().use { output -> input.copyTo(output) }
+            var copiedBytes = 0L
+            contentResolver.openInputStream(uri)?.use { input ->
+                staged.outputStream().use { output ->
+                    val buffer = ByteArray(16 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        copiedBytes += read
+                        if (copiedBytes > AppFetchFileDownloader.DEFAULT_MAX_BYTES) {
+                            throw IOException("Selected document exceeds maximum asset size")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
             } ?: throw IOException("Unable to open selected document")
             if (copiedBytes <= 0L) throw IOException("Selected document is empty")
             // Same-directory rename atomically publishes the validated data.
@@ -126,8 +149,6 @@ class UserAssetActivity : BaseActivity() {
         } finally {
             staged.delete()
         }
-        toast(R.string.toast_success)
-        binding.recyclerView.adapter?.notifyDataSetChanged()
         return targetFile.path
     }
 
@@ -145,7 +166,8 @@ class UserAssetActivity : BaseActivity() {
 
     private fun downloadGeoFiles() {
         // Prefer a live local proxy; offline direct downloads require explicit consent.
-        AppFetchRouteChooser.choose(this, { false }) { route ->
+        val vpnReportedRunning = intent.getBooleanExtra(EXTRA_VPN_RUNNING, false)
+        AppFetchRouteChooser.choose(this, { vpnReportedRunning }) { route ->
             toast(R.string.msg_downloading_content)
             geofiles.forEach { name ->
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -184,8 +206,10 @@ class UserAssetActivity : BaseActivity() {
                 holder.itemUserAssetBinding.layoutRemove.visibility = VISIBLE
             }
             holder.itemUserAssetBinding.layoutRemove.setOnClickListener {
+                val adapterPosition = holder.bindingAdapterPosition
+                if (adapterPosition == RecyclerView.NO_POSITION) return@setOnClickListener
                 file.delete()
-                binding.recyclerView.adapter?.notifyItemRemoved(position)
+                binding.recyclerView.adapter?.notifyItemRemoved(adapterPosition)
             }
         }
 

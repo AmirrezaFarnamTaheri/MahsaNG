@@ -84,8 +84,9 @@ internal object ProxyCandidateProbe {
                                 .use { tls ->
                                     tls.soTimeout = timeoutMs
                                     val parameters = tls.sslParameters
-                                    // The layered socket's explicit DNS hostname supplies
-                                    // SNI on supported Android runtimes. Keep API 21 support.
+                                    // The layered socket's explicit DNS hostname supplies SNI.
+                                    // endpointIdentificationAlgorithm requires Android API 24+;
+                                    // fail closed via LinkageError catch on older runtimes.
                                     parameters.endpointIdentificationAlgorithm = "HTTPS"
                                     tls.sslParameters = parameters
                                     val tlsStart = System.nanoTime()
@@ -97,6 +98,9 @@ internal object ProxyCandidateProbe {
                     }
                 }
             }
+        } catch (_: LinkageError) {
+            // Never silently skip HTTPS hostname verification on API 21-23.
+            status = TargetProbeStatus.TLS_HANDSHAKE_FAILED
         } catch (error: Exception) {
             status = if (!lease.isActive()) TargetProbeStatus.CANCELLED else when (error) {
                 is InvalidProxyReply, is EOFException -> TargetProbeStatus.PROXY_PROTOCOL_ERROR

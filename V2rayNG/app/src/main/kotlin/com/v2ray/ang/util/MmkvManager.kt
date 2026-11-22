@@ -41,12 +41,28 @@ object MmkvManager {
 
     fun decodeServerList(): MutableList<String> = readServerIndex() ?: mutableListOf()
 
-    /** Nonblocking native MMKV lease shared by app and VPN processes. */
+    /** Bounded cross-process native MMKV lease shared by app and VPN processes. */
     private inline fun <T> withIndexLease(unavailable: T, action: () -> T): T {
         val main = mainStorage ?: return unavailable
         return ProfileIndexMutationGate.execute(
             unavailable = unavailable,
-            tryAcquire = { main.tryLock() },
+            tryAcquire = {
+                // Retry briefly across momentary cross-process MMKV commits
+                // without ever blocking indefinitely on a held or dead lock.
+                var acquired = main.tryLock()
+                var attempt = 1
+                while (!acquired && attempt < 4) {
+                    try {
+                        Thread.sleep(15L)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        break
+                    }
+                    acquired = main.tryLock()
+                    attempt++
+                }
+                acquired
+            },
             release = { main.unlock() },
             action = action,
         )
@@ -104,20 +120,20 @@ object MmkvManager {
     }
 
     @Synchronized
-    fun removeServer(guid: String) {
-        withIndexLease(Unit) {
-        if (guid.isBlank()) return
-        val main = mainStorage ?: return
-        val serverList = readServerIndex() ?: return
-        if (guid !in serverList) return
+    fun removeServer(guid: String): Boolean {
+        return withIndexLease(false) {
+        if (guid.isBlank()) return false
+        val main = mainStorage ?: return false
+        val serverList = readServerIndex() ?: return false
+        if (guid !in serverList) return false
         val updated = serverList.filterNot { it == guid }
-        if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(updated))) return
+        if (!main.encode(KEY_ANG_CONFIGS, Gson().toJson(updated))) return false
         if (main.decodeString(KEY_SELECTED_SERVER) == guid) {
             main.remove(KEY_SELECTED_SERVER)
         }
         serverStorage?.remove(guid)
         serverAffStorage?.remove(guid)
-    
+        true
         }}
 
     /**

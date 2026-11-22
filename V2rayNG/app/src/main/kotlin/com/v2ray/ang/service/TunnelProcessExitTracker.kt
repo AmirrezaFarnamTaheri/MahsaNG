@@ -47,6 +47,17 @@ internal class TunnelProcessExitTracker<T : Any> {
     }
 
     /**
+     * Reopen for a fresh session on a reused VpnService instance ONLY when
+     * no launches remain in flight and every tracked child has exited.
+     */
+    @Synchronized fun resetForNewSession(): Boolean {
+        if (!stopRequested) return true
+        if (launchesInFlight != 0 || children.isNotEmpty()) return false
+        stopRequested = false
+        return true
+    }
+
+    /**
      * Bounded wait on a background/IO thread. No Android API-26 Process
      * polling methods; receipt comes from the existing waitFor() watcher.
      * Never treat timeout or interruption as native termination evidence.

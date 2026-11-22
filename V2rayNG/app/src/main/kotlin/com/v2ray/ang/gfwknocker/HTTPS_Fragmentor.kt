@@ -3,6 +3,7 @@ package com.v2ray.ang.gfwknocker
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.Collections
@@ -177,8 +178,8 @@ internal class My_upstream_H(
         safely_close_socket(client_sock)
         safely_close_socket(backend_sock)
         try {
-            ops!!.flush()
-            ops!!.close()
+            ops?.flush()
+            ops?.close()
             ips.close()
         } catch (e: Exception) {
 //            println("up-stream Close ERR: " + e.message)
@@ -237,7 +238,11 @@ internal class My_upstream_H(
                 }
             }
 //            println("$remote_host --> $remote_port")
-            backend_sock = Socket(remote_host, remote_port)
+            backend_sock = Socket()
+            if (!forwarders.track(this, backend_sock)) {
+                return null
+            }
+            backend_sock.connect(InetSocketAddress(remote_host, remote_port), myH_socket_timeout)
             backend_sock.soTimeout = myH_socket_timeout
             backend_sock.tcpNoDelay = true
             response_data =

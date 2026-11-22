@@ -17,6 +17,8 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Satisfy Android O+ startForegroundService() contract before any early return.
+        V2RayServiceManager.ensureForeground(this)
         V2RayServiceManager.startV2rayPoint()
         return START_STICKY
     }

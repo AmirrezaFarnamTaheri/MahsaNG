@@ -258,7 +258,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
 
         // Reserve BEFORE Builder.establish(), which can complete after Stop.
-        if (!tunCloseTracker.beginEstablish()) return
+        if (!tunCloseTracker.beginEstablish()) {
+            throw IllegalStateException("Xray VPN TUN establishment blocked by Stop")
+        }
         var establishmentPending = true
         try {
             val established = builder.establish()
@@ -395,10 +397,20 @@ class V2RayVpnService : VpnService(), ServiceControl {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Satisfy Android O+ startForegroundService() contract before any early return.
+        V2RayServiceManager.ensureForeground(this)
         V2RayServiceManager.startV2rayPoint()
         return START_STICKY
         //return super.onStartCommand(intent, flags, startId)
     }
+
+    /**
+     * Reopen local TUN/subprocess trackers on a reused V2RayVpnService instance
+     * ONLY after a verified clean stop left zero pending establishments,
+     * unclosed descriptors, pending launches or live tun2socks children.
+     */
+    internal fun prepareForVerifiedRestart(): Boolean =
+        tunCloseTracker.resetForNewSession() && tunExitTracker.resetForNewSession()
 
     /** Signal termination on any lifecycle thread; do not block Android main. */
     private fun stopOwnedTun2socks() {

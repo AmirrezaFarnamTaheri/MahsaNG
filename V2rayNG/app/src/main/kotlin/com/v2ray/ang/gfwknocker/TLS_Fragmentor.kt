@@ -5,6 +5,7 @@ package com.v2ray.ang.gfwknocker
 
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.Collections
@@ -146,11 +147,13 @@ internal class My_upstream(
 
     override fun run() {
         try {
-            backend_sock = Socket(target_ip, target_port)
-            // connect() may have finished after stop: close the late socket.
+            val remote = Socket()
+            backend_sock = remote
+            // Track before connect() so stop() unblocks even a stalled TCP SYN.
             if (!forwarders.track(this, backend_sock!!)) {
                 throw IllegalStateException("Fragmentor stopped during backend connection")
             }
+            remote.connect(InetSocketAddress(target_ip, target_port), myT_socket_timeout)
             backend_sock!!.soTimeout = myT_socket_timeout
             backend_sock!!.tcpNoDelay = true
             ops = backend_sock!!.getOutputStream()
@@ -183,9 +186,9 @@ internal class My_upstream(
         safely_close_socket(client_sock)
         safely_close_socket(backend_sock)
         try {
-            ops!!.flush()
-            ops!!.close()
-            ips!!.close()
+            ops?.flush()
+            ops?.close()
+            ips.close()
         } catch (e: Exception) {
 //            println("up-stream Close ERR: " + e.message)
         }

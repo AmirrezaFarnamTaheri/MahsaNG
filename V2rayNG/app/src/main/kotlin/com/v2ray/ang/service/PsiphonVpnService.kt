@@ -109,9 +109,15 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     }
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AppConfig.BROADCAST_ACTION_SERVICE &&
-                intent.getIntExtra("key", 0) == AppConfig.MSG_STATE_STOP
-            ) Thread { stopAll() }.start()
+            if (intent?.action != AppConfig.BROADCAST_ACTION_SERVICE) return
+            if (intent.getIntExtra("key", 0) == AppConfig.MSG_STATE_STOP) {
+                Thread { stopAll() }.start()
+            } else if (intent.getIntExtra("key", 0) == AppConfig.MSG_REGISTER_CLIENT &&
+                isRunning.get() && !teardownStarted.get()
+            ) {
+                // Keep UI aware if Psiphon still owns the VPN TUN even when Xray died.
+                MessageUtil.sendMsg2UI(this@PsiphonVpnService, AppConfig.MSG_STATE_RUNNING, "")
+            }
         }
     }
     private var stopReceiverRegistered = false
@@ -131,6 +137,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
     private val startCommandAccepted = AtomicBoolean(false)
     private val notificationStopTokenGate = NotificationStopTokenGate()
     private val notificationStopToken = UUID.randomUUID().toString()
+    @Volatile private var activeStopPendingIntent: PendingIntent? = null
     private val psiphonSocksPort = AtomicInteger(0)
 
     private val psiphonHttpPort = AtomicInteger(0)
@@ -271,12 +278,16 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             return START_NOT_STICKY
         }
         if (teardownStarted.get()) {
+            // Satisfy startForegroundService() before stopping a terminating instance.
+            runCatching { startForegroundNotification() }
+            runCatching { stopForeground(true) }
             stopSelf()
             return START_NOT_STICKY
         }
         startCommandAccepted.set(true)
         if (VpnService.prepare(this) != null) {
             Log.w(TAG, "VPN authorization unavailable; refusing to start")
+            runCatching { startForegroundNotification() }
             stopAll()
             return START_NOT_STICKY
         }
@@ -644,6 +655,7 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             this, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        activeStopPendingIntent = stopPendingIntent
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_name)
@@ -663,20 +675,28 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
 
     private fun updateNotification(text: String) {
         try {
-            val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOngoing(true)
-                .build()
-
-            //val manager = getSystemService(NotificationManager::class.java)
-            //manager?.notify(NOTIFICATION_ID, notification)
+            // Always preserve the session-scoped Stop action across notification updates.
+            val stopPendingIntent = activeStopPendingIntent ?: PendingIntent.getService(
+                this,
+                0,
+                Intent(this, PsiphonVpnService::class.java).apply {
+                    action = ACTION_STOP
+                    data = Uri.parse("$NOTIFICATION_STOP_SCHEME://session/$notificationStopToken")
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ).also { activeStopPendingIntent = it }
+            builder.addAction(R.drawable.ic_close_grey_800_24dp, "Stop", stopPendingIntent)
+            val notification = builder.build()
 
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, notification)
-        }catch (e: Exception) {
+        } catch (e: Exception) {
             Log.d(TAG, "psiphon notification builder error: $e")
         }
     }
@@ -794,6 +814,9 @@ class PsiphonVpnService : VpnService(), PsiphonTunnel.HostService {
             }
         }
         stopCleanupFinished.set(true)
+        if (evidence.localStopReportable) {
+            runCatching { stopForeground(true) }
+        }
         if (isForced) stopSelf()
     }
 

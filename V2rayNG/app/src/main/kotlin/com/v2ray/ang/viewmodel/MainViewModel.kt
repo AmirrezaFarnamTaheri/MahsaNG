@@ -139,15 +139,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateListAction.value = -1
     }
 
-    fun removeServer(guid: String) {
+    fun removeServer(guid: String): Boolean {
+        if (!MmkvManager.removeServer(guid)) {
+            getApplication<AngApplication>().toast(R.string.toast_failure)
+            reloadServerList()
+            return false
+        }
         tcpEvidenceByGuid.remove(guid)
         tcpEvidenceRevisions.remove(guid)
         serverList.remove(guid)
-        MmkvManager.removeServer(guid)
         val index = getPosition(guid)
         if(index >= 0){
             serversCache.removeAt(index)
         }
+        return true
     }
 
     fun appendCustomConfigServer(server: String) {
@@ -156,6 +161,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         config.subscriptionId = subscriptionId
         config.fullConfig = Gson().fromJson(server, V2rayConfig::class.java)
         val key = MmkvManager.encodeServerConfig("", config)
+        if (key.isBlank()) {
+            getApplication<AngApplication>().toast(R.string.toast_failure)
+            return
+        }
         serverRawStorage?.encode(key, server)
         serverList.add(0, key)
         serversCache.add(0, ServersCache(key,config))
@@ -324,17 +333,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ivBinding.etMaxLatency.setText(profileMaxLatencyMs?.toString() ?: "")
         val builder = AlertDialog.Builder(context).setView(ivBinding.root)
         builder.setTitle(R.string.title_filter_config)
-        builder.setPositiveButton(R.string.tasker_setting_confirm) { dialogInterface: DialogInterface?, _: Int ->
+        builder.setPositiveButton(R.string.tasker_setting_confirm, null)
+        val dialog = builder.show()
+        // Override click listener after show() so invalid latency keeps the dialog open.
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             try {
                 val rawLatency = ivBinding.etMaxLatency.text.toString().trim()
                 val parsedLatency = if (rawLatency.isEmpty()) null else rawLatency.toLongOrNull()
                 if (rawLatency.isNotEmpty() && (parsedLatency == null || parsedLatency !in 1..60_000)) {
                     android.widget.Toast.makeText(context, R.string.profile_probe_invalid_latency,
                         android.widget.Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
+                    return@setOnClickListener
                 }
                 val position = ivBinding.spSubscriptionId.selectedItemPosition
-                subscriptionId = if (listRemarks.count() - 1 == position) {
+                subscriptionId = if (position < 0 || listRemarks.count() - 1 == position) {
                     ""
                 } else {
                     subscriptions[position].first
@@ -346,12 +358,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 profileMaxLatencyMs = parsedLatency
                 reloadServerList()
 
-                dialogInterface?.dismiss()
+                dialog.dismiss()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-        builder.show()
 //        AlertDialog.Builder(context)
 //            .setSingleChoiceItems(listRemarks.toTypedArray(), checkedItem) { dialog, i ->
 //                try {

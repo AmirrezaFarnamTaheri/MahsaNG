@@ -67,7 +67,7 @@ def audit_resources(res: Path) -> dict[str, list[str]]:
             if kind == "style" and name.startswith(EXTERNAL_STYLE_PREFIXES):
                 continue
             if ref not in definitions:
-                missing[ref].add(str(path.relative_to(res)))
+                missing[ref].add(path.relative_to(res).as_posix())
     return {key: sorted(files) for key, files in sorted(missing.items())}
 
 

@@ -756,12 +756,22 @@ class ServerActivity : BaseActivity() {
 
         }
 
-        MmkvManager.encodeServerConfig(editGuid, config)
+        val savedGuid = MmkvManager.encodeServerConfig(editGuid, config)
+        if (savedGuid.isBlank()) {
+            toast(R.string.toast_failure)
+            return false
+        }
         // The endpoint changed under the same GUID; discard in-flight results.
         if (editGuid.isNotBlank()) {
             TestRunTracker.forgetProfile(editGuid)
             // A stored pre-edit negative delay is also stale evidence.
             MmkvManager.clearTestDelayResults(listOf(editGuid))
+        }
+        val tlsAllowsInsecure = config.outboundBean?.streamSettings?.let { stream ->
+            stream.tlsSettings?.allowInsecure == true || stream.realitySettings?.allowInsecure == true
+        } == true
+        if (tlsAllowsInsecure && settingsStorage?.decodeBool(PREF_ALLOW_INSECURE) != true) {
+            toast(R.string.summary_pref_allow_insecure)
         }
         toast(R.string.toast_success)
         finish()
@@ -927,13 +937,19 @@ class ServerActivity : BaseActivity() {
                 if (settingsStorage?.decodeBool(AppConfig.PREF_CONFIRM_REMOVE) == true) {
                     AlertDialog.Builder(this).setMessage(R.string.del_config_comfirm)
                         .setPositiveButton(android.R.string.ok) { _, _ ->
-                            MmkvManager.removeServer(editGuid)
-                            finish()
+                            if (MmkvManager.removeServer(editGuid)) {
+                                finish()
+                            } else {
+                                toast(R.string.toast_failure)
+                            }
                         }
                         .show()
                 } else {
-                    MmkvManager.removeServer(editGuid)
-                    finish()
+                    if (MmkvManager.removeServer(editGuid)) {
+                        finish()
+                    } else {
+                        toast(R.string.toast_failure)
+                    }
                 }
             }
         }

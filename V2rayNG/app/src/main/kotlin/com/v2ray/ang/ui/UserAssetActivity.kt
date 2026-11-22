@@ -1,8 +1,12 @@
 package com.v2ray.ang.ui
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.system.Os
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -21,6 +25,7 @@ import com.v2ray.ang.databinding.ItemRecyclerUserAssetBinding
 import com.v2ray.ang.extension.toTrafficString
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.util.AppFetchFileDownloader
+import com.v2ray.ang.util.MessageUtil
 import com.v2ray.ang.util.SafeAssetFilename
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +39,28 @@ import java.text.DateFormat
 import java.util.*
 
 class UserAssetActivity : BaseActivity() {
+    companion object {
+        const val EXTRA_VPN_RUNNING = "extra_vpn_running"
+    }
+
     private lateinit var binding: ActivitySubSettingBinding
+    @Volatile private var vpnRunning: Boolean = false
+    private var vpnReceiverRegistered: Boolean = false
+
+    private val vpnStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            when (intent?.getIntExtra("key", 0)) {
+                AppConfig.MSG_STATE_RUNNING, AppConfig.MSG_STATE_START_SUCCESS -> {
+                    vpnRunning = true
+                }
+                AppConfig.MSG_STATE_NOT_RUNNING,
+                AppConfig.MSG_STATE_START_FAILURE,
+                AppConfig.MSG_STATE_STOP_SUCCESS -> {
+                    vpnRunning = false
+                }
+            }
+        }
+    }
 
     val extDir by lazy { File(Utils.userAssetPath(this)) }
     val geofiles = arrayOf("geosite.dat", "geoip.dat")
@@ -47,9 +73,32 @@ class UserAssetActivity : BaseActivity() {
         title = getString(R.string.title_user_asset_setting)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
+        vpnRunning = intent.getBooleanExtra(EXTRA_VPN_RUNNING, false)
+        val filter = IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(vpnStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(vpnStateReceiver, filter)
+        }
+        vpnReceiverRegistered = true
+
         binding.recyclerView.setHasFixedSize(true)
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = UserAssetAdapter()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Query live service state so route choice reflects changes while this screen stays open.
+        MessageUtil.sendMsg2Service(this, AppConfig.MSG_REGISTER_CLIENT, "")
+    }
+
+    override fun onDestroy() {
+        if (vpnReceiverRegistered) {
+            runCatching { unregisterReceiver(vpnStateReceiver) }
+            vpnReceiverRegistered = false
+        }
+        super.onDestroy()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -94,10 +143,16 @@ class UserAssetActivity : BaseActivity() {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val uri = it.data?.data
             if (it.resultCode == RESULT_OK && uri != null) {
-                try {
-                    copyFile(uri)
-                } catch (e: Exception) {
-                    toast(R.string.toast_asset_copy_failed)
+                lifecycleScope.launch {
+                    val copied = withContext(Dispatchers.IO) {
+                        runCatching { copyFile(uri) }.isSuccess
+                    }
+                    if (copied) {
+                        toast(R.string.toast_success)
+                        binding.recyclerView.adapter?.notifyDataSetChanged()
+                    } else {
+                        toast(R.string.toast_asset_copy_failed)
+                    }
                 }
             }
         }
@@ -117,8 +172,21 @@ class UserAssetActivity : BaseActivity() {
         // A failed stream or partial copy must never replace the existing asset.
         val staged = File.createTempFile(".asset-import-", ".tmp", root)
         try {
-            val copiedBytes = contentResolver.openInputStream(uri)?.use { input ->
-                staged.outputStream().use { output -> input.copyTo(output) }
+            var copiedBytes = 0L
+            contentResolver.openInputStream(uri)?.use { input ->
+                staged.outputStream().use { output ->
+                    val buffer = ByteArray(16 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        copiedBytes += read
+                        if (copiedBytes > AppFetchFileDownloader.DEFAULT_MAX_BYTES) {
+                            throw IOException("Selected document exceeds maximum asset size")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
             } ?: throw IOException("Unable to open selected document")
             if (copiedBytes <= 0L) throw IOException("Selected document is empty")
             // Same-directory rename atomically publishes the validated data.
@@ -126,8 +194,6 @@ class UserAssetActivity : BaseActivity() {
         } finally {
             staged.delete()
         }
-        toast(R.string.toast_success)
-        binding.recyclerView.adapter?.notifyDataSetChanged()
         return targetFile.path
     }
 
@@ -145,7 +211,7 @@ class UserAssetActivity : BaseActivity() {
 
     private fun downloadGeoFiles() {
         // Prefer a live local proxy; offline direct downloads require explicit consent.
-        AppFetchRouteChooser.choose(this, { false }) { route ->
+        AppFetchRouteChooser.choose(this, { vpnRunning }) { route ->
             toast(R.string.msg_downloading_content)
             geofiles.forEach { name ->
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -184,8 +250,10 @@ class UserAssetActivity : BaseActivity() {
                 holder.itemUserAssetBinding.layoutRemove.visibility = VISIBLE
             }
             holder.itemUserAssetBinding.layoutRemove.setOnClickListener {
+                val adapterPosition = holder.bindingAdapterPosition
+                if (adapterPosition == RecyclerView.NO_POSITION) return@setOnClickListener
                 file.delete()
-                binding.recyclerView.adapter?.notifyItemRemoved(position)
+                binding.recyclerView.adapter?.notifyItemRemoved(adapterPosition)
             }
         }
 

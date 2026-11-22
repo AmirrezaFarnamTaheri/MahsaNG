@@ -3,6 +3,7 @@ from pathlib import Path
 import subprocess
 import unittest
 import xml.etree.ElementTree as ET
+from shell_test_utils import find_bash
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app/src"
@@ -61,7 +62,7 @@ class VpnSessionCrossProcessContractTest(unittest.TestCase):
                 self.assertNotIn("decodeString(", line)
 
     def test_emulator_script_is_syntax_valid_and_invoked_with_real_adb(self):
-        result = subprocess.run(["bash", "-n", str(QA)], capture_output=True, text=True)
+        result = subprocess.run([find_bash(), "-n", str(QA)], capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
         script = QA.read_text(encoding="utf-8")
         smoke = (ROOT / "pure-tests/smoke-android-emulator.sh").read_text(

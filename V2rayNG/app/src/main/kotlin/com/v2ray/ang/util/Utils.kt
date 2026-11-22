@@ -395,6 +395,8 @@ object Utils {
         )
     }
 
+    private const val MAX_URL_CONTENT_BYTES = 16 * 1024 * 1024
+
     private fun fetchUrlContent(url: URL, proxy: Proxy): String {
         val conn = url.openConnection(proxy) as HttpURLConnection
         try {
@@ -407,7 +409,25 @@ object Utils {
                     "Basic ${encode(urlDecode(it))}")
             }
             conn.useCaches = false
-            return conn.inputStream.use { it.bufferedReader().readText() }
+            if (conn.contentLength > MAX_URL_CONTENT_BYTES) {
+                throw IOException("Remote content exceeds maximum allowed size")
+            }
+            return conn.inputStream.use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val read = input.read(buf)
+                    if (read < 0) break
+                    if (read == 0) continue
+                    total += read
+                    if (total > MAX_URL_CONTENT_BYTES) {
+                        throw IOException("Remote content exceeds maximum allowed size")
+                    }
+                    out.write(buf, 0, read)
+                }
+                out.toString(Charsets.UTF_8.name())
+            }
         } finally {
             conn.disconnect()
         }

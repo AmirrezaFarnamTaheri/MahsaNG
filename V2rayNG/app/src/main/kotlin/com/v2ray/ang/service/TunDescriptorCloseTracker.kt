@@ -55,6 +55,18 @@ internal class TunDescriptorCloseTracker<T : Any> {
     @Synchronized fun isStopComplete(): Boolean =
         stopRequested && establishmentsInFlight == 0 && outstanding.isEmpty()
 
+    /**
+     * Reopen for a fresh session on a reused VpnService instance ONLY after
+     * every tracked establishment and descriptor has already closed cleanly.
+     * Any pending establishment or unclosed descriptor fails closed.
+     */
+    @Synchronized fun resetForNewSession(): Boolean {
+        if (!stopRequested) return true
+        if (establishmentsInFlight != 0 || outstanding.isNotEmpty()) return false
+        stopRequested = false
+        return true
+    }
+
     /** Bounded observation for IO cleanup; never block an Android lifecycle callback. */
     fun awaitClosed(timeoutMillis: Long): Boolean {
         if (timeoutMillis !in 1L..10_000L) return false

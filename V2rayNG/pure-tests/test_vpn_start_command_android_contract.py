@@ -2,6 +2,7 @@
 from pathlib import Path
 import subprocess
 import unittest
+from shell_test_utils import find_bash
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE = ROOT / "app/src/main/kotlin/com/v2ray/ang/service"
@@ -36,7 +37,7 @@ class VpnStartCommandAndroidContract(unittest.TestCase):
 
     def test_real_emulator_qa_gate_is_wired_and_syntax_valid(self):
         status = subprocess.run(
-            ["bash", "-n", str(SCRIPT)], capture_output=True, text=True, timeout=10
+            [find_bash(), "-n", str(SCRIPT)], capture_output=True, text=True, timeout=10
         )
         self.assertEqual(0, status.returncode, status.stderr)
         script = SCRIPT.read_text(encoding="utf-8")

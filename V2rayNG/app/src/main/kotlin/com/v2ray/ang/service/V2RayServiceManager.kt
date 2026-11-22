@@ -71,9 +71,17 @@ object V2RayServiceManager {
         @Synchronized
         set(value) {
             field = value
+            val resolved = value?.get()?.getService()
+            if (resolved != null) activeServiceRef = resolved
             Seq.setContext(value?.get()?.getService()?.applicationContext)
             Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), "")
         }
+
+    // Retain the active Service owner across shutdown so SoftReference GC
+    // cannot falsely mark teardown as an unknown owner and quarantine starts.
+    @Volatile
+    private var activeServiceRef: Service? = null
+
     @Volatile
     var currentConfig: ServerConfig? = null
 
@@ -162,17 +170,58 @@ object V2RayServiceManager {
     // observe an unstarted core and then leave a concurrently started core alive.
     @Synchronized
     fun startV2rayPoint() {
+        val service = serviceControl?.get()?.getService()
+        if (coreStopGate.isQuarantined()) {
+            Log.e(ANG_PACKAGE, "Native stop remained unverified; refusing Xray start")
+            cancelNotificationFor(service)
+            service?.stopSelf()
+            if (service != null) {
+                MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            }
+            return
+        }
+        if (service is V2RayVpnService && !service.isLifecycleActive()) {
+            Log.e(ANG_PACKAGE, "Refusing Xray VPN start on destroyed V2RayVpnService")
+            cancelNotificationFor(service)
+            service.stopSelf()
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
         // If stopLoop is still executing, coalesce starts into one deferred retry.
         if (!coreStopGate.requestStart()) return
 
-        val service = serviceControl?.get()?.getService() ?: return
+        if (service == null) return
         val guid = mainStorage?.decodeString(MmkvManager.KEY_SELECTED_SERVER)
-            ?.takeIf { it.isNotBlank() } ?: return
-        val config = MmkvManager.decodeServerConfig(guid) ?: return
+            ?.takeIf { it.isNotBlank() }
+        if (guid == null) {
+            cancelNotificationFor(service)
+            service.stopSelf()
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
+        val config = MmkvManager.decodeServerConfig(guid)
+        if (config == null) {
+            cancelNotificationFor(service)
+            service.stopSelf()
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
         if (v2rayPoint.isRunning) return
+        // Reopen per-service trackers ONLY after a verified clean stop so
+        // deferred restarts on a reused V2RayVpnService establish a fresh TUN.
+        if (service is V2RayVpnService && !service.prepareForVerifiedRestart()) {
+            Log.e(ANG_PACKAGE, "Previous Xray TUN or tun2socks cleanup is still outstanding")
+            cancelNotificationFor(service)
+            service.stopSelf()
+            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+            return
+        }
+        activeServiceRef = service
         invalidateLiveDelay()
         val result = V2rayConfigUtil.getV2rayConfig(service, guid)
         if (!result.status) {
+            cancelNotificationFor(service)
+            service.stopSelf()
             MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
             return
         }
@@ -279,7 +328,7 @@ object V2RayServiceManager {
         invalidateLiveDelay()
         // Idempotent while an earlier stopLoop remains in flight.
         val stopToken = coreStopGate.beginStop() ?: return
-        val service = serviceControl?.get()?.getService()
+        val service = serviceControl?.get()?.getService() ?: activeServiceRef
         val fragmentor = TLS_serv
         TLS_serv = null
 
@@ -339,6 +388,7 @@ object V2RayServiceManager {
                     TLS_serv = fragmentor
                 }
                 if (stopped) {
+                    if (activeServiceRef === service) activeServiceRef = null
                     cancelNotificationFor(service)
                     if (service != null) {
                         runCatching { service.unregisterReceiver(mMsgReceive) }
@@ -355,12 +405,28 @@ object V2RayServiceManager {
                         // owns resources. Neither Success nor Not Running is
                         // evidence of a fully stopped VPN at that point.
                         Log.w(ANG_PACKAGE, "Xray local teardown incomplete; suppressing not-running state")
+                        runCatching {
+                            updateNotification(
+                                service.getString(R.string.toast_services_failure),
+                                0,
+                                0,
+                            )
+                        }
                     }
                 }
 
                 val restartToken = coreStopGate.completeStop(stopToken, stopped)
                 if (restartToken != null && coreStopGate.canResume(restartToken)) {
-                    startV2rayPoint()
+                    val currentService = serviceControl?.get()?.getService()
+                    if (currentService is V2RayVpnService && !currentService.isLifecycleActive()) {
+                        Log.w(ANG_PACKAGE, "Deferred Xray restart observed destroyed V2RayVpnService; launching fresh service")
+                        runCatching { startV2Ray(currentService.applicationContext) }.onFailure {
+                            Log.e(ANG_PACKAGE, "Unable to relaunch V2RayVpnService after verified stop", it)
+                            MessageUtil.sendMsg2UI(currentService, AppConfig.MSG_STATE_START_FAILURE, "")
+                        }
+                    } else {
+                        startV2rayPoint()
+                    }
                 }
             }
         }
@@ -456,8 +522,21 @@ object V2RayServiceManager {
         }
     }
 
+    /**
+     * Satisfy Android O+ startForegroundService() promptly on service entry
+     * before any early return, quarantine rejection, or deferred async stop.
+     */
+    fun ensureForeground(service: Service) {
+        runCatching { showNotificationFor(service) }
+            .onFailure { Log.d(ANG_PACKAGE, "Ensure foreground notification: $it") }
+    }
+
     private fun showNotification() {
         val service = serviceControl?.get()?.getService() ?: return
+        showNotificationFor(service)
+    }
+
+    private fun showNotificationFor(service: Service) {
         val startMainIntent = Intent(service, MainActivity::class.java)
         val contentPendingIntent = PendingIntent.getActivity(service,
                 NOTIFICATION_PENDING_INTENT_CONTENT, startMainIntent,
@@ -481,7 +560,7 @@ object V2RayServiceManager {
 
         val channelId =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    createNotificationChannel()
+                    createNotificationChannelFor(service)
                 } else {
                     // If earlier version channel ID is not used
                     // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
@@ -492,7 +571,7 @@ object V2RayServiceManager {
                 .setSmallIcon(R.drawable.ic_stat_name)
             // ------- GFW-knocker  ----------------------
 //                .setContentTitle("فعلا فقط یوتیوب")
-                .setContentTitle(currentConfig?.remarks)
+                .setContentTitle(currentConfig?.remarks ?: service.getString(R.string.app_name))
             // ------- GFW-knocker  ----------------------
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setOngoing(true)
@@ -506,11 +585,26 @@ object V2RayServiceManager {
 
         //mBuilder?.setDefaults(NotificationCompat.FLAG_ONLY_ALERT_ONCE)  //取消震动,铃声其他都不好使
 
-        service.startForeground(NOTIFICATION_ID, mBuilder?.build())
+        val notification = mBuilder?.build() ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            service.startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            service.startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannel(): String {
+        val service = serviceControl?.get()?.getService()
+        return if (service != null) createNotificationChannelFor(service) else "RAY_NG_M_CH_ID"
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun createNotificationChannelFor(service: Service): String {
         val channelId = "RAY_NG_M_CH_ID"
         val channelName = "V2rayNG Background Service"
         val chan = NotificationChannel(channelId,
@@ -518,7 +612,11 @@ object V2RayServiceManager {
         chan.lightColor = Color.DKGRAY
         chan.importance = NotificationManager.IMPORTANCE_NONE
         chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        getNotificationManager()?.createNotificationChannel(chan)
+        val manager = mNotificationManager
+            ?: (service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).also {
+                mNotificationManager = it
+            }
+        manager.createNotificationChannel(chan)
         return channelId
     }
 

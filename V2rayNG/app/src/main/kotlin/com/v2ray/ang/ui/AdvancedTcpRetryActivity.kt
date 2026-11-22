@@ -1,5 +1,6 @@
 package com.v2ray.ang.ui
 
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -119,6 +120,13 @@ class AdvancedTcpRetryActivity : BaseActivity() {
     }
 
     private fun prepare() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            AlertDialog.Builder(this)
+                .setMessage(R.string.advanced_retry_error)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
         val n = attempts.text.toString().toIntOrNull()
         val m = passes.text.toString().toIntOrNull()
         val c = concurrency.text.toString().toIntOrNull()

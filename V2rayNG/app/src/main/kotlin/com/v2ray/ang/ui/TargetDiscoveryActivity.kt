@@ -1,6 +1,7 @@
 package com.v2ray.ang.ui
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.text.InputType
@@ -165,6 +166,11 @@ class TargetDiscoveryActivity : BaseActivity() {
 
     private fun prepare() {
         if (model.running || job?.isActive == true) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            AlertDialog.Builder(this).setMessage(R.string.target_discovery_network_unavailable)
+                .setPositiveButton(android.R.string.ok, null).show()
+            return
+        }
         val port = portInput.text.toString().toIntOrNull()
         val timeoutMs = timeoutInput.text.toString().toIntOrNull()
         val passes = passesInput.text.toString().toIntOrNull()

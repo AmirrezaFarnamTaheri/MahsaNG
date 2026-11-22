@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 
@@ -29,8 +30,9 @@ class QaFailure(Exception):
 
 def adb(serial, *arguments):
     try:
+        executable = shutil.which("adb") or "adb"
         result = subprocess.run(
-            ["adb", "-s", serial, *arguments],
+            [executable, "-s", serial, *arguments],
             capture_output=True, text=True, timeout=15, check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as error:

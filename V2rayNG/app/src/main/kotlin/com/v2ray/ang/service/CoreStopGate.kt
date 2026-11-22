@@ -14,6 +14,10 @@ internal class CoreStopGate {
     @Synchronized
     fun isStopping(): Boolean = stopping
 
+    /** True once a native teardown failed verification and fenced this process. */
+    @Synchronized
+    fun isQuarantined(): Boolean = nativeStopUnverified
+
     @Synchronized
     fun requestStart(): Boolean {
         if (!stopping) return true
